@@ -6,8 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A push that lands while an earlier run is still going supersedes it; there is
-# no value in finishing a build of a commit that is already stale.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -21,15 +19,11 @@ jobs:
       - name: Install the pinned toolchain
         uses: leanprover/lean-action@v1
         with:
-          # We drive the build ourselves below so that the Mathlib cache is
-          # fetched before anything is compiled from source.
           auto-config: false
           build: false
           test: false
           lint: false
 
-      # Mathlib arrives transitively through arlib, so the cache fetch has to
-      # come after Lake has materialised the dependency tree.
       - name: Fetch prebuilt Mathlib
         run: lake exe cache get
 
@@ -44,8 +38,6 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
-    # Documentation is generated only from the default branch: doc-gen4 builds
-    # Mathlib's docs too, which is far too slow to sit in the PR path.
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -60,9 +52,6 @@ jobs:
       - name: Fetch prebuilt Mathlib
         run: lake exe cache get
 
-      # doc-gen4 is appended here rather than committed to lakefile.toml, so
-      # that ordinary (and offline) builds never try to fetch it. This edit is
-      # ephemeral — it lives only in the CI checkout.
       - name: Add doc-gen4 for this job only
         run: |
           cat >> lakefile.toml <<'TOML'

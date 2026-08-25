@@ -1,0 +1,18 @@
+name = "arlibCommunity"
+version = "0.1.0"
+defaultTargets = ["ArlibCommunity"]
+
+[leanOptions]
+pp.unicode.fun = true
+relaxedAutoImplicit = false
+autoImplicit = false
+
+# This commit is produced by the paired hard-split core branch. It must be
+# pushed before community CI resolves the dependency.
+[[require]]
+name = "arlib"
+git = "https://github.com/meelgroup/arlib.git"
+rev = "dcace04e7339ab1d6fd91a5dde5d43d4d08c7662"
+
+[[lean_lib]]
+name = "ArlibCommunity"

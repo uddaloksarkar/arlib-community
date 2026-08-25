@@ -1,13 +1,54 @@
+# Lean / Lake build products
 /.lake/
 /build/
+/lake-packages/
 *.olean
 *.ilean
+*.ltar
 *.trace
-.DS_Store
 
-# Local paper sources / build artifacts — never tracked (papers may be copyrighted)
+# Generated native artifacts
+*.a
+*.o
+*.so
+*.dylib
+*.dll
+*.bc
+
+# Generated documentation and coverage/profiling output
+/doc/
+/docs/build/
+/coverage/
+/profile/
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Editors
+/.idea/
+/.vscode/
+
+# Codex/agent workspace metadata
+/.agents/
+/.codex/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+
+# Environment files may contain local paths or secrets
+.env
+.env.*
+!.env.example
+.worktrees/
+
+# Local paper sources / build artifacts
 /source/
 
-# Stray directory created by a mis-expanded ${env:HOME} in some tool invocation.
-# Contains Claude Code session data; belongs in $HOME, never in the repo.
+# Stray directory created by a mis-expanded ${env:HOME}.
 ${env:HOME}/

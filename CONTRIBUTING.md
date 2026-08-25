@@ -3,62 +3,46 @@
 ## Build, test, audit
 
 ```bash
-lake exe cache get                    # prebuilt Mathlib oleans — always first
-lake build                            # the library
-lake test                             # the worked examples in ArlibCommunityTest/
-lake env lean scripts/AxiomAudit.lean # no sorry, no extra axioms
+lake exe cache get
+lake build
+lake test
+lake env lean scripts/AxiomAudit.lean
 ```
 
-CI runs exactly those four. `lake env lean ArlibCommunity/Path/To/File.lean`
-type-checks a single file without taking Lake's workspace lock, which is the
-fast way to iterate; a change that crosses modules still needs a real
-`lake build`.
+CI runs those four checks. To iterate on one module without taking Lake's
+workspace lock, use `lake env lean ArlibCommunity/Path/To/File.lean`. Changes
+that cross module boundaries still need a full `lake build`.
 
 ## What belongs here, and what belongs in arlib
 
-The two repositories split by *what a result is about*, not by who needed it.
+The two repositories split by what a result is about, not by who needed it.
 
 | It is about | It goes in |
 | --- | --- |
-| A subject — probability, concentration, Markov chains, information theory, knowledge compilation, communication complexity, generic `Finset`/`List` helpers | [arlib](https://github.com/meelgroup/arlib) |
-| A named algorithm — the law of its counter, the arithmetic of its schedule, its termination argument | here |
+| Reusable foundations: probability, concentration, Markov chains, information theory, knowledge compilation, communication complexity, or generic helpers | [arlib](https://github.com/uddaloksarkar/arlib) |
+| An algorithm, model, reduction, lower bound, or explicit resource analysis built on those foundations | here |
 
-Two rules on top of that.
+Only the problem-independent part of an analysis belongs in a shared library.
+Problem-specific structure stays in the project that uses it. General lemmas
+discovered while formalizing an application should move upstream to arlib.
 
-**Only the problem-independent half.** An algorithm's analysis divides into a
-generic half and a half that exhibits the structure the algorithm needs for one
-particular counting or sampling problem. Only the generic half belongs in a
-shared library; the rest stays in the project that uses it. An entry that cannot
-be stated without naming a problem is a sign the split has not been found yet.
+## Adding an area
 
-**A lemma with no algorithm in it belongs upstream.** If while analysing an
-algorithm you prove something general — a `Finset` identity, a tail bound, a
-fact about Poisson masses — send it to arlib and import it. Material drifting
-into the wrong repository is the failure mode this split exists to prevent.
+Put public modules below `ArlibCommunity/<Area>/` and provide an
+`ArlibCommunity/<Area>.lean` import root. Add compatible roots to
+`ArlibCommunity.lean`; keep intentionally incompatible or optional roots as
+separate documented imports.
 
-## Adding an algorithm
-
-Create `ArlibCommunity/Algorithms/<Name>/` together with
-`ArlibCommunity/Algorithms/<Name>.lean`, which re-exports every module in the
-directory, and add `import ArlibCommunity.Algorithms.<Name>` to
-`ArlibCommunity/Algorithms.lean`.
-
-The sub-area root is not a stub: it carries a docstring saying what the
-algorithm is, what half of its analysis is here, what is deliberately left to
-the caller, and a module-by-module table. Each algorithm takes its own namespace
-`ArlibCommunity.Algorithms.<Name>`, because entries are independent of one
-another and their short names would collide.
-
-Add a worked example to `ArlibCommunityTest/`, and the paper to
-[REFERENCES.md](REFERENCES.md) with the key its docstrings cite.
+Add a downstream-style import example below `Examples/`, document the public
+entry point in `README.md`, and record source references in `REFERENCES.md`.
 
 ## House style
 
-arlib's
-[CONVENTIONS.md](https://github.com/meelgroup/arlib/blob/main/CONVENTIONS.md)
-governs here too: naming, namespacing, statement shape, a docstring on every
-declaration, explicit numeric bounds rather than `O`/`Ω` asymptotics. The build
-must be warning-free.
+Follow arlib's
+[CONVENTIONS.md](https://github.com/uddaloksarkar/arlib/blob/arlib-core/CONVENTIONS.md)
+for naming, namespaces, theorem statements, and docstrings. Complexity claims
+must name the primitive resource they count rather than leaving the cost model
+implicit.
 
-The hard invariant, enforced by CI: no `sorry`, and no axiom beyond the three
-Mathlib itself uses — `propext`, `Classical.choice`, `Quot.sound`.
+The build must be warning-free. No declaration may depend on `sorryAx` or on an
+axiom beyond `propext`, `Classical.choice`, and `Quot.sound`.
