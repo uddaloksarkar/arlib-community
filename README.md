@@ -1,103 +1,130 @@
 # arlib-community
 
-`arlib-community` is an importable Lean 4 library for algorithms and their
-analysis. It is the algorithm-facing companion to Arlib: Arlib supplies reusable
-data structures and mathematical foundations, while this library organizes
-algorithm implementations, reductions, correctness results, lower bounds, and
-explicit complexity models by theory.
+Analyses of **specific randomised algorithms**, in Lean 4, built on top of
+[arlib](https://github.com/meelgroup/arlib).
 
-The public Lean module is `ArlibCommunity`.
+## The split with arlib
 
-## Using the library
+arlib is organised by *subject*: finite probability and concentration, Markov
+chain mixing, information theory, knowledge compilation, communication
+complexity — results stated without reference to any one algorithm. This
+repository holds the other half: the analysis of a *named* algorithm, one
+directory and one namespace per algorithm.
 
-From another local Lean project, add this dependency to `lakefile.toml`:
+The dependency runs one way. arlib-community imports arlib; arlib never imports
+anything here. That keeps arlib's build small and its area layering intact, and
+it means an algorithm can be added here without touching the shared core.
+
+What an entry must still meet is arlib's own rule: only the
+**problem-independent** half of an algorithm's analysis belongs in a shared
+library. The law of a counter, the arithmetic of a run-count schedule, a
+termination argument — those are reusable. Exhibiting the structure the
+algorithm needs for one particular counting or sampling problem is the using
+project's obligation and stays there. *An entry that cannot be stated without
+naming a problem is a sign the split has not been found yet.*
+
+## What's inside
+
+Two algorithm entries so far.
+
+| Area | Contents | Start here |
+| --- | --- | --- |
+| `Algorithms/TPA` | Huber's Tootsie Pop Algorithm: its contraction-counter tail, Poisson law, almost-sure termination, and two-phase run-count schedule. | [ArlibCommunity/Algorithms/TPA.lean](ArlibCommunity/Algorithms/TPA.lean) |
+| `Algorithms/HitAndRun` | Lovász's direction/chord sampler, finite-facet realization, stationarity, and a corrected unconditional mixing theorem. The compact statement surface is under `Model/`; proof background is under `Analysis/`. | [ArlibCommunity/Algorithms/HitAndRun.lean](ArlibCommunity/Algorithms/HitAndRun.lean) |
+
+`import ArlibCommunity` gives you everything; `import ArlibCommunity.Algorithms`
+gives you one area; importing a single module gives you one piece. Every
+declaration lives in the namespace matching its module path, and each algorithm
+gets a namespace of its own (`ArlibCommunity.Algorithms.TPA`) — the entries are
+independent, and short names like `tpaTail` would otherwise collide.
+
+The area roots carry the real documentation: read the corresponding
+`ArlibCommunity/Algorithms/<Name>.lean` before reading modules under it.
+
+## Getting started
+
+Use the same toolchain as arlib, which is Mathlib's own — today:
+
+```
+leanprover/lean4:v4.33.0
+```
+
+Copy that line into your `lean-toolchain`, then add arlib-community to your
+`lakefile.toml`:
 
 ```toml
 [[require]]
-name = "arlibCommunity"
-path = "../arlib-community"
+name = "arlib-community"
+git = "https://github.com/meelgroup/arlib-community.git"
+rev = "main"
 ```
 
-Then update Lake and import the complete library:
+arlib-community requires arlib, which requires Mathlib, so neither needs to be
+required separately. Then:
 
 ```bash
-lake update arlibCommunity
-```
-
-```lean
-import ArlibCommunity
-```
-
-This root imports every mutually compatible theory. Continuous MCMC is
-temporarily a separate import because the current upstream finite and continuous
-Markov-chain staging trees both define `Arlib.MarkovChains.flow_apply`. Use:
-
-```lean
-import ArlibCommunity.Theories.ContinuousMCMC
-```
-
-Do not combine that module with `ArlibCommunity.Theories.FiniteMarkovChains`
-until the upstream namespace collision is migrated.
-
-For a smaller dependency, import one theory directly:
-
-```lean
-import ArlibCommunity.Theories.ContinuousMCMC
-import ArlibCommunity.Theories.KnowledgeCompilation
-```
-
-The current development checkout resolves core Arlib from the sibling
-`../arlib-pr3` directory. A published version should replace that path in
-`lakefile.toml` with a pinned Git revision of Arlib.
-
-## How to read this repository
-
-Read the repository in this order:
-
-1. Use `ArlibCommunity/Theories/<Name>.lean` to see a theory's public imports.
-   These are the stable entry points intended for downstream formalizations.
-2. Read the corresponding files below `Theories/<name>/src/` when auditing the
-   migrated proofs or their original authorship. These are verbatim snapshots,
-   not the public module path.
-3. Consult [`REFERENCES.md`](REFERENCES.md) for citations and source provenance,
-   and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the core/community ownership rule.
-
-## Directory layout
-
-```text
-ArlibCommunity.lean                 public root; imports compatible theories
-ArlibCommunity/
-  Init.lean                        shared initialization
-  Theories/*.lean                  narrow public imports, including optional MCMC
-Examples/Import.lean               downstream-style import smoke test
-Theories/
-  <theory>/src/                    verbatim migration snapshot
-CONTRIBUTING.md                    ownership rule and contribution workflow
-REFERENCES.md                      citations and source provenance
-```
-
-## Complexity convention
-
-Every complexity statement must name the primitive it counts. Depending on the
-theory this may be an oracle query, comparison, sample, transition, Bellman
-backup, circuit node, communicated bit, or retained row. A unit-cost oracle
-model is not automatically a unit-cost machine model, and a Markov-chain mixing
-bound is not automatically a running-time bound. Each theory README records the
-relevant distinction.
-
-## Building
-
-Use Lean `v4.33.0`, then run from this directory:
-
-```bash
+lake exe cache get   # fetch prebuilt Mathlib oleans
 lake build
 ```
 
-The files under `Theories/*/src` preserve the migration inputs and are not Lake
-targets. The compiled API is the `ArlibCommunity` module tree. `lake build`
-verifies the compatible root; the command below verifies the optional
-continuous-MCMC entry point separately:
+Always run `lake exe cache get` first. Without it, Lake compiles Mathlib from
+source, which takes hours.
 
-```bash
-lake build ArlibCommunity.Theories.ContinuousMCMC
+### A worked example
+
+```lean
+import ArlibCommunity.Algorithms
+
+open ArlibCommunity.Algorithms.TPA
+
+-- A TPA run whose centre-to-shell measure ratio is `c` terminates almost surely:
+-- the probability of performing more than `m` contractions tends to 0.
+example {c : ℝ} (hc : 0 < c) :
+    Filter.Tendsto (fun m => tpaTail m c) Filter.atTop (nhds 0) :=
+  tendsto_tpaTail_atTop hc
+
+-- And the counter's law is exactly Poisson(ln(1/c)).
+example (m : ℕ) {c : ℝ} (hc : 0 < c) (hc1 : c < 1) :
+    ((MeasureTheory.Measure.pi (fun _ : Fin m => unifUnit))
+        {u : Fin m → ℝ | c < ∏ i, u i}).toReal
+      - ((MeasureTheory.Measure.pi (fun _ : Fin (m + 1) => unifUnit))
+        {u : Fin (m + 1) → ℝ | c < ∏ i, u i}).toReal
+      = Arlib.Probability.poissonPMF (-Real.log c) m :=
+  prob_exactly_eq_poissonPMF m hc hc1
 ```
+
+`ArlibCommunityTest/` holds these as compiled examples; `lake test` runs them.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short: the house style is arlib's —
+[CONVENTIONS.md](https://github.com/meelgroup/arlib/blob/main/CONVENTIONS.md)
+governs naming, namespacing, statement shape and docstrings here too. Every
+paper an entry formalizes goes in [REFERENCES.md](REFERENCES.md) with the short
+key its docstrings cite.
+
+The invariant is the same as arlib's and CI enforces it: no `sorry`, and no
+axiom beyond the three Mathlib itself uses (`propext`, `Classical.choice`,
+`Quot.sound`).
+
+## Versioning and stability
+
+Pre-1.0; there is no stable API. It tracks arlib, which is itself pre-1.0 and
+renames as it consolidates. If you depend on this, pin a specific commit.
+
+## License
+
+Released under the [Apache License 2.0](LICENSE), following Mathlib.
+
+Copyright © 2026 the arlib contributors. The per-file headers are authoritative
+for who holds copyright in which module.
+
+## Origins
+
+The `Algorithms` area started life inside arlib and moved here in 2026, when the
+two halves were separated: subject-organised infrastructure in arlib,
+algorithm-by-algorithm analyses in arlib-community.
+
+## Acknowledgements
+
+Built with the assistance of **Claude** (Anthropic's Claude Code).

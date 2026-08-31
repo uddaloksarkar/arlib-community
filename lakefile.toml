@@ -1,19 +1,29 @@
-name = "arlibCommunity"
-version = "0.1.0"
+name = "arlib-community"
 defaultTargets = ["ArlibCommunity"]
+
+# `lake test` builds the smoke-test library, whose modules are short worked
+# examples of the public API — see `ArlibCommunityTest/`. They are deliberately
+# NOT part of `defaultTargets`: a consumer should not pay to compile them.
 testDriver = "ArlibCommunityTest"
 
-[leanOptions]
-pp.unicode.fun = true
-relaxedAutoImplicit = false
-autoImplicit = false
-
-# The community library tracks the matching core branch of Arlib. Using a Git
-# dependency keeps fresh GitHub and CI checkouts self-contained.
+# arlib-community — analyses of specific randomised algorithms, built on arlib.
+#
+# The only dependency is `arlib`, which requires Mathlib itself; Mathlib is
+# therefore inherited rather than required here, and its revision is whatever
+# arlib's `lake-manifest.json` pins. `lean-toolchain` must equal Mathlib's own,
+# so it follows arlib's. To move forward:
+#
+#     lake update arlib                                        # re-resolve arlib
+#     cp .lake/packages/mathlib/lean-toolchain lean-toolchain  # follow Mathlib
+#     lake exe cache get && lake build
+#
+# `doc-gen4` is deliberately NOT required here, for the same reason as in arlib:
+# adding it would make every `lake build` — including offline ones — try to
+# fetch another package. CI appends the requirement for the docs job only.
 [[require]]
 name = "arlib"
-git = "https://github.com/uddaloksarkar/arlib.git"
-rev = "arlib-core"
+git = "https://github.com/meelgroup/arlib.git"
+rev = "main"
 
 [[lean_lib]]
 name = "ArlibCommunity"

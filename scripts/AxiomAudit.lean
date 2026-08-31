@@ -8,20 +8,44 @@ import ArlibCommunity
 /-!
 # Axiom audit
 
-Checks that declarations in `ArlibCommunity` depend only on the three axioms
-used by Mathlib: `propext`, `Classical.choice`, and `Quot.sound`. Run with:
+arlib-community maintains arlib's hard invariant: **no declaration in the
+library depends on any axiom beyond the three that Mathlib itself uses** —
+`propext`, `Classical.choice`, `Quot.sound`. In particular nothing depends on
+`sorryAx`, so "no `sorry`" is checked semantically rather than by grepping for
+the token.
+
+Run it with
 
 ```bash
 lake env lean scripts/AxiomAudit.lean
 ```
+
+which exits non-zero if the invariant is broken. CI runs exactly this.
+
+The roots are the `ArlibCommunity.*` declarations only. Everything reachable
+from them is still traversed, so a violation inside arlib or Mathlib would be
+caught; but arlib audits itself, and taking its declarations as roots here would
+re-audit a dependency on every build.
+
+The fast path is a single depth-first traversal from those roots, sharing one
+`visited` set — linear in the size of the used environment, rather than one
+`collectAxioms` call per declaration. Precise per-declaration attribution is
+expensive, so it is only computed on the failure path, where the extra cost does
+not matter.
 -/
 
 open Lean Elab Command
 
 namespace ArlibCommunity.AxiomAudit
 
+/-- The only axioms a declaration in arlib-community may depend on: exactly the
+three that Mathlib itself is built on. Anything else — most importantly
+`sorryAx` — is a failure. -/
 def allowed : List Name := [``propext, ``Classical.choice, ``Quot.sound]
 
+/-- Every non-internal declaration whose name sits under the `ArlibCommunity`
+namespace. Declarations from the `arlib` dependency are deliberately not roots;
+they are audited in their own repository. -/
 def communityDecls (env : Environment) : Array Name := Id.run do
   let mut out : Array Name := #[]
   for (n, _) in env.constants.toList do
@@ -29,6 +53,8 @@ def communityDecls (env : Environment) : Array Name := Id.run do
     if (`ArlibCommunity).isPrefixOf n then out := out.push n
   return out
 
+/-- One shared-`visited` DFS from all of `roots`, returning every axiom reachable
+from any of them. Cheap: each constant in the used environment is expanded once. -/
 def reachableAxioms (env : Environment) (roots : Array Name) : NameSet := Id.run do
   let mut visited : NameSet := {}
   let mut axioms : NameSet := {}
@@ -58,6 +84,8 @@ run_cmd do
     logInfo m!"axiom audit: {roots.size} ArlibCommunity declarations, \
       axioms used = {found.toList}, all allowed."
   else
+    -- Failure path only: attribute each offending axiom to the declarations that
+    -- actually use it, so the error message names files a human can go fix.
     let mut msg := m!"AXIOM AUDIT FAILED — disallowed axioms: {offending}\n"
     for ax in offending do
       let mut culprits : Array Name := #[]

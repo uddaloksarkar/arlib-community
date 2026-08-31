@@ -34,7 +34,7 @@ real inequality makes the missing hypothesis visible.
   Mark Huber, *Approximation Algorithms for the Normalizing Constant of Gibbs
   Distributions*, Ann. Appl. Probab. **25**(2):974–985, 2015, arXiv:1206.2689,
   but the rest of this sub-area attributes itself to Huber–Schott 2010; see
-  `Arlib/Algorithms/TPA.lean`); for `#(𝓛) ∈ {1,2}` the displayed chain
+  `ArlibCommunity/Algorithms/TPA.lean`); for `#(𝓛) ∈ {1,2}` the displayed chain
   of inequalities does not close.  The lower tail (`phase2_lower_budget`) needs
   only `A > 0`.
 

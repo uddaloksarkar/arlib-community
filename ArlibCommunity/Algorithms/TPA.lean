@@ -6,7 +6,7 @@ Authors: Kuldeep S. Meel
 /-
 # `ArlibCommunity.Algorithms.TPA` — the Tootsie Pop Algorithm
 
-Part of the `ArlibCommunity.Algorithms` area; see `Arlib/Algorithms.lean`.
+Part of the `ArlibCommunity.Algorithms` area; see `ArlibCommunity/Algorithms.lean`.
 
 **Which Huber paper this follows is unresolved in this library.**  These
 modules are described elsewhere in the tree as following "Huber, 2010" — Mark
