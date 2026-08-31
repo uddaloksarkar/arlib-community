@@ -1,0 +1,222 @@
+/-
+Copyright (c) 2026. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+-/
+import Arlib.Probability.Median
+import ArlibCommunity.Algorithms.CV18.Model.Prelude
+
+/-!
+# Accelerated Gaussian-cooling pseudocode for ordinary volume
+
+This file models Figure 1 all the way to the uniform endpoint. Ratio estimators
+are membership-oracle programs, not arbitrary laws with access to the complete
+set, and query counts are produced by the interpreter.
+-/
+
+open MeasureTheory
+
+namespace ArlibCommunity.Algorithms.CV18
+
+/-! ## Operational semantics -/
+
+/-- Sequential composition of membership-oracle programs. -/
+def MembershipOracleProgram.bind {n : ℕ} {A B : Type}
+    (program : MembershipOracleProgram n A)
+    (next : A → MembershipOracleProgram n B) : MembershipOracleProgram n B :=
+  match program with
+  | .pure result => next result
+  | .query point branch => .query point (fun answer => (branch answer).bind next)
+  | .randomNat law branch => .randomNat law (fun seed => (branch seed).bind next)
+  | .randomPoint law hprob branch =>
+      .randomPoint law hprob (fun point => (branch point).bind next)
+  | .randomReal law hprob branch =>
+      .randomReal law hprob (fun value => (branch value).bind next)
+
+/-- Execute a program against an oracle. The second component is the actual
+number of `query` nodes traversed by that execution. -/
+noncomputable def MembershipOracleProgram.run {n : ℕ} {Result : Type}
+    [MeasurableSpace Result]
+    (oracle : AmbientSpace n → Bool) :
+    MembershipOracleProgram n Result → Measure (Result × ℕ)
+  | .pure result => Measure.dirac (result, 0)
+  | .query point next =>
+      (run oracle (next (oracle point))).map fun outcome =>
+        (outcome.1, outcome.2 + 1)
+  | .randomNat law next => law.toMeasure.bind fun seed => run oracle (next seed)
+  | .randomPoint law _ next => law.bind fun point => run oracle (next point)
+  | .randomReal law _ next => law.bind fun value => run oracle (next value)
+
+/-- The estimate marginal of an oracle program. Keeping costs at the syntax
+level avoids treating the topological support of a non-atomic measure as if it
+were the atom support of a `PMF`. -/
+noncomputable def MembershipOracleProgram.runEstimate {n : ℕ} {Result : Type}
+    [MeasurableSpace Result] (oracle : AmbientSpace n → Bool) :
+    MembershipOracleProgram n Result → Measure Result
+  | .pure result => Measure.dirac result
+  | .query point next => runEstimate oracle (next (oracle point))
+  | .randomNat law next => law.toMeasure.bind fun seed => runEstimate oracle (next seed)
+  | .randomPoint law _ next => law.bind fun point => runEstimate oracle (next point)
+  | .randomReal law _ next => law.bind fun value => runEstimate oracle (next value)
+
+/-- A syntax-level worst-case membership-query bound. Continuous draws do not
+hide a cost field: every possible continuation must satisfy the same bound. -/
+inductive MembershipOracleProgram.QueryBound {n : ℕ} {Result : Type} :
+    MembershipOracleProgram n Result → ℕ → Prop where
+  | pure (result : Result) (budget : ℕ) : QueryBound (.pure result) budget
+  | query (point : AmbientSpace n) (next : Bool → MembershipOracleProgram n Result)
+      (budget : ℕ) (hnext : ∀ answer, QueryBound (next answer) budget) :
+      QueryBound (.query point next) (budget + 1)
+  | randomNat (law : PMF ℕ) (next : ℕ → MembershipOracleProgram n Result)
+      (budget : ℕ) (hnext : ∀ seed, QueryBound (next seed) budget) :
+      QueryBound (.randomNat law next) budget
+  | randomPoint (law : Measure (AmbientSpace n)) (hprob : IsProbabilityMeasure law)
+      (next : AmbientSpace n → MembershipOracleProgram n Result)
+      (budget : ℕ) (hnext : ∀ point, QueryBound (next point) budget) :
+      QueryBound (.randomPoint law hprob next) budget
+  | randomReal (law : Measure ℝ) (hprob : IsProbabilityMeasure law)
+      (next : ℝ → MembershipOracleProgram n Result)
+      (budget : ℕ) (hnext : ∀ value, QueryBound (next value) budget) :
+      QueryBound (.randomReal law hprob next) budget
+
+/-- The law of a program's estimate together with its interpreter-counted
+membership queries. -/
+noncomputable def volumeAlgorithmLaw (A : VolumeAlgorithm) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I) : Measure ℝ :=
+  (A q).runEstimate oracle.query
+
+/-! ## Figure 1 schedule -/
+
+/-- The all-epsilon replacement for Figure 1's `1/(4n)`. -/
+noncomputable def initialVariance (q : VolumeParams) : ℝ :=
+  q.eps / (64 * (q.n : ℝ))
+
+/-- The known full-space integral of the initial unnormalised Gaussian. -/
+noncomputable def initialGaussianIntegral (q : VolumeParams) : ℝ :=
+  Real.rpow (2 * Real.pi * initialVariance q) ((q.n : ℝ) / 2)
+
+/-- The truncation/terminal variance `C²n`. From the second-moment promise
+`E_K‖X‖² ≤ roundness*n`, the paper takes a truncation radius proportional
+to `sqrt(roundness*n) * log(1/eps)`. -/
+noncomputable def terminalVariance (q : VolumeParams) : ℝ :=
+  volumeTerminalScale q
+
+/-- The high-probability truncation of `K` used to turn the second-moment
+promise into the outer-radius hypothesis required by Figure 1. -/
+noncomputable def truncatedBody (q : VolumeParams) (I : VolumeInput q.n) :
+    Set (AmbientSpace q.n) :=
+  (I.body : Set (AmbientSpace q.n)) ∩ Metric.closedBall 0 (Real.sqrt (terminalVariance q))
+
+/-- Figure 1's two-rate multiplier: `1+1/n` through variance one, followed by
+the accelerated rate `1+σ²/(2C²n)`. -/
+noncomputable def coolingRate (q : VolumeParams) (sigma2 : ℝ) : ℝ :=
+  if sigma2 ≤ 1 then 1 + 1 / (q.n : ℝ)
+  else 1 + sigma2 / (2 * terminalVariance q)
+
+/-- One Gaussian-to-Gaussian schedule step, shortened at the terminal
+variance so the following phase can jump exactly to the uniform density. -/
+noncomputable def nextVariance (q : VolumeParams) (sigma2 : ℝ) : ℝ :=
+  min (terminalVariance q) (sigma2 * coolingRate q sigma2)
+
+/-- A finite schedule witnessing the loop in Figure 1.
+
+Existence and quantitative bounds for this schedule are analysis obligations;
+they are deliberately not hidden inside an unconstrained estimator. -/
+structure VolumeCoolingSchedule (q : VolumeParams) where
+  variances : List ℝ
+  nonempty : variances ≠ []
+  start : variances.head? = some (initialVariance q)
+  step : variances.IsChain (fun sigma2 tau2 => tau2 = nextVariance q sigma2)
+  positive : ∀ sigma2 ∈ variances, 0 < sigma2
+  finish : variances.getLast? = some (terminalVariance q)
+
+/-- Primitive ratio-estimation programs used by the transcription.
+
+Unlike the previous interface, these fields receive neither `VolumeInput` nor
+an oracle law. They can learn membership only when their returned program is
+interpreted and traverses a `query` node. -/
+structure VolumeCoolingPrimitives where
+  /-- Produce the first point at the starting variance.  The unit-ball promise
+  is what makes rejection from the concentrated full Gaussian possible. -/
+  initialSample :
+    (q : VolumeParams) → MembershipOracleProgram q.n (Option (AmbientSpace q.n))
+  ratioEstimate :
+    (q : VolumeParams) → (sigma2 tau2 : ℝ) →
+      AmbientSpace q.n →
+      MembershipOracleProgram q.n (Option (ℝ × AmbientSpace q.n))
+  uniformRatioEstimate :
+    (q : VolumeParams) → (sigma2 : ℝ) →
+      AmbientSpace q.n → MembershipOracleProgram q.n (Option ℝ)
+
+/-- Multiply estimates for every adjacent pair while threading the last walk
+point into the next phase.  This state is the warm start used in Figure 1 and
+is essential for the amortized cubic query bound. -/
+noncomputable def coolingProduct (P : VolumeCoolingPrimitives)
+    (q : VolumeParams) :
+    List ℝ → AmbientSpace q.n →
+      MembershipOracleProgram q.n (Option (ℝ × AmbientSpace q.n))
+  | [], point => .pure (some (1, point))
+  | [_], point => .pure (some (1, point))
+  | sigma2 :: tau2 :: rest, point =>
+      (P.ratioEstimate q sigma2 tau2 point).bind fun phase =>
+        match phase with
+        | none => .pure none
+        | some (ratio, nextPoint) =>
+            (coolingProduct P q (tau2 :: rest) nextPoint).bind fun tail =>
+              .pure <| match tail with
+                | some (product, lastPoint) => some (ratio * product, lastPoint)
+                | none => none
+termination_by variances => variances.length
+
+/-- One run of Figure 1: Gaussian cooling, the final Gaussian-to-uniform ratio,
+and multiplication by the known initial integral. Aborted capped subroutines
+return estimate zero, while the interpreter retains their actual query count. -/
+noncomputable def baseVolumeCooling (P : VolumeCoolingPrimitives)
+    (S : (q : VolumeParams) → VolumeCoolingSchedule q)
+    (q : VolumeParams) : MembershipOracleProgram q.n ℝ :=
+  (P.initialSample q).bind fun initialPoint =>
+    match initialPoint with
+    | none => .pure 0
+    | some point =>
+        (coolingProduct P q (S q).variances point).bind fun product =>
+          match product with
+          | none => .pure 0
+          | some (gaussianProduct, lastPoint) =>
+              (P.uniformRatioEstimate q (terminalVariance q) lastPoint).bind fun finalRatio =>
+                .pure <| match finalRatio with
+                  | some uniformRatio =>
+                      initialGaussianIntegral q * gaussianProduct * uniformRatio
+                  | none => 0
+
+/-- Repeat a program independently in the `PMF` semantics. -/
+noncomputable def repeatVolumeCooling (P : VolumeCoolingPrimitives)
+    (S : (q : VolumeParams) → VolumeCoolingSchedule q)
+    (q : VolumeParams) : (m : ℕ) → MembershipOracleProgram q.n (Fin m → ℝ)
+  | 0 => .pure Fin.elim0
+  | m + 1 =>
+      (baseVolumeCooling P S q).bind fun estimate =>
+        (repeatVolumeCooling P S q m).bind fun tail =>
+          .pure (Fin.cons estimate tail)
+
+/-- Confidence amplification count. -/
+noncomputable def confidenceRepetitions (q : VolumeParams) : ℕ :=
+  Nat.ceil (8 * protectedLog (1 / q.p))
+
+/-- The concrete shape of the paper's volume algorithm: repeated accelerated
+cooling runs followed by their median. -/
+noncomputable def volumeCoolingAlgorithm (P : VolumeCoolingPrimitives)
+    (S : (q : VolumeParams) → VolumeCoolingSchedule q) : VolumeAlgorithm :=
+  fun q =>
+    (repeatVolumeCooling P S q (confidenceRepetitions q)).bind fun estimates =>
+      .pure (Arlib.Probability.medianOf estimates)
+
+/-- Successful complete runs. -/
+def accurateOutcome (q : VolumeParams) (I : VolumeInput q.n) : Set ℝ :=
+  {estimate | RelativeApprox q.eps (euclideanVolume I) estimate}
+
+/-- Probability assigned to an event of complete executions. -/
+noncomputable def outcomeProbability (mu : Measure ℝ) (S : Set ℝ) : ℝ :=
+  (mu.toOuterMeasure S).toReal
+
+#modelClosure volumeCoolingAlgorithm
+
+end ArlibCommunity.Algorithms.CV18

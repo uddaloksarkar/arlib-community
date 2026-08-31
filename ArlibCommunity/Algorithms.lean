@@ -30,7 +30,11 @@ and their names (`tpaTail`, and whatever follows) would otherwise collide.
 * `ArlibCommunity.Algorithms.HitAndRun` — the hit-and-run sampler: its
   direction/chord kernel, a finite-facet realization, stationarity, and a fully
   discharged corrected mixing theorem.
+* `ArlibCommunity.Algorithms.CV18` — Cousins--Vempala accelerated Gaussian
+  cooling: the executable oracle program and discharged analysis, with the two
+  remaining quantitative inputs exposed as hypotheses.
 -/
 
 import ArlibCommunity.Algorithms.TPA
 import ArlibCommunity.Algorithms.HitAndRun
+import ArlibCommunity.Algorithms.CV18

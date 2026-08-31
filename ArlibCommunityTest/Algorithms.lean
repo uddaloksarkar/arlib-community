@@ -61,3 +61,24 @@ example {n : ℕ} (hn : 21 ≤ n) (p : Problem n)
   hitAndRun_mixes hn p hM heps0 heps1 hWarm hm
 
 end ArlibCommunityTest.HitAndRun
+
+namespace ArlibCommunityTest.CV18
+
+open ArlibCommunity.Algorithms.CV18
+
+/-- The public CV18 frontier: the concrete base run is accurate once the two
+remaining quantitative analytic inputs are supplied. The accelerated moment
+bound is internal and unconditional. -/
+example (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I)
+    (htrunc : FigureOneRadialTruncationBound q I)
+    (hmixing : FigureOnePostInitialMixingBound q I oracle) :
+    3 / 4 ≤
+      outcomeProbability
+        (volumeAlgorithmLaw
+          (fun q => baseVolumeCooling figureOnePrimitives
+            explicitVolumeCoolingSchedule q) q I oracle)
+        (accurateOutcome q I) :=
+  figureOne_base_accuracy_of_truncation_and_mixing q I oracle htrunc hmixing
+
+end ArlibCommunityTest.CV18
