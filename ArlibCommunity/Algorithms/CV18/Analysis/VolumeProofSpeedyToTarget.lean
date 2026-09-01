@@ -1247,7 +1247,6 @@ theorem TVLe.speedyToGaussian_twoStage_of_coreDefect_cv18
     {epsilon : ENNReal}
     (hmix : Arlib.TVLe mu (ellGaussianProb K delta variance) epsilon)
     (hepsilon : epsilon ≠ ⊤)
-    (hepsilon_quarter : epsilon ≤ ENNReal.ofReal (1 / 4 : ℝ))
     (hcombined_quarter : 8 * epsilon + 4 * eta ≤
       ENNReal.ofReal (1 / 4 : ℝ)) :
     let c : ℝ := 1 - 1 / (2 * (n : ℝ))

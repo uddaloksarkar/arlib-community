@@ -1553,4 +1553,68 @@ theorem standardCore_defect_and_speedyMass_cv18
         (hball (Metric.mem_closedBall_self zero_le_one))
         (by positivity : 0 < sigma ^ 2) hspeedy0 hspeedytop heta hraw)
 
+/-- End-to-end form of the paper's phase-local speedy-to-Gaussian conversion.
+The KLS core hypotheses are discharged from the displayed proposal radius;
+only normalization guards and the incoming speedy mixing estimate remain. -/
+theorem TVLe.speedyToGaussian_of_paperStep_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hball : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {delta sigma coreError : ℝ} (hdelta : 0 < delta) (hsigma : 0 < sigma)
+    (hcoreError0 : 0 < coreError) (hcoreError16 : coreError ≤ 1 / 16)
+    (hstep : delta ≤
+      1 / (8 * Real.sqrt
+        ((n : ℝ) * Real.log ((n : ℝ) / coreError))))
+    (hgaussCore0 :
+      (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2))).restrict K)
+          ((1 - 1 / (2 * (n : ℝ))) • K) ≠ 0)
+    (hgaussCoretop :
+      (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2))).restrict K)
+          ((1 - 1 / (2 * (n : ℝ))) • K) ≠ ⊤)
+    (hspeedy0 : ellGaussianMeasure K delta (sigma ^ 2) Set.univ ≠ 0)
+    (hspeedytop : ellGaussianMeasure K delta (sigma ^ 2) Set.univ ≠ ⊤)
+    (hproposal0 :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight
+          (sigma ^ 2 / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K ≠ 0)
+    (hproposaltop :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight
+          (sigma ^ 2 / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K ≠ ⊤)
+    {mu : Measure (EuclideanSpace ℝ (Fin n))} [IsProbabilityMeasure mu]
+    {mixError : ENNReal}
+    (hmix : Arlib.TVLe mu (ellGaussianProb K delta (sigma ^ 2)) mixError)
+    (hmixTop : mixError ≠ ⊤)
+    (hcombined : 8 * mixError + 4 * ENNReal.ofReal coreError ≤
+      ENNReal.ofReal (1 / 4 : ℝ)) :
+    let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+    Arlib.TVLe
+      (Arlib.condOn
+        (((Arlib.condOn mu (c • K)).map (fun x => c⁻¹ • x)).withDensity
+          (gaussianScaleAcceptance (sigma ^ 2) c)) Set.univ)
+      (Arlib.condOn
+        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight (sigma ^ 2))) K)
+      (64 * mixError + 32 * ENNReal.ofReal coreError) := by
+  dsimp only
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hpaper := standardCore_defect_and_speedyMass_cv18
+    hn hKc hKcl hKfin hball hdelta hsigma hcoreError0 hcoreError16
+      hstep hgaussCore0 hgaussCoretop hspeedy0 hspeedytop
+  have hetaTop : ENNReal.ofReal coreError ≠ ⊤ := ENNReal.ofReal_ne_top
+  have hetaHalf : ENNReal.ofReal coreError ≤ ENNReal.ofReal (1 / 2 : ℝ) :=
+    ENNReal.ofReal_le_ofReal (hcoreError16.trans (by norm_num))
+  exact TVLe.speedyToGaussian_twoStage_of_coreDefect_cv18
+    hn hKcl.measurableSet hKc
+      (hball (Metric.mem_closedBall_self zero_le_one))
+      (by positivity : 0 < sigma ^ 2)
+      hspeedy0 hspeedytop hproposal0 hproposaltop
+      (by simpa [c] using hpaper.2)
+      (by simpa [c] using hgaussCore0)
+      (by simpa [c] using hgaussCoretop)
+      hetaTop hetaHalf (by simpa [c] using hpaper.1)
+      hmix hmixTop hcombined
+
 end Arlib.MarkovChains
