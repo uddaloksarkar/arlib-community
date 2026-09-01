@@ -80,3 +80,26 @@ Importing a speedy-walk mixing theorem alone is insufficient: its stationary
 law is proportional to local conductance times the Gaussian density, not the
 target truncated Gaussian, and it does not identify a fixed raw-step law with
 the required sample law.
+
+## Proper-step bridge progress
+
+`VolumeProofProperStep.lean` now supplies the first operational part of option
+1.  The speedy-walk and holding-time developments have been ported into this
+CV18 tree without imports from the stale workspace.  In addition, the new
+`geometricCostKernel` constructs the joint law of the number of raw trials and
+the next proper state.  The following are proved:
+
+- the exact geometric cost/state rectangle probabilities;
+- the returned-state marginal is exactly the requested next-state kernel;
+- the expected trials-through-success cost is exactly the reciprocal of the
+  success probability, hence exactly `1 / ell K delta x` for the ball walk;
+- the costed kernel is Markov whenever the success probability is pointwise
+  nonzero; and
+- specializing the success probability to `ell K delta` makes the returned
+  state exactly one `speedyWalk K delta` step.
+
+The next missing result is the iterated bridge: accumulate these costs over
+`t` state-dependent proper steps, identify the state marginal with the
+`t`-fold speedy walk, and identify that costed execution with the concrete raw
+proposal loop.  The average-local-conductance expectation and cutoff/restart
+bounds can then be applied to that accumulated cost.
