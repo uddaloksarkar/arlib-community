@@ -3,7 +3,7 @@ Copyright (c) 2026. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.AuditCheck
-import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperClock
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperProgram
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.Convexity.SpeedyGaussianMixing
 
 /-!

@@ -192,13 +192,22 @@ its Markov cutoff bound. The module also specializes the deterministic-time
 projection to `truncatedMetropolisKernel`, so this is now an exact bridge to
 the executable Figure-1 transition rather than a parallel abstract chain.
 
+`VolumeProofLazyProperProgram.lean` adds the corresponding bounded
+membership-oracle program. Its marked step records body membership before the
+Metropolis coin, so a coin rejection remains a proper proposal. Erasing the
+mark is proved equal to the existing Figure-1 step at the program-syntax level.
+`cappedProperMetropolisBallWalk` then runs until a requested number of proper
+marks or returns `none` at a raw-proposal cap, with a proved worst-case query
+bound equal to that cap. This supplies the operational cutoff/restart primitive
+that the paper describes but the previous fixed-raw-endpoint program lacked.
+
 These results still do not by themselves prove CV18 Theorem 1.1 with its
 advertised `O*(n^3)` complexity. The average-local-conductance and
 raw-proposal cutoff obligation at the advertised phase radius is now closed.
 The remaining work is:
 
-1. connect the stopped proper-step execution and its cutoff event to the
-   sampler returned by the program, and transfer the speedy stationary law
+1. identify the law of the new capped proper-step oracle program with the
+   stopped marked-chain law, and transfer the speedy stationary law
    proportional to `ell * gaussianWeight` to the phase's restricted-Gaussian
    target (the paper's rejection map must be connected to the executable
    sampler, not merely imported as a standalone theorem); and
