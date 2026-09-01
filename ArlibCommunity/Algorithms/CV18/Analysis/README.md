@@ -210,13 +210,22 @@ proper-step count, that the executable `Option`-valued output law is exactly
 the recursively stopped abstract marked-kernel law. The same induction proves
 the measurability facts needed to compose this program with later phases.
 
+`VolumeProofLazyProperFailure.lean` closes the global raw-counter argument for
+that finite program. It constructs a Bellman potential for the number of raw
+proposals still needed, proves a direct Markov inequality for the recursive
+failure mass, and bounds its expectation from a warm start by the stationary
+`1 / ell` integral. At the Figure-1 proposal radius this gives the executable
+paper-shaped inequality
+`(1/2) * rawCap * Pr[none] <= properSteps * M`. Thus the cap failure estimate
+now applies to the membership-oracle program itself, not only to a separately
+constructed stopped trajectory.
+
 These results still do not by themselves prove CV18 Theorem 1.1 with its
 advertised `O*(n^3)` complexity. The average-local-conductance and
 raw-proposal cutoff obligation at the advertised phase radius is now closed.
 The remaining work is:
 
-1. connect the now-identified finite capped marked law to the restarted
-   total-cost cutoff event, and transfer the speedy stationary law
+1. transfer the speedy stationary law
    proportional to `ell * gaussianWeight` to the phase's restricted-Gaussian
    target (the paper's rejection map must be connected to the executable
    sampler, not merely imported as a standalone theorem); and

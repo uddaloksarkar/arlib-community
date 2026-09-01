@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAnalyticCore
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperProgram
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperFailure
 import ArlibCommunity.Algorithms.CV18.Analysis.TheoremProof
 
 /-!
@@ -30,6 +31,8 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms runEstimate_truncatedMetropolisMarkedBallStep_eq_lazyProperAux
 #print axioms cappedProperMetropolisBallWalk_queryBound
 #print axioms cappedProperMetropolisBallWalk_semantics
+#print axioms Arlib.MarkovChains.mul_natCast_mul_bind_cappedLazyProperMarkedLaw_none_le
+#print axioms half_mul_natCast_mul_cappedProperMetropolisBallWalk_none_le
 #print axioms half_mul_lintegral_gaussianWeight_le_figureOne
 #print axioms figureOne_base_accuracy_of_mixing
 #print axioms figureOne_base_query_cost
