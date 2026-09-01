@@ -9,7 +9,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPhaseMixing
 
 namespace ArlibCommunity.Algorithms.CV18
 
-open MeasureTheory
+open MeasureTheory ProbabilityTheory
 open Arlib.MarkovChains
 open scoped ENNReal
 
@@ -694,6 +694,267 @@ theorem accuracyScaleFactor_le_one (q : VolumeParams) :
   unfold accuracyScaleFactor
   exact sub_le_self 1 (by positivity)
 
+/-- One executable KLS speedy-to-Gaussian rejection test.  The returned point
+is the homothetically expanded candidate; the Boolean records acceptance. -/
+noncomputable def accuracyGaussianRejectionAttempt (q : VolumeParams)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    MembershipOracleProgram q.n (Bool × AmbientSpace q.n) :=
+  let c := accuracyScaleFactor q
+  let target := c⁻¹ • current
+  .query target fun inside =>
+    .randomReal uniformUnitIntervalMeasure inferInstance fun coin =>
+      if inside = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target then
+        .pure (true, target)
+      else
+        .pure (false, target)
+
+theorem accuracyGaussianRejectionAttempt_queryBound
+    (q : VolumeParams) (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    (accuracyGaussianRejectionAttempt q sigma2 current).QueryBound 1 := by
+  unfold accuracyGaussianRejectionAttempt
+  apply MembershipOracleProgram.QueryBound.query
+  intro inside
+  apply MembershipOracleProgram.QueryBound.randomReal
+  intro coin
+  split <;> exact .pure _ 0
+
+theorem accuracyGaussianRejectionAttempt_stronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    (accuracyGaussianRejectionAttempt q sigma2 current).StronglyMeasurable
+      oracle.query := by
+  simp only [accuracyGaussianRejectionAttempt,
+    MembershipOracleProgram.StronglyMeasurable]
+  let target : AmbientSpace q.n := (accuracyScaleFactor q)⁻¹ • current
+  let output : ℝ → Bool × AmbientSpace q.n := fun coin =>
+    if oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+        ENNReal.ofReal coin ≤ Arlib.MarkovChains.gaussianScaleAcceptance
+          sigma2 (accuracyScaleFactor q) target then
+      (true, target)
+    else (false, target)
+  have hout : Measurable output := by
+    by_cases heligible : oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ accuracyPhaseRadius q sigma2
+    · simp only [output, heligible.1, heligible.2.1, heligible.2.2, true_and]
+      exact Measurable.ite
+        (measurableSet_le (ENNReal.measurable_ofReal.comp measurable_id)
+          measurable_const)
+        measurable_const measurable_const
+    · have hfalse : ∀ coin : ℝ, ¬ (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ Arlib.MarkovChains.gaussianScaleAcceptance
+            sigma2 (accuracyScaleFactor q) target) := by
+        intro coin h
+        exact heligible ⟨h.1, h.2.1, h.2.2.1⟩
+      simp only [output, hfalse, if_false]
+      exact measurable_const
+  constructor
+  · rw [show (fun coin => MembershipOracleProgram.runEstimate oracle.query
+        (if oracle.query target = true ∧
+            ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+            ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+            ENNReal.ofReal coin ≤ Arlib.MarkovChains.gaussianScaleAcceptance
+              sigma2 (accuracyScaleFactor q) target then
+          .pure (true, target) else .pure (false, target))) =
+        fun coin => Measure.dirac (output coin) by
+      funext coin
+      by_cases h : oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ Arlib.MarkovChains.gaussianScaleAcceptance
+            sigma2 (accuracyScaleFactor q) target
+      · simp [h, output, MembershipOracleProgram.runEstimate]
+      · simp [h, output, MembershipOracleProgram.runEstimate]]
+    exact Measure.measurable_dirac.comp hout
+  · intro coin
+    split <;> trivial
+
+noncomputable def accuracyGaussianRejectionAcceptance
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (current : AmbientSpace q.n) : ENNReal :=
+  let c := accuracyScaleFactor q
+  let target := c⁻¹ • current
+  (accuracyPhaseTruncatedBody q I sigma2).indicator
+    (Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c) target
+
+theorem accuracyGaussianRejectionAcceptance_le_one
+    (q : VolumeParams) (I : VolumeInput q.n) {sigma2 : ℝ}
+    (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    accuracyGaussianRejectionAcceptance q I sigma2 current ≤ 1 := by
+  unfold accuracyGaussianRejectionAcceptance
+  by_cases ht : (accuracyScaleFactor q)⁻¹ • current ∈
+      accuracyPhaseTruncatedBody q I sigma2
+  · rw [Set.indicator_of_mem ht]
+    exact Arlib.MarkovChains.gaussianScaleAcceptance_le_one hsigma2
+      (accuracyScaleFactor_pos q) (accuracyScaleFactor_le_one q) _
+  · rw [Set.indicator_of_notMem ht]
+    exact bot_le
+
+theorem measurable_accuracyGaussianRejectionAcceptance
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
+    Measurable (accuracyGaussianRejectionAcceptance q I sigma2) := by
+  unfold accuracyGaussianRejectionAcceptance
+  exact ((Arlib.MarkovChains.measurable_gaussianScaleAcceptance sigma2
+      (accuracyScaleFactor q)).indicator
+        (accuracyPhaseTruncatedBody_measurable q I sigma2)).comp
+          ((measurable_const : Measurable fun _ : AmbientSpace q.n =>
+            (accuracyScaleFactor q)⁻¹).smul measurable_id)
+
+noncomputable def accuracyGaussianRejectionLaw
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (current : AmbientSpace q.n) : Measure (Bool × AmbientSpace q.n) :=
+  let target := (accuracyScaleFactor q)⁻¹ • current
+  let accept := accuracyGaussianRejectionAcceptance q I sigma2 current
+  accept • Measure.dirac (true, target) +
+    (1 - accept) • Measure.dirac (false, target)
+
+theorem measurable_accuracyGaussianRejectionLaw
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
+    Measurable (accuracyGaussianRejectionLaw q I sigma2) := by
+  apply Measure.measurable_of_measurable_coe
+  intro S hS
+  simp only [accuracyGaussianRejectionLaw, Measure.add_apply,
+    Measure.smul_apply, smul_eq_mul, Measure.dirac_apply' _ hS]
+  have htarget : Measurable fun current : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹ • current :=
+    (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹).smul measurable_id
+  have htrue : Measurable fun current : AmbientSpace q.n =>
+      S.indicator (1 : Bool × AmbientSpace q.n → ENNReal)
+        (true, (accuracyScaleFactor q)⁻¹ • current) :=
+    (measurable_one.indicator hS).comp (measurable_const.prodMk htarget)
+  have hfalse : Measurable fun current : AmbientSpace q.n =>
+      S.indicator (1 : Bool × AmbientSpace q.n → ENNReal)
+        (false, (accuracyScaleFactor q)⁻¹ • current) :=
+    (measurable_one.indicator hS).comp (measurable_const.prodMk htarget)
+  have hacc := measurable_accuracyGaussianRejectionAcceptance q I sigma2
+  exact (hacc.mul htrue).add ((measurable_const.sub hacc).mul hfalse)
+
+theorem runEstimate_accuracyGaussianRejectionAttempt
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    (accuracyGaussianRejectionAttempt q sigma2 current).runEstimate oracle.query =
+      accuracyGaussianRejectionLaw q I sigma2 current := by
+  let c := accuracyScaleFactor q
+  let target : AmbientSpace q.n := c⁻¹ • current
+  let accept := accuracyGaussianRejectionAcceptance q I sigma2 current
+  have haccept : accept ≤ 1 :=
+    accuracyGaussianRejectionAcceptance_le_one q I hsigma2 current
+  have hacceptTop : accept ≠ ⊤ :=
+    ne_top_of_le_ne_top ENNReal.one_ne_top haccept
+  have hacceptReal0 : 0 ≤ accept.toReal := ENNReal.toReal_nonneg
+  have hacceptReal1 : accept.toReal ≤ 1 := by
+    exact ENNReal.toReal_mono ENNReal.one_ne_top haccept
+  by_cases ht : target ∈ accuracyPhaseTruncatedBody q I sigma2
+  · have heligible := (oracle_and_radii_iff_mem_accuracyPhaseTruncatedBody
+      q I oracle sigma2 target).mpr ht
+    have hcond : ∀ coin : ℝ,
+        (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target) =
+        (coin ≤ accept.toReal) := by
+      intro coin
+      have hacceptEq : accuracyGaussianRejectionAcceptance q I sigma2 current =
+          Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target := by
+        unfold accuracyGaussianRejectionAcceptance
+        rw [Set.indicator_of_mem ht]
+      rw [← hacceptEq]
+      apply propext
+      simpa only [heligible.1, heligible.2.1, heligible.2.2, true_and] using
+        (ENNReal.ofReal_le_iff_le_toReal hacceptTop :
+          ENNReal.ofReal coin ≤ accept ↔ coin ≤ accept.toReal)
+    simp only [accuracyGaussianRejectionAttempt,
+      MembershipOracleProgram.runEstimate]
+    dsimp only [c, target] at hcond
+    simp_rw [hcond]
+    have hout : Measurable fun coin : ℝ =>
+        if coin ≤ accept.toReal then (true, target) else (false, target) :=
+      Measurable.ite measurableSet_Iic measurable_const measurable_const
+    have hbind :
+        (uniformUnitIntervalMeasure.bind fun value =>
+          MembershipOracleProgram.runEstimate oracle.query
+            (if value ≤ accept.toReal then
+              MembershipOracleProgram.pure (true, target)
+            else MembershipOracleProgram.pure (false, target))) =
+          uniformUnitIntervalMeasure.bind fun value =>
+            Measure.dirac (if value ≤ accept.toReal then
+              (true, target) else (false, target)) := by
+      apply Measure.bind_congr_right
+      filter_upwards with value
+      split <;> simp [MembershipOracleProgram.runEstimate]
+    rw [hbind]
+    rw [Measure.bind_dirac_eq_map uniformUnitIntervalMeasure hout]
+    rw [uniformUnitInterval_map_threshold hacceptReal0 hacceptReal1
+      (true, target) (false, target)]
+    unfold accuracyGaussianRejectionLaw
+    dsimp only
+    rw [ENNReal.ofReal_toReal hacceptTop]
+    have hcompTop : 1 - accept ≠ ∞ :=
+      ne_top_of_le_ne_top ENNReal.one_ne_top (tsub_le_self : 1 - accept ≤ 1)
+    have hcomp : ENNReal.ofReal (1 - accept.toReal) = 1 - accept := by
+      rw [← ENNReal.toReal_one,
+        ← ENNReal.toReal_sub_of_le haccept ENNReal.one_ne_top,
+        ENNReal.ofReal_toReal hcompTop]
+    rw [hcomp]
+  · have hineligible : ¬ (oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ accuracyPhaseRadius q sigma2) := by
+      rwa [oracle_and_radii_iff_mem_accuracyPhaseTruncatedBody]
+    have haccept0 : accept = 0 := by
+      unfold accept accuracyGaussianRejectionAcceptance
+      rw [Set.indicator_of_notMem ht]
+    simp only [accuracyGaussianRejectionAttempt,
+      MembershipOracleProgram.runEstimate]
+    have hfalse : ∀ coin : ℝ,
+        ¬ (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target) := by
+      intro coin h
+      exact hineligible ⟨h.1, h.2.1, h.2.2.1⟩
+    dsimp only [c, target] at hfalse
+    simp_rw [hfalse, if_false]
+    simp only [MembershipOracleProgram.runEstimate]
+    rw [Measure.bind_const, measure_univ, one_smul]
+    unfold accuracyGaussianRejectionLaw
+    dsimp only
+    rw [show accuracyGaussianRejectionAcceptance q I sigma2 current = 0 from haccept0]
+    simp
+
+theorem accuracyGaussianRejectionLaw_isProbabilityMeasure
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    IsProbabilityMeasure (accuracyGaussianRejectionLaw q I sigma2 current) := by
+  constructor
+  simp only [accuracyGaussianRejectionLaw, Measure.add_apply,
+    Measure.smul_apply, measure_univ, smul_eq_mul, mul_one]
+  rw [add_comm, tsub_add_cancel_of_le]
+  exact accuracyGaussianRejectionAcceptance_le_one q I hsigma2 current
+
+noncomputable def accuracyGaussianRejectionKernel
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
+    Kernel (AmbientSpace q.n) (Bool × AmbientSpace q.n) :=
+  ⟨accuracyGaussianRejectionLaw q I sigma2,
+    measurable_accuracyGaussianRejectionLaw q I sigma2⟩
+
+instance accuracyGaussianRejectionKernel_isMarkovKernel
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (sigma2 : ℝ) [Fact (0 < sigma2)] :
+    IsMarkovKernel (accuracyGaussianRejectionKernel q I sigma2) :=
+  ⟨accuracyGaussianRejectionLaw_isProbabilityMeasure
+    q I (Fact.out : 0 < sigma2)⟩
+
 /-- Globally capped faithful phase collector.  After each block of proper
 steps it performs the two KLS rejection tests, records the transformed target
 sample on success, and retains the underlying speedy endpoint as the warm
@@ -706,17 +967,10 @@ noncomputable def cappedAccuracyGaussianCollectWeightsAux (q : VolumeParams)
   | _, _, 0, total, current => .pure (some (total, current))
   | 0, _, _ + 1, _, _ => .pure none
   | rawCap + 1, 0, samples + 1, total, current =>
-      let c := accuracyScaleFactor q
-      let target := c⁻¹ • current
-      .query target fun inside =>
-        .randomReal uniformUnitIntervalMeasure inferInstance fun coin =>
-          if inside = true ∧
-              ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
-              ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
-              ENNReal.ofReal coin ≤
-                Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target then
+      (accuracyGaussianRejectionAttempt q sigma2 current).bind fun result =>
+          if result.1 then
             cappedAccuracyGaussianCollectWeightsAux q sigma2 weight properStride
-              rawCap properStride samples (total + weight target) current
+              rawCap properStride samples (total + weight result.2) current
           else
             cappedAccuracyGaussianCollectWeightsAux q sigma2 weight properStride
               rawCap properStride (samples + 1) total current
@@ -736,6 +990,467 @@ noncomputable def cappedAccuracyGaussianCollectWeights (q : VolumeParams)
     MembershipOracleProgram q.n (Option (ℝ × AmbientSpace q.n)) :=
   cappedAccuracyGaussianCollectWeightsAux q sigma2 weight properStride
     rawCap properStride samples 0 current
+
+/-- Measure-level counterpart of the faithful collector, separating the
+marked proper proposal kernel `Q` from the speedy-to-target rejection kernel
+`R`. -/
+noncomputable def cappedAccuracyGaussianCollectLawAux
+    {S : Type*} [MeasurableSpace S]
+    (Q R : Kernel S (Bool × S)) (f : S → ℝ) (properStride : ℕ) :
+    ℕ → ℕ → ℕ → ℝ → S → Measure (Option (ℝ × S))
+  | _, _, 0, total, current => Measure.dirac (some (total, current))
+  | 0, _, _ + 1, _, _ => Measure.dirac none
+  | rawCap + 1, 0, samples + 1, total, current =>
+      (R current).bind fun result =>
+        if result.1 then
+          cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+            properStride samples (total + f result.2) current
+        else
+          cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+            properStride (samples + 1) total current
+  | rawCap + 1, remainingProper + 1, samples + 1, total, current =>
+      (Q current).bind fun result =>
+        if result.1 then
+          cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+            remainingProper (samples + 1) total result.2
+        else
+          cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+            (remainingProper + 1) (samples + 1) total result.2
+termination_by rawCap remainingProper samples total current => (rawCap, samples)
+
+noncomputable def cappedAccuracyGaussianCollectLaw
+    {S : Type*} [MeasurableSpace S]
+    (Q R : Kernel S (Bool × S)) (f : S → ℝ)
+    (rawCap properStride samples : ℕ) (current : S) :
+    Measure (Option (ℝ × S)) :=
+  cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap properStride
+    samples 0 current
+
+theorem cappedAccuracyGaussianCollectLawAux_measurable_and_probability
+    {S : Type*} [MeasurableSpace S]
+    (Q R : Kernel S (Bool × S)) [IsMarkovKernel Q] [IsMarkovKernel R]
+    {f : S → ℝ} (hf : Measurable f) (properStride : ℕ) :
+    ∀ rawCap remainingProper samples,
+      Measurable (fun p : ℝ × S =>
+        cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+          remainingProper samples p.1 p.2) ∧
+      ∀ total current, IsProbabilityMeasure
+        (cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+          remainingProper samples total current) := by
+  intro rawCap
+  induction rawCap with
+  | zero =>
+      intro remainingProper samples
+      cases samples with
+      | zero =>
+          simp only [cappedAccuracyGaussianCollectLawAux]
+          constructor
+          · exact Measure.measurable_dirac.comp <| measurable_some.comp <|
+              measurable_fst.prodMk measurable_snd
+          · intro total current
+            infer_instance
+      | succ samples =>
+          simp only [cappedAccuracyGaussianCollectLawAux]
+          constructor
+          · exact Measure.measurable_dirac.comp measurable_const
+          · intro total current
+            infer_instance
+  | succ rawCap ih =>
+      intro remainingProper samples
+      cases samples with
+      | zero =>
+          simp only [cappedAccuracyGaussianCollectLawAux]
+          constructor
+          · exact Measure.measurable_dirac.comp <| measurable_some.comp <|
+              measurable_fst.prodMk measurable_snd
+          · intro total current
+            infer_instance
+      | succ samples =>
+          cases remainingProper with
+          | zero =>
+              let tail : (ℝ × S) → (Bool × S) →
+                  Measure (Option (ℝ × S)) := fun state result =>
+                if result.1 then
+                  cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+                    properStride samples (state.1 + f result.2) state.2
+                else
+                  cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+                    properStride (samples + 1) state.1 state.2
+              have htail : Measurable fun p : (ℝ × S) × (Bool × S) =>
+                  tail p.1 p.2 := by
+                dsimp only [tail]
+                apply Measurable.ite
+                · exact (measurable_fst.comp measurable_snd)
+                    (measurableSet_singleton true)
+                · exact (ih properStride samples).1.comp <|
+                    ((measurable_fst.comp measurable_fst).add
+                      (hf.comp (measurable_snd.comp measurable_snd))).prodMk
+                        (measurable_snd.comp measurable_fst)
+                · exact (ih properStride (samples + 1)).1.comp <|
+                    (measurable_fst.comp measurable_fst).prodMk
+                      (measurable_snd.comp measurable_fst)
+              have htailProb : ∀ state result,
+                  IsProbabilityMeasure (tail state result) := by
+                intro state result
+                dsimp only [tail]
+                split_ifs
+                · exact (ih properStride samples).2 _ _
+                · exact (ih properStride (samples + 1)).2 _ _
+              simp only [cappedAccuracyGaussianCollectLawAux]
+              constructor
+              · change Measurable fun state : ℝ × S =>
+                  (R state.2).bind (tail state)
+                exact measurable_measure_bind_param_variable
+                  (R.measurable.comp measurable_snd)
+                  (fun state => IsMarkovKernel.isProbabilityMeasure state.2)
+                  htail
+              · intro total current
+                change IsProbabilityMeasure ((R current).bind (tail (total, current)))
+                exact MeasureTheory.isProbabilityMeasure_bind
+                  (htail.comp
+                    (measurable_const.prodMk measurable_id)).aemeasurable <|
+                  ae_of_all _ (htailProb (total, current))
+          | succ remainingProper =>
+              let tail : (ℝ × S) → (Bool × S) →
+                  Measure (Option (ℝ × S)) := fun state result =>
+                if result.1 then
+                  cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+                    remainingProper (samples + 1) state.1 result.2
+                else
+                  cappedAccuracyGaussianCollectLawAux Q R f properStride rawCap
+                    (remainingProper + 1) (samples + 1) state.1 result.2
+              have htail : Measurable fun p : (ℝ × S) × (Bool × S) =>
+                  tail p.1 p.2 := by
+                dsimp only [tail]
+                apply Measurable.ite
+                · exact (measurable_fst.comp measurable_snd)
+                    (measurableSet_singleton true)
+                · exact (ih remainingProper (samples + 1)).1.comp <|
+                    (measurable_fst.comp measurable_fst).prodMk
+                      (measurable_snd.comp measurable_snd)
+                · exact (ih (remainingProper + 1) (samples + 1)).1.comp <|
+                    (measurable_fst.comp measurable_fst).prodMk
+                      (measurable_snd.comp measurable_snd)
+              have htailProb : ∀ state result,
+                  IsProbabilityMeasure (tail state result) := by
+                intro state result
+                dsimp only [tail]
+                split_ifs
+                · exact (ih remainingProper (samples + 1)).2 _ _
+                · exact (ih (remainingProper + 1) (samples + 1)).2 _ _
+              simp only [cappedAccuracyGaussianCollectLawAux]
+              constructor
+              · change Measurable fun state : ℝ × S =>
+                  (Q state.2).bind (tail state)
+                exact measurable_measure_bind_param_variable
+                  (Q.measurable.comp measurable_snd)
+                  (fun state => IsMarkovKernel.isProbabilityMeasure state.2)
+                  htail
+              · intro total current
+                change IsProbabilityMeasure ((Q current).bind (tail (total, current)))
+                exact MeasureTheory.isProbabilityMeasure_bind
+                  (htail.comp
+                    (measurable_const.prodMk measurable_id)).aemeasurable <|
+                  ae_of_all _ (htailProb (total, current))
+
+theorem cappedAccuracyGaussianCollectWeightsAux_semantics
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (properStride : ℕ) : ∀ rawCap remainingProper samples,
+    (Measurable fun state : ℝ × AmbientSpace q.n =>
+      (cappedAccuracyGaussianCollectWeightsAux q sigma2 weight properStride
+        rawCap remainingProper samples state.1 state.2).runEstimate oracle.query) ∧
+    (∀ total current,
+      (cappedAccuracyGaussianCollectWeightsAux q sigma2 weight properStride
+        rawCap remainingProper samples total current).StronglyMeasurable oracle.query) ∧
+    (∀ total current,
+      (cappedAccuracyGaussianCollectWeightsAux q sigma2 weight properStride
+        rawCap remainingProper samples total current).runEstimate oracle.query =
+      cappedAccuracyGaussianCollectLawAux
+        (Arlib.MarkovChains.lazyProperProposalGaussianAux
+          (accuracyPhaseTruncatedBody q I sigma2)
+          (accuracyPhaseTruncatedBody_measurable q I sigma2)
+          (figureOneProposalRadius q sigma2) sigma2)
+        (accuracyGaussianRejectionKernel q I sigma2) weight properStride
+        rawCap remainingProper samples total current) := by
+  let _ : Fact (0 < sigma2) := ⟨hsigma2⟩
+  let Q := Arlib.MarkovChains.lazyProperProposalGaussianAux
+    (accuracyPhaseTruncatedBody q I sigma2)
+    (accuracyPhaseTruncatedBody_measurable q I sigma2)
+    (figureOneProposalRadius q sigma2) sigma2
+  let R := accuracyGaussianRejectionKernel q I sigma2
+  intro rawCap
+  induction rawCap with
+  | zero =>
+      intro remainingProper samples
+      cases samples with
+      | zero =>
+          constructor
+          · simp only [cappedAccuracyGaussianCollectWeightsAux,
+              MembershipOracleProgram.runEstimate]
+            exact Measure.measurable_dirac.comp <| measurable_some.comp <|
+              measurable_fst.prodMk measurable_snd
+          constructor
+          · intro total current
+            rw [cappedAccuracyGaussianCollectWeightsAux]
+            trivial
+          · intro total current
+            simp only [cappedAccuracyGaussianCollectWeightsAux,
+              MembershipOracleProgram.runEstimate,
+              cappedAccuracyGaussianCollectLawAux]
+      | succ samples =>
+          constructor
+          · simp only [cappedAccuracyGaussianCollectWeightsAux,
+              MembershipOracleProgram.runEstimate]
+            exact Measure.measurable_dirac.comp measurable_const
+          constructor
+          · intro total current
+            rw [cappedAccuracyGaussianCollectWeightsAux]
+            trivial
+          · intro total current
+            simp only [cappedAccuracyGaussianCollectWeightsAux,
+              MembershipOracleProgram.runEstimate,
+              cappedAccuracyGaussianCollectLawAux]
+  | succ rawCap ih =>
+      intro remainingProper samples
+      cases samples with
+      | zero =>
+          constructor
+          · simp only [cappedAccuracyGaussianCollectWeightsAux,
+              MembershipOracleProgram.runEstimate]
+            exact Measure.measurable_dirac.comp <| measurable_some.comp <|
+              measurable_fst.prodMk measurable_snd
+          constructor
+          · intro total current
+            rw [cappedAccuracyGaussianCollectWeightsAux]
+            trivial
+          · intro total current
+            simp only [cappedAccuracyGaussianCollectWeightsAux,
+              MembershipOracleProgram.runEstimate,
+              cappedAccuracyGaussianCollectLawAux]
+      | succ samples =>
+          cases remainingProper with
+          | zero =>
+              let next (total : ℝ) (current : AmbientSpace q.n) :
+                  Bool × AmbientSpace q.n → MembershipOracleProgram q.n
+                    (Option (ℝ × AmbientSpace q.n)) := fun result =>
+                if result.1 then
+                  cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                    properStride rawCap properStride samples
+                    (total + weight result.2) current
+                else
+                  cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                    properStride rawCap properStride (samples + 1) total current
+              let nextLaw (total : ℝ) (current : AmbientSpace q.n) :
+                  Bool × AmbientSpace q.n →
+                    Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+                if result.1 then
+                  cappedAccuracyGaussianCollectLawAux Q R weight properStride
+                    rawCap properStride samples (total + weight result.2) current
+                else
+                  cappedAccuracyGaussianCollectLawAux Q R weight properStride
+                    rawCap properStride (samples + 1) total current
+              have hnextStrong : ∀ total current result,
+                  (next total current result).StronglyMeasurable oracle.query := by
+                intro total current
+                rintro ⟨mark, target⟩
+                cases mark with
+                | false => exact (ih properStride (samples + 1)).2.1 _ _
+                | true => exact (ih properStride samples).2.1 _ _
+              have hnextEq : ∀ total current result,
+                  (next total current result).runEstimate oracle.query =
+                    nextLaw total current result := by
+                intro total current
+                rintro ⟨mark, target⟩
+                cases mark with
+                | false => exact (ih properStride (samples + 1)).2.2 _ _
+                | true => exact (ih properStride samples).2.2 _ _
+              have hnextLawMeasurable : ∀ total current,
+                  Measurable (nextLaw total current) := by
+                intro total current
+                dsimp only [nextLaw]
+                apply Measurable.ite
+                · exact measurable_fst (measurableSet_singleton true)
+                · exact (cappedAccuracyGaussianCollectLawAux_measurable_and_probability
+                    Q R hweight properStride rawCap properStride samples).1.comp <|
+                      ((measurable_const.add
+                        (hweight.comp measurable_snd)).prodMk measurable_const)
+                · exact (cappedAccuracyGaussianCollectLawAux_measurable_and_probability
+                    Q R hweight properStride rawCap properStride
+                      (samples + 1)).1.comp <|
+                        measurable_const.prodMk measurable_const
+              have hnextRun : ∀ total current, Measurable fun result =>
+                  (next total current result).runEstimate oracle.query := by
+                intro total current
+                rw [show (fun result =>
+                    (next total current result).runEstimate oracle.query) =
+                    nextLaw total current by
+                  funext result
+                  exact hnextEq total current result]
+                exact hnextLawMeasurable total current
+              have hsemantic : ∀ total current,
+                  (cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                    properStride (rawCap + 1) 0 (samples + 1)
+                    total current).runEstimate oracle.query =
+                  cappedAccuracyGaussianCollectLawAux Q R weight properStride
+                    (rawCap + 1) 0 (samples + 1) total current := by
+                intro total current
+                simp only [cappedAccuracyGaussianCollectWeightsAux]
+                rw [MembershipOracleProgram.runEstimate_bind oracle.query _
+                  (next total current)
+                  (accuracyGaussianRejectionAttempt_stronglyMeasurable
+                    q I oracle sigma2 current)
+                  (hnextStrong total current) (hnextRun total current)]
+                rw [runEstimate_accuracyGaussianRejectionAttempt
+                  q I oracle hsigma2 current]
+                simp_rw [hnextEq total current]
+                change (R current).bind (nextLaw total current) = _
+                rw [cappedAccuracyGaussianCollectLawAux]
+              constructor
+              · rw [show (fun state : ℝ × AmbientSpace q.n =>
+                    (cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                      properStride (rawCap + 1) 0 (samples + 1)
+                      state.1 state.2).runEstimate oracle.query) =
+                  fun state => cappedAccuracyGaussianCollectLawAux Q R weight
+                    properStride (rawCap + 1) 0 (samples + 1)
+                    state.1 state.2 by
+                    funext state
+                    exact hsemantic state.1 state.2]
+                exact (cappedAccuracyGaussianCollectLawAux_measurable_and_probability
+                  Q R hweight properStride (rawCap + 1) 0 (samples + 1)).1
+              constructor
+              · intro total current
+                simp only [cappedAccuracyGaussianCollectWeightsAux]
+                exact (accuracyGaussianRejectionAttempt_stronglyMeasurable
+                  q I oracle sigma2 current).bind
+                    (hnextStrong total current) (hnextRun total current)
+              · exact hsemantic
+          | succ remainingProper =>
+              let next (total : ℝ) : Bool × AmbientSpace q.n →
+                  MembershipOracleProgram q.n
+                    (Option (ℝ × AmbientSpace q.n)) := fun result =>
+                if result.1 then
+                  cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                    properStride rawCap remainingProper (samples + 1)
+                    total result.2
+                else
+                  cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                    properStride rawCap (remainingProper + 1) (samples + 1)
+                    total result.2
+              let nextLaw (total : ℝ) : Bool × AmbientSpace q.n →
+                  Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+                if result.1 then
+                  cappedAccuracyGaussianCollectLawAux Q R weight properStride
+                    rawCap remainingProper (samples + 1) total result.2
+                else
+                  cappedAccuracyGaussianCollectLawAux Q R weight properStride
+                    rawCap (remainingProper + 1) (samples + 1) total result.2
+              have hnextStrong : ∀ total result,
+                  (next total result).StronglyMeasurable oracle.query := by
+                intro total
+                rintro ⟨mark, state⟩
+                cases mark with
+                | false => exact (ih (remainingProper + 1) (samples + 1)).2.1 _ _
+                | true => exact (ih remainingProper (samples + 1)).2.1 _ _
+              have hnextEq : ∀ total result,
+                  (next total result).runEstimate oracle.query =
+                    nextLaw total result := by
+                intro total
+                rintro ⟨mark, state⟩
+                cases mark with
+                | false => exact (ih (remainingProper + 1) (samples + 1)).2.2 _ _
+                | true => exact (ih remainingProper (samples + 1)).2.2 _ _
+              have hnextLawMeasurable : ∀ total, Measurable (nextLaw total) := by
+                intro total
+                dsimp only [nextLaw]
+                apply Measurable.ite
+                · exact measurable_fst (measurableSet_singleton true)
+                · exact (cappedAccuracyGaussianCollectLawAux_measurable_and_probability
+                    Q R hweight properStride rawCap remainingProper
+                      (samples + 1)).1.comp <|
+                        measurable_const.prodMk measurable_snd
+                · exact (cappedAccuracyGaussianCollectLawAux_measurable_and_probability
+                    Q R hweight properStride rawCap (remainingProper + 1)
+                      (samples + 1)).1.comp <|
+                        measurable_const.prodMk measurable_snd
+              have hnextRun : ∀ total, Measurable fun result =>
+                  (next total result).runEstimate oracle.query := by
+                intro total
+                rw [show (fun result =>
+                    (next total result).runEstimate oracle.query) = nextLaw total by
+                  funext result
+                  exact hnextEq total result]
+                exact hnextLawMeasurable total
+              have hsemantic : ∀ total current,
+                  (cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                    properStride (rawCap + 1) (remainingProper + 1)
+                    (samples + 1) total current).runEstimate oracle.query =
+                  cappedAccuracyGaussianCollectLawAux Q R weight properStride
+                    (rawCap + 1) (remainingProper + 1) (samples + 1)
+                    total current := by
+                intro total current
+                simp only [cappedAccuracyGaussianCollectWeightsAux]
+                rw [MembershipOracleProgram.runEstimate_bind oracle.query _ (next total)
+                  (accuracyMetropolisMarkedBallStep_stronglyMeasurable
+                    q I oracle sigma2 current)
+                  (hnextStrong total) (hnextRun total)]
+                rw [runEstimate_accuracyMetropolisMarkedBallStep_eq_lazyProperAux
+                  q I oracle hsigma2 current]
+                simp_rw [hnextEq total]
+                change (Q current).bind (nextLaw total) = _
+                rw [cappedAccuracyGaussianCollectLawAux]
+              constructor
+              · rw [show (fun state : ℝ × AmbientSpace q.n =>
+                    (cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                      properStride (rawCap + 1) (remainingProper + 1)
+                      (samples + 1) state.1 state.2).runEstimate oracle.query) =
+                  fun state => cappedAccuracyGaussianCollectLawAux Q R weight
+                    properStride (rawCap + 1) (remainingProper + 1)
+                    (samples + 1) state.1 state.2 by
+                    funext state
+                    exact hsemantic state.1 state.2]
+                exact (cappedAccuracyGaussianCollectLawAux_measurable_and_probability
+                  Q R hweight properStride (rawCap + 1) (remainingProper + 1)
+                    (samples + 1)).1
+              constructor
+              · intro total current
+                simp only [cappedAccuracyGaussianCollectWeightsAux]
+                exact (accuracyMetropolisMarkedBallStep_stronglyMeasurable
+                  q I oracle sigma2 current).bind
+                    (hnextStrong total) (hnextRun total)
+              · exact hsemantic
+
+theorem cappedAccuracyGaussianCollectWeights_semantics
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (rawCap properStride samples : ℕ) :
+    (Measurable fun current =>
+      (cappedAccuracyGaussianCollectWeights q sigma2 weight rawCap
+        properStride samples current).runEstimate oracle.query) ∧
+    (∀ current,
+      (cappedAccuracyGaussianCollectWeights q sigma2 weight rawCap
+        properStride samples current).StronglyMeasurable oracle.query) ∧
+    (∀ current,
+      (cappedAccuracyGaussianCollectWeights q sigma2 weight rawCap
+        properStride samples current).runEstimate oracle.query =
+      cappedAccuracyGaussianCollectLaw
+        (Arlib.MarkovChains.lazyProperProposalGaussianAux
+          (accuracyPhaseTruncatedBody q I sigma2)
+          (accuracyPhaseTruncatedBody_measurable q I sigma2)
+          (figureOneProposalRadius q sigma2) sigma2)
+        (accuracyGaussianRejectionKernel q I sigma2) weight rawCap
+        properStride samples current) := by
+  have h := cappedAccuracyGaussianCollectWeightsAux_semantics
+    q I oracle hsigma2 hweight properStride rawCap properStride samples
+  constructor
+  · exact h.1.comp (measurable_const.prodMk measurable_id)
+  constructor
+  · intro current
+    exact h.2.1 0 current
+  · intro current
+    exact h.2.2 0 current
 
 /-- The faithful phase collector consumes at most its single shared cap,
 including both ball proposals and speedy-to-target rejection queries. -/
@@ -766,13 +1481,21 @@ theorem cappedAccuracyGaussianCollectWeightsAux_queryBound
           cases remainingProper with
           | zero =>
               simp only [cappedAccuracyGaussianCollectWeightsAux]
-              apply MembershipOracleProgram.QueryBound.query
-              intro inside
-              apply MembershipOracleProgram.QueryBound.randomReal
-              intro coin
-              split
-              · exact ih properStride samples _ current
-              · exact ih properStride (samples + 1) total current
+              have htail : ∀ result : Bool × AmbientSpace q.n,
+                  (if result.1 then
+                    cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                      properStride rawCap properStride samples
+                        (total + weight result.2) current
+                  else cappedAccuracyGaussianCollectWeightsAux q sigma2 weight
+                    properStride rawCap properStride (samples + 1) total
+                      current).QueryBound rawCap := by
+                rintro ⟨mark, target⟩
+                cases mark with
+                | false => exact ih properStride (samples + 1) total current
+                | true => exact ih properStride samples _ current
+              have h := (accuracyGaussianRejectionAttempt_queryBound
+                q sigma2 current).bind htail
+              simpa [Nat.add_comm] using h
           | succ remainingProper =>
               simp only [cappedAccuracyGaussianCollectWeightsAux]
               have htail : ∀ result : Bool × AmbientSpace q.n,
