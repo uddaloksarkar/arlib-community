@@ -36,10 +36,15 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms Arlib.MarkovChains.mul_natCast_mul_bind_cappedLazyProperMarkedLaw_none_le
 #print axioms half_mul_natCast_mul_cappedProperMetropolisBallWalk_none_le
 #print axioms Arlib.MarkovChains.TVLe.withDensity_le_one_cv18
+#print axioms Arlib.MarkovChains.TVLe.withDensity_of_one_sub_lintegral_le_cv18
+#print axioms Arlib.MarkovChains.TVLe.normalize_withDensity_of_defect_cv18
 #print axioms Arlib.MarkovChains.TVLe.condOn_cv18
 #print axioms Arlib.MarkovChains.TVLe.condOn_target_half_cv18
 #print axioms Arlib.MarkovChains.TVLe.normalize_withDensity_target_half_cv18
 #print axioms Arlib.MarkovChains.condOn_restrict_univ_cv18
+#print axioms Arlib.MarkovChains.ell_eq_one_on_shrunken_radius_cv18
+#print axioms Arlib.MarkovChains.half_le_ellGaussianProb_standardCore_radius_cv18
+#print axioms Arlib.MarkovChains.condOn_ellGaussianProb_smul_eq_gaussian_radius_cv18
 #print axioms Arlib.MarkovChains.condOn_gaussian_scaleAcceptance_eq_target_cv18
 #print axioms Arlib.MarkovChains.TVLe.speedyToGaussian_twoStage_cv18
 #print axioms Arlib.MarkovChains.acceptance_floor_of_cv_four_cv18

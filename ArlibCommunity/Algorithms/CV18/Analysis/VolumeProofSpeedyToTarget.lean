@@ -32,6 +32,44 @@ theorem TVLe.withDensity_le_one_cv18
   exact ⟨lintegral_le_of_tvLe h hm hle,
     lintegral_le_of_tvLe h.symm hm hle⟩
 
+/-- If a probability density multiplier is bounded by one and its total
+missing mass is at most `epsilon`, weighting changes the law by at most
+`epsilon` in setwise total variation. -/
+theorem TVLe.withDensity_of_one_sub_lintegral_le_cv18
+    {Omega : Type*} [MeasurableSpace Omega]
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    {weight : Omega → ENNReal} (hweight : Measurable weight)
+    (hweight_one : ∀ x, weight x ≤ 1) {epsilon : ENNReal}
+    (hdefect : ∫⁻ x, (1 - weight x) ∂mu ≤ epsilon) :
+    Arlib.TVLe (mu.withDensity weight) mu epsilon := by
+  intro S hS
+  rw [withDensity_apply _ hS]
+  have hweighted : (∫⁻ x in S, weight x ∂mu) ≤ mu S := by
+    rw [← setLIntegral_one]
+    exact setLIntegral_mono' hS fun x _ => hweight_one x
+  have hsplit : mu S =
+      (∫⁻ x in S, weight x ∂mu) + ∫⁻ x in S, (1 - weight x) ∂mu := by
+    rw [← lintegral_add_left hweight]
+    rw [← setLIntegral_one]
+    refine setLIntegral_congr_fun hS fun x _ => ?_
+    exact (add_tsub_cancel_of_le (hweight_one x)).symm
+  have hdefectUniv : (∫⁻ x in Set.univ, (1 - weight x) ∂mu) ≤ epsilon := by
+    simpa using hdefect
+  have hdefectS : (∫⁻ x in S, (1 - weight x) ∂mu) ≤ epsilon :=
+    (lintegral_mono_set (Set.subset_univ S)).trans hdefectUniv
+  constructor
+  · exact hweighted.trans (self_le_add_right _ _)
+  · rw [hsplit]
+    gcongr
+
+/-- Conditioning a probability measure on the whole space is the identity. -/
+theorem condOn_univ_eq_cv18 {Omega : Type*} [MeasurableSpace Omega]
+    (mu : Measure Omega) [IsProbabilityMeasure mu] :
+    Arlib.condOn mu Set.univ = mu := by
+  ext S hS
+  rw [Arlib.condOn_apply _ MeasurableSet.univ hS]
+  simp
+
 /-- Conditioning two probability laws on the same event amplifies a TV error
 by at most twice the reciprocal of a common lower bound on the event mass.
 This intentionally exposes the amplification factor: the CV18 acceptance
@@ -129,6 +167,48 @@ theorem TVLe.condOn_cv18
           exact hfrac.trans hediv
         linarith [hediv]
     _ = b / B + 2 * e / P := by ring
+
+/-- Normalizing a density multiplier whose missing mass is at most `epsilon`
+costs at most `4 * epsilon`, provided `epsilon ≤ 1/2`. -/
+theorem TVLe.normalize_withDensity_of_defect_cv18
+    {Omega : Type*} [MeasurableSpace Omega]
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    {weight : Omega → ENNReal} (hweight : Measurable weight)
+    (hweight_one : ∀ x, weight x ≤ 1) {epsilon : ENNReal}
+    (hepsilon : epsilon ≠ ⊤)
+    (hepsilon_half : epsilon ≤ ENNReal.ofReal (1 / 2 : ℝ))
+    (hdefect : ∫⁻ x, (1 - weight x) ∂mu ≤ epsilon) :
+    Arlib.TVLe (Arlib.condOn (mu.withDensity weight) Set.univ) mu
+      (4 * epsilon) := by
+  have hbase := TVLe.withDensity_of_one_sub_lintegral_le_cv18
+    mu hweight hweight_one hdefect
+  have hweightInt : ∫⁻ x, weight x ∂mu ≠ ⊤ := by
+    apply ne_top_of_le_ne_top ENNReal.one_ne_top
+    exact lintegral_le_const (Filter.Eventually.of_forall hweight_one)
+  let _ : IsFiniteMeasure (mu.withDensity weight) :=
+    isFiniteMeasure_withDensity hweightInt
+  have hhalf_add : ENNReal.ofReal (1 / 2 : ℝ) + epsilon ≤ 1 := by
+    calc
+      ENNReal.ofReal (1 / 2 : ℝ) + epsilon ≤
+          ENNReal.ofReal (1 / 2 : ℝ) + ENNReal.ofReal (1 / 2 : ℝ) := by gcongr
+      _ = 1 := by
+        rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 1 / 2)
+          (by norm_num : (0 : ℝ) ≤ 1 / 2)]
+        norm_num
+  have hweight_add : ENNReal.ofReal (1 / 2 : ℝ) + epsilon ≤
+      (mu.withDensity weight) Set.univ + epsilon := by
+    exact hhalf_add.trans (by simpa using hbase.right MeasurableSet.univ)
+  have hweight_half : ENNReal.ofReal (1 / 2 : ℝ) ≤
+      (mu.withDensity weight) Set.univ :=
+    ENNReal.le_of_add_le_add_right hepsilon hweight_add
+  have hmu_half : ENNReal.ofReal (1 / 2 : ℝ) ≤ mu Set.univ := by simp
+  have hcond := TVLe.condOn_cv18 hbase hepsilon MeasurableSet.univ
+    (p := ENNReal.ofReal (1 / 2 : ℝ)) (by norm_num) hweight_half hmu_half
+  have hmucond : Arlib.condOn mu Set.univ = mu := condOn_univ_eq_cv18 mu
+  rw [hmucond] at hcond
+  convert hcond using 1
+  simp [ENNReal.div_eq_inv_mul]
+  ring
 
 /-- TV stability of a complete accept/reject stage.  Weight by the common
 acceptance probability and then normalize by conditioning on `univ`.  A
@@ -268,6 +348,52 @@ theorem condOn_restrict_univ_cv18 {Omega : Type*} [MeasurableSpace Omega]
     Arlib.condOn_apply _ hS hT, Set.inter_univ,
     Measure.restrict_apply hT, Measure.restrict_apply_univ]
 
+/-- The homothetic-core ball inclusion with an arbitrary inradius. -/
+theorem ball_smul_subset_of_convex_radius_cv18
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hKc : Convex ℝ K)
+    {rho c : ℝ}
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) rho ⊆ K)
+    (hc0 : 0 < c) (hc1 : c < 1) :
+    ∀ y ∈ K, ball (c • y) ((1 - c) * rho) ⊆ K := by
+  intro y hy z hz
+  have honec : 0 < 1 - c := sub_pos.mpr hc1
+  have hw : (1 - c)⁻¹ • (z - c • y) ∈
+      ball (0 : EuclideanSpace ℝ (Fin n)) rho := by
+    rw [mem_ball, dist_zero_right, norm_smul, Real.norm_eq_abs,
+      abs_of_pos (inv_pos.mpr honec)]
+    rw [mem_ball, dist_eq_norm] at hz
+    calc
+      (1 - c)⁻¹ * ‖z - c • y‖ <
+          (1 - c)⁻¹ * ((1 - c) * rho) :=
+        mul_lt_mul_of_pos_left hz (inv_pos.mpr honec)
+      _ = rho := by
+        rw [← mul_assoc, inv_mul_cancel₀ honec.ne', one_mul]
+  have hmem := hKc hy (hball hw) (a := c) (b := 1 - c)
+    hc0.le (sub_nonneg.mpr hc1.le) (by ring)
+  have heq : c • y + (1 - c) • ((1 - c)⁻¹ • (z - c • y)) = z := by
+    rw [smul_smul, mul_inv_cancel₀ honec.ne', one_smul]
+    abel
+  rwa [heq] at hmem
+
+/-- Every proposal ball is internal on a homothetic core when the proposal
+radius is at most the lost fraction of an arbitrary inradius. -/
+theorem ell_eq_one_on_shrunken_radius_cv18
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hKc : Convex ℝ K)
+    {rho : ℝ} (_hrho : 0 < rho)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) rho ⊆ K)
+    {c delta : ℝ} (hc0 : 0 < c) (hc1 : c < 1)
+    (hdelta : 0 < delta) (hdelta_c : delta ≤ (1 - c) * rho)
+    {x : EuclideanSpace ℝ (Fin n)} (hx : x ∈ c • K) :
+    ell K delta x = 1 := by
+  obtain ⟨y, hy, rfl⟩ := hx
+  have hsub : ball (c • y) ((1 - c) * rho) ⊆ K :=
+    ball_smul_subset_of_convex_radius_cv18 hKc hball hc0 hc1 y hy
+  have hball' : ball (c • y) delta ⊆ K :=
+    (Metric.ball_subset_ball hdelta_c).trans hsub
+  rw [ell_apply, Set.inter_eq_left.2 hball', ENNReal.div_self]
+  · exact (measure_ball_pos volume _ hdelta).ne'
+  · exact measure_ball_lt_top.ne
+
 /-- On a homothetic core on which every proposal ball stays inside `K`, the
 speedy stationary measure is exactly the ordinary restricted Gaussian. -/
 theorem ellGaussianMeasure_restrict_smul_eq_gaussian_cv18
@@ -296,6 +422,34 @@ theorem ellGaussianMeasure_restrict_smul_eq_gaussian_cv18
   refine setLIntegral_congr_fun (hS.inter hcore) fun x hx => ?_
   rw [ell_eq_one_on_shrunken_cv18 hKc hball hc0 hc1 hdelta hdelta_c hx.2,
     one_mul]
+
+/-- Arbitrary-inradius version of the exact speedy-core identity. -/
+theorem ellGaussianMeasure_restrict_smul_eq_gaussian_radius_cv18
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (hKc : Convex ℝ K) {rho : ℝ} (hrho : 0 < rho)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) rho ⊆ K)
+    {c delta variance : ℝ} (hc0 : 0 < c) (hc1 : c < 1)
+    (hdelta : 0 < delta) (hdelta_c : delta ≤ (1 - c) * rho) :
+    (ellGaussianMeasure K delta variance).restrict (c • K) =
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight variance)).restrict (c • K) := by
+  have hcore : MeasurableSet (c • K) :=
+    measurableSet_smul_set_cv18 hK hc0.ne'
+  have hzero : (0 : EuclideanSpace ℝ (Fin n)) ∈ K :=
+    hball (Metric.mem_ball_self hrho)
+  have hsub : c • K ⊆ K := by
+    rintro _ ⟨x, hx, rfl⟩
+    exact hKc.smul_mem_of_zero_mem hzero hx ⟨hc0.le, hc1.le⟩
+  ext S hS
+  rw [Measure.restrict_apply hS, ellGaussianMeasure,
+    withDensity_apply _ (hS.inter hcore), Measure.restrict_restrict (hS.inter hcore),
+    Measure.restrict_apply hS, withDensity_apply _ (hS.inter hcore)]
+  have hset : S ∩ c • K ∩ K = S ∩ c • K :=
+    Set.inter_eq_left.2 fun _ hx => hsub hx.2
+  rw [hset]
+  refine setLIntegral_congr_fun (hS.inter hcore) fun x hx => ?_
+  rw [ell_eq_one_on_shrunken_radius_cv18 hKc hrho hball hc0 hc1
+    hdelta hdelta_c hx.2, one_mul]
 
 /-- The standard CV18 core keeps at least half of the ordinary Gaussian mass. -/
 theorem half_mul_gaussianWeight_le_standardCore_cv18
@@ -395,6 +549,71 @@ theorem half_le_ellGaussianProb_standardCore_cv18
     _ = ellGaussianMeasure K delta variance (c • K) :=
       hgauss.symm.trans hcore.symm
 
+/-- A speedy-stationary draw still reaches the standard half-mass homothetic
+core when the body has arbitrary inradius `rho` and
+`delta ≤ rho / (2n)`. -/
+theorem half_le_ellGaussianProb_standardCore_radius_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hK : MeasurableSet K) (hKc : Convex ℝ K)
+    {rho : ℝ} (hrho : 0 < rho)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) rho ⊆ K)
+    {delta variance : ℝ} (hdelta : 0 < delta)
+    (hdelta_n : delta ≤ rho / (2 * (n : ℝ))) (hvariance : 0 < variance)
+    (hmass0 : ellGaussianMeasure K delta variance Set.univ ≠ 0)
+    (hmasstop : ellGaussianMeasure K delta variance Set.univ ≠ ⊤) :
+    ENNReal.ofReal (1 / 2) ≤
+      ellGaussianProb K delta variance
+        ((1 - 1 / (2 * (n : ℝ))) • K) := by
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hnpos : (0 : ℝ) < n := by linarith
+  have hfrac : 0 < 1 / (2 * (n : ℝ)) := by positivity
+  have hc0 : 0 < c := by
+    dsimp [c]
+    have hle : 1 / (2 * (n : ℝ)) ≤ 1 / 2 := by
+      rw [div_le_div_iff₀ (by positivity) (by norm_num)]
+      nlinarith
+    linarith
+  have hc1 : c < 1 := by dsimp [c]; linarith
+  have hdelta_c : delta ≤ (1 - c) * rho := by
+    calc
+      delta ≤ rho / (2 * (n : ℝ)) := hdelta_n
+      _ = (1 - c) * rho := by dsimp [c]; ring
+  have hrest := ellGaussianMeasure_restrict_smul_eq_gaussian_radius_cv18
+    (variance := variance) hK hKc hrho hball hc0 hc1 hdelta hdelta_c
+  have hcore := congrArg
+    (fun mu : Measure (EuclideanSpace ℝ (Fin n)) => mu Set.univ) hrest
+  simp only [Measure.restrict_apply_univ] at hcore
+  have htotal : ellGaussianMeasure K delta variance Set.univ ≤
+      ∫⁻ x in K, gaussianWeight variance x := by
+    rw [ellGaussianMeasure_univ]
+    refine lintegral_mono fun x => ?_
+    calc
+      ell K delta x * gaussianWeight variance x ≤
+          1 * gaussianWeight variance x :=
+        mul_le_mul' (ell_le_one K delta x) le_rfl
+      _ = gaussianWeight variance x := one_mul _
+  have hhalf := half_mul_gaussianWeight_le_standardCore_cv18
+    hn hK hvariance
+  have hcoreMeas : MeasurableSet (c • K) :=
+    measurableSet_smul_set_cv18 hK hc0.ne'
+  have hgauss :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight variance)) (c • K) =
+        ∫⁻ x in c • K, gaussianWeight variance x := by
+    rw [withDensity_apply _ hcoreMeas]
+  change ENNReal.ofReal (1 / 2) ≤
+    (ellGaussianMeasure K delta variance Set.univ)⁻¹ *
+      ellGaussianMeasure K delta variance (c • K)
+  rw [← ENNReal.div_eq_inv_mul]
+  refine (ENNReal.le_div_iff_mul_le (Or.inl hmass0) (Or.inl hmasstop)).2 ?_
+  calc
+    ENNReal.ofReal (1 / 2) * ellGaussianMeasure K delta variance Set.univ ≤
+        ENNReal.ofReal (1 / 2) * (∫⁻ x in K, gaussianWeight variance x) := by gcongr
+    _ ≤ ∫⁻ x in c • K, gaussianWeight variance x := by simpa [c] using hhalf
+    _ = ellGaussianMeasure K delta variance (c • K) :=
+      hgauss.symm.trans hcore.symm
+
 /-- Consequently, rejecting speedy-stationary samples until they land in the
 homothetic core gives exactly the ordinary Gaussian conditioned on that core. -/
 theorem condOn_ellGaussianMeasure_smul_eq_gaussian_cv18
@@ -433,6 +652,30 @@ theorem condOn_ellGaussianProb_smul_eq_gaussian_cv18
       (ENNReal.inv_ne_zero.mpr hmasstop) (ENNReal.inv_ne_top.mpr hmass0)]
   exact condOn_ellGaussianMeasure_smul_eq_gaussian_cv18
     hK hKc hball hc0 hc1 hdelta hdelta_c
+
+/-- Arbitrary-inradius version of the normalized speedy-core rejection
+identity. -/
+theorem condOn_ellGaussianProb_smul_eq_gaussian_radius_cv18
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (hKc : Convex ℝ K) {rho : ℝ} (hrho : 0 < rho)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) rho ⊆ K)
+    {c delta variance : ℝ} (hc0 : 0 < c) (hc1 : c < 1)
+    (hdelta : 0 < delta) (hdelta_c : delta ≤ (1 - c) * rho)
+    (hmass0 : ellGaussianMeasure K delta variance Set.univ ≠ 0)
+    (hmasstop : ellGaussianMeasure K delta variance Set.univ ≠ ⊤) :
+    Arlib.condOn (ellGaussianProb K delta variance) (c • K) =
+      Arlib.condOn
+        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight variance)) (c • K) := by
+  have hrest := ellGaussianMeasure_restrict_smul_eq_gaussian_radius_cv18
+    (variance := variance) hK hKc hrho hball hc0 hc1 hdelta hdelta_c
+  have hmass := congrArg
+    (fun mu : Measure (EuclideanSpace ℝ (Fin n)) => mu Set.univ) hrest
+  simp only [Measure.restrict_apply_univ] at hmass
+  rw [ellGaussianProb, condOn_smul_cv18 _
+    (measurableSet_smul_set_cv18 hK hc0.ne')
+      (ENNReal.inv_ne_zero.mpr hmasstop) (ENNReal.inv_ne_top.mpr hmass0),
+    Arlib.condOn_def, Arlib.condOn_def, hmass, hrest]
 
 /-- Scaling a Gaussian conditioned on `c • K` back to `K` divides its
 variance by `c^2`.  The Jacobian cancels in the two conditional masses. -/
@@ -706,9 +949,10 @@ produce a law within `64 * epsilon` of the Gaussian target restricted to `K`. -/
 theorem TVLe.speedyToGaussian_twoStage_cv18
     (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
     (hK : MeasurableSet K) (hKc : Convex ℝ K)
-    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {rho : ℝ} (hrho : 0 < rho)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) rho ⊆ K)
     {delta variance : ℝ} (hdelta : 0 < delta)
-    (hdelta_n : delta ≤ 1 / (2 * (n : ℝ)))
+    (hdelta_n : delta ≤ rho / (2 * (n : ℝ)))
     (hvariance : 0 < variance)
     (hmass0 : ellGaussianMeasure K delta variance Set.univ ≠ 0)
     (hmasstop : ellGaussianMeasure K delta variance Set.univ ≠ ⊤)
@@ -756,8 +1000,8 @@ theorem TVLe.speedyToGaussian_twoStage_cv18
     isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
   have hhalfCore : ENNReal.ofReal (1 / 2 : ℝ) ≤ nu (c • K) := by
     dsimp [nu, c]
-    exact half_le_ellGaussianProb_standardCore_cv18 hn hK hKc hball
-      hdelta hdelta_n hvariance hmass0 hmasstop
+    exact half_le_ellGaussianProb_standardCore_radius_cv18 hn hK hKc
+      hrho hball hdelta hdelta_n hvariance hmass0 hmasstop
   have hepsQuarter : epsilon ≤ ENNReal.ofReal (1 / 4 : ℝ) :=
     hepsilon_small.trans (by norm_num)
   have hfirst := TVLe.condOn_target_half_cv18 hmix hepsilon
@@ -796,11 +1040,16 @@ theorem TVLe.speedyToGaussian_twoStage_cv18
         (gaussianWeight (variance / c ^ 2))) K
   let _ : IsProbabilityMeasure proposal :=
     Arlib.isProbabilityMeasure_condOn _ hprop0 hproptop
+  have hdeltaCore : delta ≤ (1 - c) * rho := by
+    calc
+      delta ≤ rho / (2 * (n : ℝ)) := hdelta_n
+      _ = (1 - c) * rho := by dsimp [c]; ring
   have htargetMap :
       (Arlib.condOn nu (c • K)).map (fun x => c⁻¹ • x) = proposal := by
     dsimp [nu, proposal]
-    rw [condOn_ellGaussianProb_smul_eq_gaussian_cv18 hK hKc hball
-      hc0 hc1 hdelta (by simpa [c] using hdelta_n) hmass0 hmasstop]
+    rw [condOn_ellGaussianProb_smul_eq_gaussian_radius_cv18 hK hKc
+      hrho hball hc0 hc1 hdelta hdeltaCore
+      hmass0 hmasstop]
     exact map_condOn_gaussian_smul_cv18 hK hc0
   rw [htargetMap] at hmap
   have heightSmall : 8 * epsilon ≤ ENNReal.ofReal (1 / 4 : ℝ) := by
@@ -813,7 +1062,7 @@ theorem TVLe.speedyToGaussian_twoStage_cv18
   have heightTop : 8 * epsilon ≠ ⊤ :=
     ENNReal.mul_ne_top (by norm_num) hepsilon
   have hzero : (0 : EuclideanSpace ℝ (Fin n)) ∈ K :=
-    hball (Metric.mem_ball_self one_pos)
+    hball (Metric.mem_ball_self hrho)
   have hhalfAccept : ENNReal.ofReal (1 / 2 : ℝ) ≤
       proposal.withDensity (gaussianScaleAcceptance variance c) Set.univ := by
     dsimp [proposal, c]
