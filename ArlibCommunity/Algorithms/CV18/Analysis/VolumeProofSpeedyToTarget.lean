@@ -1206,7 +1206,7 @@ theorem TVLe.speedyToGaussian_twoStage_cv18
   ring
 
 /-- The paper's actual speedy-to-target route.  The two KLS97 core facts are
-kept explicit: speedy mass at least one half on the homothetic core, and a
+kept explicit: speedy mass at least seven sixteenths on the homothetic core, and a
 small average local-conductance defect there.  No pointwise `ell = 1` claim
 is used. -/
 theorem TVLe.speedyToGaussian_twoStage_of_coreDefect_cv18
@@ -1224,7 +1224,7 @@ theorem TVLe.speedyToGaussian_twoStage_of_coreDefect_cv18
       ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
         (gaussianWeight
           (variance / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K ≠ ⊤)
-    (hcoreHalf : ENNReal.ofReal (1 / 2 : ℝ) ≤
+    (hcoreMass : ENNReal.ofReal (7 / 16 : ℝ) ≤
       ellGaussianProb K delta variance
         ((1 - 1 / (2 * (n : ℝ))) • K))
     (hgaussCore0 :
@@ -1282,10 +1282,44 @@ theorem TVLe.speedyToGaussian_twoStage_of_coreDefect_cv18
     ellGaussianProb K delta variance
   let _ : IsProbabilityMeasure nu :=
     isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
-  have hhalfCore : ENNReal.ofReal (1 / 2 : ℝ) ≤ nu (c • K) := by
-    simpa [nu, c] using hcoreHalf
-  have hfirst := TVLe.condOn_target_half_cv18 hmix hepsilon
-    hepsilon_quarter hcore hhalfCore
+  have hsevenCore : ENNReal.ofReal (7 / 16 : ℝ) ≤ nu (c • K) := by
+    simpa [nu, c] using hcoreMass
+  have height : 8 * epsilon ≤ ENNReal.ofReal (1 / 4 : ℝ) :=
+    (self_le_add_right _ _).trans hcombined_quarter
+  have hepsilon_thirtysecond :
+      epsilon ≤ ENNReal.ofReal (1 / 32 : ℝ) := by
+    apply (ENNReal.toReal_le_toReal hepsilon (by norm_num)).mp
+    rw [ENNReal.toReal_ofReal (by norm_num : (0 : ℝ) ≤ 1 / 32)]
+    have heightR := ENNReal.toReal_mono (by norm_num) height
+    rw [ENNReal.toReal_ofReal (by norm_num : (0 : ℝ) ≤ 1 / 4),
+      ENNReal.toReal_mul] at heightR
+    norm_num at heightR ⊢
+    linarith
+  have hquarter_add : ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
+      ENNReal.ofReal (7 / 16 : ℝ) := by
+    calc
+      ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
+          ENNReal.ofReal (1 / 4 : ℝ) +
+            ENNReal.ofReal (1 / 32 : ℝ) := by gcongr
+      _ ≤ ENNReal.ofReal (7 / 16 : ℝ) := by
+        rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 1 / 4)
+          (by norm_num : (0 : ℝ) ≤ 1 / 32)]
+        norm_num
+  have hmuCoreAdd : ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
+      mu (c • K) + epsilon :=
+    hquarter_add.trans (hsevenCore.trans (hmix.right hcore))
+  have hmuCore : ENNReal.ofReal (1 / 4 : ℝ) ≤ mu (c • K) :=
+    ENNReal.le_of_add_le_add_right hepsilon hmuCoreAdd
+  have hnuCore : ENNReal.ofReal (1 / 4 : ℝ) ≤ nu (c • K) :=
+    (show ENNReal.ofReal (1 / 4 : ℝ) ≤ ENNReal.ofReal (7 / 16 : ℝ) by
+      norm_num).trans hsevenCore
+  have hfirstBase := TVLe.condOn_cv18 hmix hepsilon hcore
+    (p := ENNReal.ofReal (1 / 4 : ℝ)) (by norm_num) hmuCore hnuCore
+  have hfirst : Arlib.TVLe (Arlib.condOn mu (c • K))
+      (Arlib.condOn nu (c • K)) (8 * epsilon) := by
+    convert hfirstBase using 1
+    simp [ENNReal.div_eq_inv_mul]
+    ring
   have hdefectCompare :=
     TVLe.condOn_ellGaussianProb_gaussian_of_coreDefect_cv18
       hK hcore delta variance hmass0 hmasstop hgaussCore0 hgaussCoretop
@@ -1300,20 +1334,6 @@ theorem TVLe.speedyToGaussian_twoStage_of_coreDefect_cv18
     condOn_restrict_eq_condOn_of_subset_cv18 _ hcore hsub
   rw [hgaussRestrict] at hdefectCompare
   have hcoreMix := hfirst.trans hdefectCompare
-  have hquarter_add : ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
-      ENNReal.ofReal (1 / 2 : ℝ) := by
-    calc
-      ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
-          ENNReal.ofReal (1 / 4 : ℝ) + ENNReal.ofReal (1 / 4 : ℝ) := by gcongr
-      _ = ENNReal.ofReal (1 / 2 : ℝ) := by
-        rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 1 / 4)
-          (by norm_num : (0 : ℝ) ≤ 1 / 4)]
-        norm_num
-  have hmuCoreAdd : ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
-      mu (c • K) + epsilon :=
-    hquarter_add.trans (hhalfCore.trans (hmix.right hcore))
-  have hmuCore : ENNReal.ofReal (1 / 4 : ℝ) ≤ mu (c • K) :=
-    ENNReal.le_of_add_le_add_right hepsilon hmuCoreAdd
   have hmuCore0 : mu (c • K) ≠ 0 :=
     ne_of_gt ((by norm_num : 0 < ENNReal.ofReal (1 / 4 : ℝ)).trans_le hmuCore)
   let _ : IsProbabilityMeasure (Arlib.condOn mu (c • K)) :=
