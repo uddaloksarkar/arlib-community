@@ -162,9 +162,13 @@ same measure as the normalized open ball used by `metropolisGaussian` (the
 boundary sphere is Lebesgue-null), including after translation to the current
 state.  It also proves that the program's body-filtered coin threshold is
 exactly one half of `metropolisAccept`.  Thus the implementation's explicit
-half-acceptance is the same laziness represented abstractly by `lazy`; the
-remaining mismatch is no longer geometric or pointwise, but the
-trajectory-level proper-step clock and its dependent phase composition.
+half-acceptance is the same laziness represented abstractly by `lazy`.
+`truncatedMetropolisKernel_eq_lazy_metropolisGaussian` assembles these facts
+into the exact kernel identity
+`truncatedMetropolisKernel = lazy (metropolisGaussian truncatedBody delta sigma2)`.
+The remaining mismatch is therefore no longer geometric, pointwise, or
+one-step semantic; it is the trajectory-level proper-step clock, cutoff, and
+dependent phase composition.
 
 These results still do not prove CV18 Theorem 1.1 with its advertised
 `O*(n^3)` complexity.  Figure 1 uses the phase step
