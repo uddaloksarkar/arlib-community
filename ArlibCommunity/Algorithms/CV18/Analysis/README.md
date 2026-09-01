@@ -145,12 +145,25 @@ proves `lambda = 1/2`, discharges both normalization guards for a finite-volume
 body, and derives concrete expected-cost and cutoff theorems for the restarted
 proper-proposal execution.
 
-This small-step result is a genuine unconditional operational bridge, but it
-does not yet prove CV18 Theorem 1.1 with its advertised `O*(n^3)` complexity.
-The paper uses the substantially larger phase step
+The speedy-Gaussian conductance and mixing chain is now also ported and proved
+without a stale-directory import.  In particular,
+`conductance_speedyMetropolisGaussian_ge_uncond` gives the paper-shaped
+conductance lower bound
+`delta * log 2 / (640 * sigma * sqrt n)`, and
+`mixesWithin_lazy_speedyMetropolisGaussian_uncond_explicit` converts it to the
+explicit warm-start mixing count for the lazy speedy Metropolis-Gaussian walk.
+The axiom audits of these capstones contain only Lean's standard `propext`,
+choice, and quotient axioms.
+
+These results still do not prove CV18 Theorem 1.1 with its advertised
+`O*(n^3)` complexity.  The paper uses the substantially larger phase step
 `min{sigma,1}/(8 * sqrt(n * log(n/epsilon)))`; replacing it by `1/(2n)` loses
-the required mixing exponent.  The remaining analytic results are therefore
-(1) the weighted average-local-conductance/smoothing estimate at that larger
-phase-dependent step, and (2) the speedy Gaussian mixing estimate.  Those two
-facts instantiate the already-proved trajectory cost/cutoff bridge and combine
-its failure probability with the target truncated-Gaussian sampling error.
+the required mixing exponent.  The remaining work is now:
+
+1. prove the weighted average-local-conductance/smoothing estimate, hence the
+   raw-proposal cutoff, at that larger phase-dependent step;
+2. align the proved lazy speedy-chain law with the formal proper-step execution
+   and transfer its stationary law proportional to `ell * gaussianWeight` to
+   the phase's restricted-Gaussian target; and
+3. instantiate those facts phase by phase and compose them into
+   `FigureOnePostInitialMixingBound` for the executable dependent program.
