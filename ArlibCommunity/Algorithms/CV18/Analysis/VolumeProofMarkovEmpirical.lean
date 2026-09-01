@@ -82,6 +82,33 @@ theorem markovSumLaw_isProbabilityMeasure
       filter_upwards with stateSum
       exact Measure.isProbabilityMeasure_map (by fun_prop)
 
+/-- Product-kernel form of one accumulator update.  This is equivalent to
+`markovSumLaw_succ_eq_comp`, but supports a substantially smaller specialized
+Fubini proof term for real moments. -/
+theorem markovSumLaw_succ_eq_map_compProd
+    (P : Kernel S S) [IsMarkovKernel P] (f : S → ℝ) (hf : Measurable f)
+    (samples : ℕ) (mu : Measure S) [IsProbabilityMeasure mu] :
+    markovSumLaw P f (samples + 1) mu =
+      ((markovSumLaw P f samples mu) ⊗ₘ
+        (P.comap Prod.fst measurable_fst)).map
+          (fun p => (p.2, p.1.2 + f p.2)) := by
+  let _ : IsProbabilityMeasure (markovSumLaw P f samples mu) :=
+    markovSumLaw_isProbabilityMeasure P hf mu samples
+  ext A hA
+  rw [markovSumLaw]
+  have hQ : Measurable fun stateSum : S × ℝ =>
+      (P stateSum.1).map fun next => (next, stateSum.2 + f next) :=
+    measurable_markovSumStep P hf
+  rw [Measure.bind_apply hA hQ.aemeasurable]
+  have htransform : Measurable (fun p : (S × ℝ) × S =>
+      (p.2, p.1.2 + f p.2)) := by fun_prop
+  rw [Measure.map_apply htransform hA,
+    Measure.compProd_apply (htransform hA)]
+  congr with stateSum
+  rw [Kernel.comap_apply]
+  rw [Measure.map_apply (by fun_prop) hA]
+  congr 1
+
 /-- The state component after `samples` accumulator updates is the ordinary
 `samples`-step Markov marginal. -/
 theorem markovSumLaw_map_fst
