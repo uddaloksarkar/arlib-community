@@ -1180,4 +1180,136 @@ theorem condOn_gaussian_coreDefect_le_cv18
           · rw [← hmass]
             exact hmasstop
 
+/-- The KLS defect estimate also supplies a constant first-rejection
+probability.  The coarse Gaussian fact `mass(cK) ≥ 1/2` and defect at most
+`1/16` give speedy mass at least `7/16`; this is enough to retain the paper's
+`1/4` conditioning floor once the mixing error is small. -/
+theorem seven_sixteenths_le_ellGaussianProb_standardCore_of_defect_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hzero : (0 : EuclideanSpace ℝ (Fin n)) ∈ K)
+    {delta variance : ℝ} (hvariance : 0 < variance)
+    (hmass0 : ellGaussianMeasure K delta variance Set.univ ≠ 0)
+    (hmasstop : ellGaussianMeasure K delta variance Set.univ ≠ ⊤)
+    {eta : ENNReal} (heta : eta ≤ ENNReal.ofReal (1 / 16 : ℝ))
+    (hdefect :
+      ∫⁻ x in (1 - 1 / (2 * (n : ℝ))) • K,
+          (1 - ell K delta x) * gaussianWeight variance x ≤
+        eta * ∫⁻ x in (1 - 1 / (2 * (n : ℝ))) • K,
+          gaussianWeight variance x) :
+    ENNReal.ofReal (7 / 16 : ℝ) ≤
+      ellGaussianProb K delta variance
+        ((1 - 1 / (2 * (n : ℝ))) • K) := by
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hn0 : (0 : ℝ) < n := by linarith
+  have hc0 : 0 < c := by
+    dsimp [c]
+    have : 1 / (2 * (n : ℝ)) ≤ 1 / 2 := by
+      rw [div_le_div_iff₀ (by positivity) (by norm_num)]
+      nlinarith
+    linarith
+  have hc1 : c < 1 := by
+    dsimp [c]
+    have : 0 < 1 / (2 * (n : ℝ)) := by positivity
+    linarith
+  have hcoreM : MeasurableSet (c • K) :=
+    ((isClosedMap_smul_of_ne_zero hc0.ne') K hKcl).measurableSet
+  have hsub : c • K ⊆ K := by
+    rintro _ ⟨x, hx, rfl⟩
+    exact hKc.smul_mem_of_zero_mem hzero hx ⟨hc0.le, hc1.le⟩
+  let G : ENNReal := ∫⁻ x in c • K, gaussianWeight variance x
+  let E : ENNReal := ∫⁻ x in c • K,
+    ell K delta x * gaussianWeight variance x
+  let D : ENNReal := ∫⁻ x in c • K,
+    (1 - ell K delta x) * gaussianWeight variance x
+  let T : ENNReal := ellGaussianMeasure K delta variance Set.univ
+  let GT : ENNReal := ∫⁻ x in K, gaussianWeight variance x
+  have hTle : T ≤ GT := by
+    dsimp [T, GT]
+    rw [ellGaussianMeasure_univ]
+    exact setLIntegral_mono' hKcl.measurableSet fun x _ => by
+      calc
+        ell K delta x * gaussianWeight variance x ≤
+            1 * gaussianWeight variance x := by gcongr; exact ell_le_one _ _ _
+        _ = gaussianWeight variance x := one_mul _
+  have hhalf : ENNReal.ofReal (1 / 2 : ℝ) * GT ≤ G := by
+    dsimp [GT, G, c]
+    exact half_mul_gaussianWeight_le_standardCore_cv18
+      hn hKcl.measurableSet hvariance
+  have hD : D ≤ ENNReal.ofReal (1 / 16 : ℝ) * G := by
+    calc
+      D ≤ eta * G := by simpa [D, G, c] using hdefect
+      _ ≤ ENNReal.ofReal (1 / 16 : ℝ) * G := by gcongr
+  have hsplit : G = E + D := by
+    dsimp [G, E, D]
+    calc
+      (∫⁻ x in c • K, gaussianWeight variance x) =
+          ∫⁻ x in c • K,
+            ell K delta x * gaussianWeight variance x +
+              (1 - ell K delta x) * gaussianWeight variance x := by
+        apply setLIntegral_congr_fun hcoreM
+        intro x _
+        change gaussianWeight variance x =
+          ell K delta x * gaussianWeight variance x +
+            (1 - ell K delta x) * gaussianWeight variance x
+        rw [← add_mul]
+        rw [add_tsub_cancel_of_le (ell_le_one K delta x), one_mul]
+      _ = (∫⁻ x in c • K,
+            ell K delta x * gaussianWeight variance x) +
+          ∫⁻ x in c • K,
+            (1 - ell K delta x) * gaussianWeight variance x :=
+        lintegral_add_left
+          ((measurable_ell hKcl.measurableSet delta).mul
+            (measurable_gaussianWeight variance)) _
+  have hGtop : G ≠ ⊤ := by
+    apply ne_top_of_le_ne_top hKfin
+    dsimp [G]
+    calc
+      (∫⁻ x in c • K, gaussianWeight variance x) ≤
+          ∫⁻ _x in c • K, (1 : ENNReal) :=
+        setLIntegral_mono' hcoreM fun x _ => gaussianWeight_le_one hvariance x
+      _ = volume (c • K) := by simp
+      _ ≤ volume K := measure_mono hsub
+  have hDtop : D ≠ ⊤ := ne_top_of_le_ne_top
+    (ENNReal.mul_ne_top ENNReal.ofReal_ne_top hGtop) hD
+  have hEmeasure : ellGaussianMeasure K delta variance (c • K) = E := by
+    rw [ellGaussianMeasure, withDensity_apply _ hcoreM]
+    change (∫⁻ x in c • K,
+      ell K delta x * gaussianWeight variance x ∂volume.restrict K) = E
+    rw [Measure.restrict_restrict hcoreM]
+    have hset : c • K ∩ K = c • K := Set.inter_eq_left.2 hsub
+    rw [hset]
+  rw [ellGaussianProb, Measure.smul_apply, smul_eq_mul, hEmeasure]
+  change ENNReal.ofReal (7 / 16 : ℝ) ≤ T⁻¹ * E
+  rw [← ENNReal.div_eq_inv_mul]
+  refine (ENNReal.le_div_iff_mul_le (Or.inl hmass0) (Or.inl hmasstop)).2 ?_
+  apply ENNReal.le_of_add_le_add_right hDtop
+  rw [← hsplit]
+  calc
+    ENNReal.ofReal (7 / 16 : ℝ) * T + D ≤
+        ENNReal.ofReal (7 / 16 : ℝ) * GT +
+          ENNReal.ofReal (1 / 16 : ℝ) * G := add_le_add (by gcongr) hD
+    _ ≤ ENNReal.ofReal (7 / 8 : ℝ) * G +
+          ENNReal.ofReal (1 / 16 : ℝ) * G := by
+      have hseven : ENNReal.ofReal (7 / 16 : ℝ) * GT ≤
+          ENNReal.ofReal (7 / 8 : ℝ) * G := by
+        calc
+        ENNReal.ofReal (7 / 16 : ℝ) * GT =
+            ENNReal.ofReal (7 / 8 : ℝ) *
+              (ENNReal.ofReal (1 / 2 : ℝ) * GT) := by
+          rw [← mul_assoc, ← ENNReal.ofReal_mul (by norm_num)]
+          norm_num
+        _ ≤ ENNReal.ofReal (7 / 8 : ℝ) * G := by gcongr
+      exact add_le_add hseven le_rfl
+    _ ≤ G := by
+      calc
+        ENNReal.ofReal (7 / 8 : ℝ) * G +
+              ENNReal.ofReal (1 / 16 : ℝ) * G =
+            ENNReal.ofReal (15 / 16 : ℝ) * G := by
+          rw [← add_mul, ← ENNReal.ofReal_add (by norm_num) (by norm_num)]
+          norm_num
+        _ ≤ 1 * G := by gcongr <;> norm_num
+        _ = G := one_mul _
+
 end Arlib.MarkovChains
