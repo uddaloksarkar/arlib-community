@@ -156,9 +156,12 @@ The axiom audits of these capstones contain only Lean's standard `propext`,
 choice, and quotient axioms.
 
 These results still do not prove CV18 Theorem 1.1 with its advertised
-`O*(n^3)` complexity.  The paper uses the substantially larger phase step
-`min{sigma,1}/(8 * sqrt(n * log(n/epsilon)))`; replacing it by `1/(2n)` loses
-the required mixing exponent.  The remaining work is now:
+`O*(n^3)` complexity.  Figure 1 uses the phase step
+`min{sigma,1}/(4096 * sqrt(n * log(n/epsilon)))`.  The paper's smoothing lemma
+is intended to prove average local conductance at this scale.  The elementary
+homothetic-core proof above applies only when that step also satisfies
+`delta ≤ 1/(2n)`; using `1/(2n)` as a uniform replacement loses the required
+asymptotic mixing exponent.  The remaining work is now:
 
 1. prove the weighted average-local-conductance/smoothing estimate, hence the
    raw-proposal cutoff, at that larger phase-dependent step;
