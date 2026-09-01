@@ -7,6 +7,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperProgram
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperFailure
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofSpeedyToTarget
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofPhaseMixing
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofStrongStepMixing
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKLSCore
 import ArlibCommunity.Algorithms.CV18.Analysis.TheoremProof
 
@@ -65,6 +66,12 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms phaseSampleToGaussian_of_paperStep_cv18
 #print axioms figureOneProposalRadius_le_phaseMixingStep
 #print axioms figureOneProposalRadius_le_paperCoreStep
+#print axioms Arlib.gaussianWeightReal_le_of_strongStep_cv18
+#print axioms Arlib.MarkovChains.conductance_speedyMetropolisGaussian_ge_strongStep_cv18
+#print axioms Arlib.MarkovChains.mixesWithin_lazy_speedyMetropolisGaussian_strongStep_cv18
+#print axioms figureOneProposalRadius_le_strongMixingStep
+#print axioms mixesWithin_phaseTruncatedBody_figureOne_cv18
+#print axioms phaseSampleToGaussian_figureOne_cv18
 #print axioms MeasureLeUpTo.of_tvLe
 #print axioms Arlib.MarkovChains.half_le_ellGaussianProb_standardCore_cv18
 #print axioms Arlib.MarkovChains.condOn_ellGaussianProb_smul_eq_gaussian_cv18
