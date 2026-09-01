@@ -137,6 +137,45 @@ theorem figureOneProposalRadius_le_accuracyPhaseLVStep
   · have hmul : (q.n : ℝ) ≤ (q.n : ℝ) * L := by nlinarith
     nlinarith [Real.sqrt_le_sqrt hmul]
 
+/-- Figure 1's proposal is also small enough for the exact homothetic-core
+rejection used to turn a speedy sample into an ordinary Gaussian sample. -/
+theorem figureOneProposalRadius_le_accuracyPhaseCoreStep
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (hsmall : accuracyPhaseRadius q sigma2 ≤ 1) :
+    figureOneProposalRadius q sigma2 ≤
+      accuracyPhaseInradius q sigma2 / (2 * (q.n : ℝ)) := by
+  let sigma : ℝ := Real.sqrt sigma2
+  let L : ℝ := protectedLog ((q.n : ℝ) / q.eps)
+  let b : ℝ := Real.sqrt ((q.n : ℝ) * L)
+  have hsigma : 0 < sigma := Real.sqrt_pos.2 hsigma2
+  have hn0 : (0 : ℝ) < q.n := by
+    exact_mod_cast (lt_of_lt_of_le (by norm_num : 0 < 3) q.dim_ok)
+  have hL : 1 ≤ L := by dsimp [L]; exact le_max_left _ _
+  have hb : 0 < b := by dsimp [b]; positivity
+  have hb2 : b ^ 2 = (q.n : ℝ) * L := by
+    dsimp [b]
+    rw [Real.sq_sqrt]
+    positivity
+  have hrho : accuracyPhaseInradius q sigma2 = 32 * sigma * b := by
+    rw [accuracyPhaseInradius, min_eq_right hsmall]
+    rfl
+  have hmin : min sigma 1 ≤ sigma := min_le_left _ _
+  unfold figureOneProposalRadius
+  change min sigma 1 / (4096 * b) ≤
+    accuracyPhaseInradius q sigma2 / (2 * (q.n : ℝ))
+  rw [hrho]
+  apply (div_le_iff₀ (by positivity : 0 < 4096 * b)).2
+  rw [div_mul_eq_mul_div]
+  apply (le_div_iff₀ (by positivity : 0 < 2 * (q.n : ℝ))).2
+  calc
+    min sigma 1 * (2 * (q.n : ℝ)) ≤
+        sigma * (2 * (q.n : ℝ)) := by gcongr
+    _ ≤ (32 * sigma * b) * (4096 * b) := by
+      rw [show (32 * sigma * b) * (4096 * b) =
+          sigma * (131072 * b ^ 2) by ring, hb2]
+      apply mul_le_mul_of_nonneg_left _ hsigma.le
+      nlinarith
+
 /-- The Gaussian-weighted average local conductance on every accuracy phase
 core is at least one half, including phases whose inradius is below one. -/
 theorem half_mul_gaussianWeight_le_accuracyPhaseEllGaussian
@@ -434,6 +473,42 @@ theorem TVLe.accuracyPhase_condOn_truncatedGaussian_cv18
     exact (not_le_of_gt hepsilon1) (hcompl_one ▸ hcompl)
   exact TVLe.condOn_of_compl_le_cv18 mu hS hS0 hcompl
 
+/-- Normalizing the abstract Gaussian density on an accuracy phase core is
+the same law as conditioning the executable full-body Gaussian target on
+that core. -/
+theorem condOn_gaussian_accuracyPhase_eq_truncatedGaussian
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    Arlib.condOn
+        ((volume : Measure (AmbientSpace q.n)).withDensity
+          (Arlib.MarkovChains.gaussianWeight sigma2))
+        (accuracyPhaseTruncatedBody q I sigma2) =
+      Arlib.condOn
+        (truncatedGaussianProbability q I sigma2 hsigma2 :
+          Measure (AmbientSpace q.n))
+        (accuracyPhaseTruncatedBody q I sigma2) := by
+  let Z : ENNReal :=
+    ENNReal.ofReal (gaussianIntegral (truncatedBody q I) sigma2)
+  have hZreal : 0 < gaussianIntegral (truncatedBody q I) sigma2 :=
+    gaussianIntegral_pos q (truncatedVolumeInput q I) hsigma2
+  have hZ0 : Z⁻¹ ≠ 0 := ENNReal.inv_ne_zero.mpr ENNReal.ofReal_ne_top
+  have hZtop : Z⁻¹ ≠ ⊤ := ENNReal.inv_ne_top.mpr
+    (ENNReal.ofReal_pos.2 hZreal).ne'
+  have hsub : accuracyPhaseTruncatedBody q I sigma2 ⊆ truncatedBody q I :=
+    fun _ hx => hx.1
+  rw [truncatedGaussianProbability_toMeasure q I hsigma2]
+  change _ = Arlib.condOn (Z⁻¹ • truncatedGaussianMeasure q I sigma2) _
+  rw [Arlib.MarkovChains.condOn_smul_cv18 _
+    (accuracyPhaseTruncatedBody_measurable q I sigma2) hZ0 hZtop]
+  unfold truncatedGaussianMeasure
+  rw [← restrict_withDensity (truncatedBody_measurable q I)]
+  rw [Arlib.MarkovChains.condOn_restrict_eq_condOn_of_subset_cv18 _
+    (accuracyPhaseTruncatedBody_measurable q I sigma2) hsub]
+  congr 2
+  funext x
+  simp [gaussianDensity_eq, Arlib.MarkovChains.gaussianWeight,
+    Arlib.MarkovChains.gaussianWeightReal]
+
 /-- The executable proposal and accuracy-dependent radius obey the product
 condition used by the generalized conductance proof. -/
 theorem accuracyPhaseRadius_mul_figureOneProposalRadius_le
@@ -523,5 +598,168 @@ theorem mixesWithin_accuracyPhaseTruncatedBody_figureOne_cv18
         accuracyPhaseRadius_mul_figureOneProposalRadius_le q hsigma2)
       hM hwarm' heps0 heps1 ht
   simpa [Real.sq_sqrt hsigma2.le] using hmix
+
+/-- Complete phase-local sampler in the sub-unit-radius branch.  Speedy
+mixing is followed by the paper's two exact rejection stages and then the
+negligible accuracy-core truncation is removed. -/
+theorem accuracyPhaseSampleToGaussian_smallRadius_cv18
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (hsmall : accuracyPhaseRadius q sigma2 ≤ 1)
+    {mu0 : Measure (AmbientSpace q.n)} [IsProbabilityMeasure mu0]
+    {M mixError : ℝ} (hM : 1 ≤ M)
+    (hwarm : Arlib.IsWarm (ENNReal.ofReal M) mu0
+      (Arlib.MarkovChains.ellGaussianProb
+        (accuracyPhaseTruncatedBody q I sigma2)
+        (figureOneProposalRadius q sigma2) sigma2))
+    (hmixError0 : 0 < mixError) (hmixError1 : mixError ≤ 1 / 32)
+    {t : ℕ} (ht : 4 * ((Real.log M + 2 * Real.log (1 / mixError)) /
+      (figureOneProposalRadius q sigma2 * Real.log 2 /
+        (640 * Real.sqrt sigma2 * Real.sqrt q.n)) ^ 2) + 1 ≤ (t : ℝ)) :
+    let K := accuracyPhaseTruncatedBody q I sigma2
+    let delta := figureOneProposalRadius q sigma2
+    let P := Arlib.MarkovChains.lazy
+      (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2)
+    let mu := Arlib.MarkovChains.iterate P mu0 t
+    let c : ℝ := 1 - 1 / (2 * (q.n : ℝ))
+    Arlib.TVLe
+      (Arlib.condOn
+        (((Arlib.condOn mu (c • K)).map (fun x => c⁻¹ • x)).withDensity
+          (Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c)) Set.univ)
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n))
+      (64 * ENNReal.ofReal mixError +
+        ENNReal.ofReal ((q.eps / (q.n : ℝ)) ^ 16)) := by
+  dsimp only
+  let K := accuracyPhaseTruncatedBody q I sigma2
+  let delta := figureOneProposalRadius q sigma2
+  let P := Arlib.MarkovChains.lazy
+    (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2)
+  let mu := Arlib.MarkovChains.iterate P mu0 t
+  have hn : 1 ≤ q.n := le_trans (by norm_num) q.dim_ok
+  have hdelta : 0 < delta := figureOneProposalRadius_pos q hsigma2
+  have hmixPhase := mixesWithin_accuracyPhaseTruncatedBody_figureOne_cv18
+    q I hsigma2 hM hwarm hmixError0 (hmixError1.trans (by norm_num)) ht
+  have hmix : Arlib.TVLe mu
+      (Arlib.MarkovChains.ellGaussianProb K delta sigma2)
+      (ENNReal.ofReal mixError) := by
+    simpa [Arlib.MarkovChains.MixesWithin, mu, P, K, delta] using hmixPhase
+  have hKmeas : MeasurableSet K := accuracyPhaseTruncatedBody_measurable q I sigma2
+  have hKconv : Convex ℝ K := accuracyPhaseTruncatedBody_convex q I sigma2
+  have hKcompact : IsCompact K := accuracyPhaseTruncatedBody_isCompact q I sigma2
+  have hK0 : volume K ≠ 0 := accuracyPhaseTruncatedBody_volume_ne_zero q I hsigma2
+  have hKtop : volume K ≠ ⊤ := accuracyPhaseTruncatedBody_volume_ne_top q I sigma2
+  have hrho : 0 < accuracyPhaseInradius q sigma2 :=
+    accuracyPhaseInradius_pos q hsigma2
+  have hball : Metric.ball (0 : AmbientSpace q.n)
+      (accuracyPhaseInradius q sigma2) ⊆ K :=
+    ball_accuracyPhaseInradius_subset q I sigma2
+  have hmass0 : Arlib.MarkovChains.ellGaussianMeasure K delta sigma2 Set.univ ≠ 0 :=
+    Arlib.MarkovChains.ellGaussianMeasure_univ_ne_zero hKmeas hKconv
+      hKcompact.isBounded hK0 hdelta sigma2
+  have hmasstop : Arlib.MarkovChains.ellGaussianMeasure K delta sigma2 Set.univ ≠ ⊤ :=
+    Arlib.MarkovChains.ellGaussianMeasure_ne_top_cv18 hKtop delta hsigma2
+  let c : ℝ := 1 - 1 / (2 * (q.n : ℝ))
+  have hc0 : 0 < c := by
+    have hnR : (1 : ℝ) ≤ q.n := by exact_mod_cast hn
+    dsimp [c]
+    have : 1 / (2 * (q.n : ℝ)) ≤ 1 / 2 := by
+      rw [div_le_div_iff₀ (by positivity) (by norm_num)]
+      nlinarith
+    linarith
+  have hscaled : 0 < sigma2 / c ^ 2 := by positivity
+  have hprop0 :
+      ((volume : Measure (AmbientSpace q.n)).withDensity
+        (Arlib.MarkovChains.gaussianWeight (sigma2 / c ^ 2))) K ≠ 0 :=
+    Arlib.MarkovChains.withDensity_gaussianWeight_ne_zero _ hK0
+  have hproptop :
+      ((volume : Measure (AmbientSpace q.n)).withDensity
+        (Arlib.MarkovChains.gaussianWeight (sigma2 / c ^ 2))) K ≠ ⊤ :=
+    Arlib.MarkovChains.withDensity_gaussianWeight_ne_top hscaled hKmeas hKtop
+  have htransfer := Arlib.MarkovChains.TVLe.speedyToGaussian_twoStage_cv18
+    hn hKmeas hKconv hrho hball hdelta
+      (figureOneProposalRadius_le_accuracyPhaseCoreStep q hsigma2 hsmall)
+      hsigma2 hmass0 hmasstop
+      (by simpa [c] using hprop0) (by simpa [c] using hproptop)
+      hmix ENNReal.ofReal_ne_top (ENNReal.ofReal_le_ofReal hmixError1)
+  have htarget := TVLe.accuracyPhase_condOn_truncatedGaussian_cv18 q I hsigma2
+  rw [condOn_gaussian_accuracyPhase_eq_truncatedGaussian q I hsigma2] at htransfer
+  exact htransfer.trans htarget
+
+/-- Complete phase-local sampler in the unit-inball branch.  This is the KLS
+core-defect route used by CV18 once the accuracy-dependent radial core has
+radius at least one. -/
+theorem accuracyPhaseSampleToGaussian_largeRadius_cv18
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 coreError mixError : ℝ} (hsigma2 : 0 < sigma2)
+    (hlarge : 1 ≤ accuracyPhaseRadius q sigma2)
+    (hcoreError0 : 0 < coreError) (hcoreError16 : coreError ≤ 1 / 16)
+    (hpaperStep : figureOneProposalRadius q sigma2 ≤
+      1 / (8 * Real.sqrt
+        ((q.n : ℝ) * Real.log ((q.n : ℝ) / coreError))))
+    {mu0 : Measure (AmbientSpace q.n)} [IsProbabilityMeasure mu0]
+    {M : ℝ} (hM : 1 ≤ M)
+    (hwarm : Arlib.IsWarm (ENNReal.ofReal M) mu0
+      (Arlib.MarkovChains.ellGaussianProb
+        (accuracyPhaseTruncatedBody q I sigma2)
+        (figureOneProposalRadius q sigma2) sigma2))
+    (hmixError0 : 0 < mixError) (hmixError1 : mixError ≤ 1)
+    {t : ℕ} (ht : 4 * ((Real.log M + 2 * Real.log (1 / mixError)) /
+      (figureOneProposalRadius q sigma2 * Real.log 2 /
+        (640 * Real.sqrt sigma2 * Real.sqrt q.n)) ^ 2) + 1 ≤ (t : ℝ))
+    (hcombined : 8 * ENNReal.ofReal mixError +
+      4 * ENNReal.ofReal coreError ≤ ENNReal.ofReal (1 / 4 : ℝ)) :
+    let K := accuracyPhaseTruncatedBody q I sigma2
+    let delta := figureOneProposalRadius q sigma2
+    let P := Arlib.MarkovChains.lazy
+      (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2)
+    let mu := Arlib.MarkovChains.iterate P mu0 t
+    let c : ℝ := 1 - 1 / (2 * (q.n : ℝ))
+    Arlib.TVLe
+      (Arlib.condOn
+        (((Arlib.condOn mu (c • K)).map (fun x => c⁻¹ • x)).withDensity
+          (Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c)) Set.univ)
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n))
+      (64 * ENNReal.ofReal mixError + 32 * ENNReal.ofReal coreError +
+        ENNReal.ofReal ((q.eps / (q.n : ℝ)) ^ 16)) := by
+  dsimp only
+  let K := accuracyPhaseTruncatedBody q I sigma2
+  let delta := figureOneProposalRadius q sigma2
+  let P := Arlib.MarkovChains.lazy
+    (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2)
+  let mu := Arlib.MarkovChains.iterate P mu0 t
+  have hn : 1 ≤ q.n := le_trans (by norm_num) q.dim_ok
+  have hdelta : 0 < delta := figureOneProposalRadius_pos q hsigma2
+  have hmixPhase := mixesWithin_accuracyPhaseTruncatedBody_figureOne_cv18
+    q I hsigma2 hM hwarm hmixError0 hmixError1 ht
+  have hmix : Arlib.TVLe mu
+      (Arlib.MarkovChains.ellGaussianProb K delta sigma2)
+      (ENNReal.ofReal mixError) := by
+    simpa [Arlib.MarkovChains.MixesWithin, mu, P, K, delta] using hmixPhase
+  have hunit : Metric.closedBall (0 : AmbientSpace q.n) 1 ⊆ K := by
+    intro x hx
+    refine ⟨unitBall_subset_truncatedBody q I ?_, ?_⟩
+    · simpa [unitBall] using hx
+    · rw [Metric.mem_closedBall, dist_zero_right]
+      have hx1 : ‖x‖ ≤ 1 := by
+        simpa [Metric.mem_closedBall, dist_zero_right] using hx
+      exact hx1.trans hlarge
+  have htransfer :=
+    Arlib.MarkovChains.TVLe.speedyToGaussian_of_paperStep_of_body_cv18
+      hn (accuracyPhaseTruncatedBody_convex q I sigma2)
+      (accuracyPhaseTruncatedBody_isCompact q I sigma2).isClosed
+      (accuracyPhaseTruncatedBody_isCompact q I sigma2).isBounded
+      (accuracyPhaseTruncatedBody_volume_ne_zero q I hsigma2)
+      (accuracyPhaseTruncatedBody_volume_ne_top q I sigma2)
+      hunit hdelta (Real.sqrt_pos.2 hsigma2)
+      hcoreError0 hcoreError16 hpaperStep
+      (by simpa [Real.sq_sqrt hsigma2.le] using hmix)
+      ENNReal.ofReal_ne_top hcombined
+  have htransfer' := htransfer
+  simp only [Real.sq_sqrt hsigma2.le] at htransfer'
+  have htarget := TVLe.accuracyPhase_condOn_truncatedGaussian_cv18 q I hsigma2
+  rw [condOn_gaussian_accuracyPhase_eq_truncatedGaussian q I hsigma2] at htransfer'
+  exact htransfer'.trans htarget
 
 end ArlibCommunity.Algorithms.CV18

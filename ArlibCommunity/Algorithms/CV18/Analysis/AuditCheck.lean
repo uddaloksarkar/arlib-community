@@ -78,6 +78,10 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms TVLe.condOn_of_compl_le_cv18
 #print axioms TVLe.accuracyPhase_condOn_truncatedGaussian_cv18
 #print axioms mixesWithin_accuracyPhaseTruncatedBody_figureOne_cv18
+#print axioms figureOneProposalRadius_le_accuracyPhaseCoreStep
+#print axioms condOn_gaussian_accuracyPhase_eq_truncatedGaussian
+#print axioms accuracyPhaseSampleToGaussian_smallRadius_cv18
+#print axioms accuracyPhaseSampleToGaussian_largeRadius_cv18
 #print axioms Arlib.MarkovChains.ell_inv_smul_cv18
 #print axioms MeasureLeUpTo.of_tvLe
 #print axioms Arlib.MarkovChains.half_le_ellGaussianProb_standardCore_cv18
