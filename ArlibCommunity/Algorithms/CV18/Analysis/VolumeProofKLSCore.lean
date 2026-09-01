@@ -694,4 +694,403 @@ theorem setLIntegral_one_sub_ell_core_le_exp_cv18
           (2 * Real.exp (-((n : ℝ) * (1 - c) ^ 2 /
             (2 * delta ^ 2)))) * volume K) := by ac_rfl
 
+/-- Scaling an intersection with a centered ball.  This is the exact set
+identity needed to apply KLS to the enlarged Gaussian level body
+`K ∩ (r/c)B` while estimating the desired set `cK ∩ rB`. -/
+theorem smul_inter_closedBall_div_cv18
+    (K : Set (EuclideanSpace ℝ (Fin n))) {c r : ℝ}
+    (hc : 0 < c) :
+    c • (K ∩ closedBall (0 : EuclideanSpace ℝ (Fin n)) (r / c)) =
+      c • K ∩ closedBall 0 r := by
+  ext x
+  constructor
+  · rintro ⟨y, ⟨hyK, hyball⟩, rfl⟩
+    refine ⟨⟨y, hyK, rfl⟩, ?_⟩
+    rw [mem_closedBall, dist_zero_right, norm_smul, Real.norm_eq_abs,
+      abs_of_pos hc]
+    rw [mem_closedBall, dist_zero_right] at hyball
+    rw [le_div_iff₀ hc] at hyball
+    simpa [mul_comm] using hyball
+  · rintro ⟨⟨y, hyK, rfl⟩, hyball⟩
+    refine ⟨y, ⟨hyK, ?_⟩, rfl⟩
+    rw [mem_closedBall, dist_zero_right]
+    apply (le_div_iff₀ hc).2
+    rw [mem_closedBall, dist_zero_right, norm_smul, Real.norm_eq_abs,
+      abs_of_pos hc] at hyball
+    simpa [mul_comm] using hyball
+
+/-- Uniform KLS defect bound on a Gaussian level section.  The key corrected
+body is `K ∩ (r/c)B`; its `c`-core is the desired `cK ∩ rB`. -/
+theorem setLIntegral_one_sub_ell_levelCore_le_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hball : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {c delta : ℝ} (hc0 : 0 < c) (hc1 : c < 1) (hdelta : 0 < delta)
+    (hscale : 4 * delta ^ 2 ≤ 1 - c) {eta : ENNReal}
+    (hcoeff : ENNReal.ofReal
+        (2 * Real.exp (-((n : ℝ) * (1 - c) ^ 2 /
+          (2 * delta ^ 2)))) ≤ eta * ENNReal.ofReal (c ^ n))
+    {r : ℝ} (hr : c ≤ r) :
+    ∫⁻ x in c • K ∩ closedBall 0 r, (1 - ell K delta x) ≤
+      eta * volume (c • K ∩ closedBall 0 r) := by
+  let L : Set (EuclideanSpace ℝ (Fin n)) :=
+    K ∩ closedBall 0 (r / c)
+  have hr0 : 0 ≤ r := hc0.le.trans hr
+  have hLcore : c • L = c • K ∩ closedBall 0 r := by
+    exact smul_inter_closedBall_div_cv18 K hc0
+  have hLc : Convex ℝ L := hKc.inter (convex_closedBall 0 _)
+  have hLcl : IsClosed L := hKcl.inter isClosed_closedBall
+  have hLfin : volume L ≠ ⊤ :=
+    ne_top_of_le_ne_top hKfin (measure_mono fun _ hx => hx.1)
+  have hballL : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ L := by
+    intro x hx
+    refine ⟨hball hx, ?_⟩
+    rw [mem_closedBall, dist_zero_right]
+    have hxnorm : ‖x‖ ≤ 1 := by
+      simpa [mem_closedBall, dist_zero_right] using hx
+    have hone : 1 ≤ r / c := (le_div_iff₀ hc0).2 (by simpa using hr)
+    exact hxnorm.trans hone
+  have hmono : ∀ x, 1 - ell K delta x ≤ 1 - ell L delta x := by
+    intro x
+    apply tsub_le_tsub_left _ 1
+    rw [ell_apply, ell_apply]
+    have hinter : ball x delta ∩ L ⊆ ball x delta ∩ K := by
+      rintro z ⟨hzball, hzL⟩
+      exact ⟨hzball, hzL.1⟩
+    exact ENNReal.div_le_div (measure_mono hinter) le_rfl
+  rw [← hLcore]
+  calc
+    (∫⁻ x in c • L, (1 - ell K delta x)) ≤
+        ∫⁻ x in c • L, (1 - ell L delta x) :=
+      setLIntegral_mono'
+        ((isClosedMap_smul_of_ne_zero hc0.ne') L hLcl).measurableSet
+        (fun x _ => hmono x)
+    _ ≤ ENNReal.ofReal
+          (2 * Real.exp (-((n : ℝ) * (1 - c) ^ 2 /
+            (2 * delta ^ 2)))) * volume L :=
+      setLIntegral_one_sub_ell_core_le_exp_cv18 hn hLc hLcl hLfin
+        hballL hc0 hc1 hdelta hscale
+    _ ≤ (eta * ENNReal.ofReal (c ^ n)) * volume L := by gcongr
+    _ = eta * volume (c • L) := by
+      rw [Arlib.volume_smul_euclidean hc0.le]
+      ac_rfl
+
+/-- A proposal ball centred at norm at most `c` can leave the unit ball only
+through a spherical cap of depth at least `(1-c)/2`.  This supplies CV18's
+"standard calculation" for the small Gaussian level sets. -/
+theorem volume_closedBall_sdiff_unitBall_le_exp_cv18
+    {x : EuclideanSpace ℝ (Fin n)} {c delta : ℝ}
+    (hc0 : 0 < c) (hc1 : c < 1) (hx : ‖x‖ ≤ c)
+    (hdelta : 0 < delta) (hscale : 4 * delta ^ 2 ≤ 1 - c) :
+    volume (closedBall x delta \ closedBall 0 1) ≤
+      ENNReal.ofReal
+          (Real.exp (-((n : ℝ) * ((1 - c) / 2) ^ 2 /
+            (2 * delta ^ 2)))) *
+        volume (closedBall (0 : EuclideanSpace ℝ (Fin n)) delta) := by
+  let h : ℝ := (1 - c) / 2
+  have hh0 : 0 < h := by dsimp [h]; linarith
+  have hdelta1 : delta < 1 := by
+    have hd2 : delta ^ 2 < 1 := by nlinarith [sq_nonneg delta]
+    nlinarith [sq_nonneg (delta - 1)]
+  by_cases hx0 : x = 0
+  · subst x
+    have hempty : closedBall (0 : EuclideanSpace ℝ (Fin n)) delta \
+        closedBall 0 1 = ∅ := by
+      rw [Set.sdiff_eq_empty]
+      exact closedBall_subset_closedBall hdelta1.le
+    rw [hempty, measure_empty]
+    positivity
+  · let q : ℝ := ‖x‖
+    have hq0 : 0 < q := by dsimp [q]; exact norm_pos_iff.mpr hx0
+    let nu : EuclideanSpace ℝ (Fin n) := q⁻¹ • x
+    have hnu : ‖nu‖ = 1 := by
+      dsimp [nu, q]
+      rw [norm_smul, Real.norm_eq_abs, abs_of_pos (inv_pos.mpr hq0)]
+      exact inv_mul_cancel₀ hq0.ne'
+    let H : Set (EuclideanSpace ℝ (Fin n)) :=
+      {y | h + inner ℝ nu x ≤ inner ℝ nu y}
+    have hHc : Convex ℝ H := by
+      intro a ha b hb u v hu hv huv
+      dsimp [H] at ha hb ⊢
+      rw [inner_add_right, real_inner_smul_right,
+        real_inner_smul_right]
+      have hua := mul_le_mul_of_nonneg_left ha hu
+      have hvb := mul_le_mul_of_nonneg_left hb hv
+      calc
+        h + inner ℝ nu x =
+            u * (h + inner ℝ nu x) + v * (h + inner ℝ nu x) := by
+          rw [← add_mul, huv, one_mul]
+        _ ≤ u * inner ℝ nu a + v * inner ℝ nu b := add_le_add hua hvb
+    have hHcl : IsClosed H := by
+      dsimp [H]
+      exact isClosed_le continuous_const (by fun_prop)
+    have hHne : H.Nonempty := by
+      refine ⟨x + h • nu, ?_⟩
+      dsimp [H]
+      rw [inner_add_right, real_inner_smul_right,
+        real_inner_self_eq_norm_sq, hnu]
+      linarith
+    have hxH : x ∉ H := by
+      dsimp [H]
+      linarith
+    have hhsep : h ≤ Metric.infDist x H := by
+      rw [Metric.le_infDist hHne]
+      intro y hy
+      rw [dist_eq_norm]
+      have hyinner : h ≤ inner ℝ nu (y - x) := by
+        dsimp [H] at hy
+        rw [inner_sub_right]
+        linarith
+      calc
+        h ≤ inner ℝ nu (y - x) := hyinner
+        _ ≤ ‖nu‖ * ‖y - x‖ := real_inner_le_norm _ _
+        _ = ‖x - y‖ := by rw [hnu, one_mul, norm_sub_rev]
+    have hsub : closedBall x delta \ closedBall 0 1 ⊆
+        H ∩ closedBall x delta := by
+      rintro y ⟨hyball, hyunit⟩
+      refine ⟨?_, hyball⟩
+      dsimp [H]
+      have hyout : 1 < ‖y‖ := by
+        simpa [mem_closedBall, dist_zero_right, not_le] using hyunit
+      have hzle : ‖y - x‖ ≤ delta := by
+        simpa [mem_closedBall, dist_eq_norm, norm_sub_rev] using hyball
+      have hexpand : ‖y‖ ^ 2 =
+          ‖x‖ ^ 2 + 2 * inner ℝ x (y - x) + ‖y - x‖ ^ 2 := by
+        calc
+          ‖y‖ ^ 2 = ‖x + (y - x)‖ ^ 2 := by congr 2 <;> abel
+          _ = _ := norm_add_sq_real _ _
+      have hinnerx : q * (1 - c) / 2 ≤ inner ℝ x (y - x) := by
+        have hqle : q ≤ c := by simpa [q] using hx
+        have hq2 : q ^ 2 ≤ c * q := by nlinarith
+        have hd2 : delta ^ 2 ≤ (1 - c) / 4 := by linarith
+        have hnormsq : ‖y - x‖ ^ 2 ≤ delta ^ 2 := by nlinarith [norm_nonneg (y - x)]
+        have hyone : 1 < ‖y‖ ^ 2 := by nlinarith [norm_nonneg y]
+        dsimp [q] at hq2 ⊢
+        nlinarith
+      have hnux : inner ℝ nu (y - x) = q⁻¹ * inner ℝ x (y - x) := by
+        dsimp [nu]
+        rw [real_inner_smul_left]
+      have hnuShift : h ≤ inner ℝ nu (y - x) := by
+        rw [hnux]
+        have := mul_le_mul_of_nonneg_left hinnerx (inv_pos.mpr hq0).le
+        dsimp [h]
+        have heq : q * (1 - c) / 2 / q = (1 - c) / 2 := by
+          field_simp
+        rw [inv_mul_eq_div, heq] at this
+        exact this
+      rw [inner_sub_right] at hnuShift
+      linarith
+    have hcap := volume_inter_closedBall_le_gaussian_infDist_cv18
+      hHc hHcl hHne hdelta hxH
+    have hdist0 : 0 ≤ Metric.infDist x H := Metric.infDist_nonneg
+    have hsquare : h ^ 2 ≤ Metric.infDist x H ^ 2 :=
+      (sq_le_sq₀ hh0.le hdist0).2 hhsep
+    have hexp :
+        Real.exp (-((n : ℝ) * Metric.infDist x H ^ 2 /
+          (2 * delta ^ 2))) ≤
+        Real.exp (-((n : ℝ) * h ^ 2 / (2 * delta ^ 2))) := by
+      apply Real.exp_le_exp.mpr
+      have hn0 : (0 : ℝ) ≤ n := by positivity
+      have hden : 0 ≤ 2 * delta ^ 2 := by positivity
+      exact neg_le_neg (div_le_div_of_nonneg_right
+        (mul_le_mul_of_nonneg_left hsquare hn0) hden)
+    calc
+      volume (closedBall x delta \ closedBall 0 1) ≤
+          volume (H ∩ closedBall x delta) := measure_mono hsub
+      _ ≤ ENNReal.ofReal
+            (Real.exp (-((n : ℝ) * Metric.infDist x H ^ 2 /
+              (2 * delta ^ 2)))) *
+          volume (closedBall (0 : EuclideanSpace ℝ (Fin n)) delta) := hcap
+      _ ≤ ENNReal.ofReal
+            (Real.exp (-((n : ℝ) * h ^ 2 /
+              (2 * delta ^ 2)))) *
+          volume (closedBall (0 : EuclideanSpace ℝ (Fin n)) delta) := by
+        gcongr
+      _ = ENNReal.ofReal
+            (Real.exp (-((n : ℝ) * ((1 - c) / 2) ^ 2 /
+              (2 * delta ^ 2)))) *
+          volume (closedBall (0 : EuclideanSpace ℝ (Fin n)) delta) := by rfl
+
+/-- Pointwise version of CV18's small-level-set calculation. -/
+theorem one_sub_ell_le_exp_of_norm_le_core_cv18
+    (hn : 1 ≤ n)
+    {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hK : MeasurableSet K)
+    (hball : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {x : EuclideanSpace ℝ (Fin n)} {c delta : ℝ}
+    (hc0 : 0 < c) (hc1 : c < 1) (hx : ‖x‖ ≤ c)
+    (hdelta : 0 < delta) (hscale : 4 * delta ^ 2 ≤ 1 - c) :
+    1 - ell K delta x ≤
+      ENNReal.ofReal
+        (Real.exp (-((n : ℝ) * ((1 - c) / 2) ^ 2 /
+          (2 * delta ^ 2)))) := by
+  let _ : Nontrivial (EuclideanSpace ℝ (Fin n)) :=
+    Module.nontrivial_of_finrank_pos (R := ℝ) (by
+      rw [finrank_euclideanSpace_fin]
+      omega)
+  let V : ENNReal :=
+    volume (closedBall (0 : EuclideanSpace ℝ (Fin n)) delta)
+  have hV0 : V ≠ 0 := by
+    dsimp [V]
+    exact (Metric.measure_closedBall_pos volume 0 hdelta).ne'
+  have hVtop : V ≠ ⊤ := by
+    dsimp [V]
+    exact measure_closedBall_lt_top.ne
+  apply (ENNReal.mul_le_mul_iff_right hV0 hVtop).1
+  calc
+    V * (1 - ell K delta x) = volume (ball x delta \ K) := by
+      dsimp [V]
+      rw [mul_comm]
+      rw [Measure.addHaar_closedBall_eq_addHaar_ball,
+        ← volume_ball_eq x delta,
+        one_sub_ell_mul_volume_ball_eq hK hdelta]
+    _ ≤ volume (closedBall x delta \ closedBall 0 1) :=
+      measure_mono fun _ hy =>
+        ⟨Metric.ball_subset_closedBall hy.1, fun hz => hy.2 (hball hz)⟩
+    _ ≤ V * ENNReal.ofReal
+          (Real.exp (-((n : ℝ) * ((1 - c) / 2) ^ 2 /
+            (2 * delta ^ 2)))) := by
+      simpa [mul_comm] using
+        volume_closedBall_sdiff_unitBall_le_exp_cv18
+          (n := n) hc0 hc1 hx hdelta hscale
+
+/-- Every Gaussian level section of the core has relative defect at most
+`eta`: large levels use the corrected KLS body, while small levels use the
+pointwise unit-ball cap calculation. -/
+theorem setLIntegral_one_sub_ell_levelCore_le_uniform_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hball : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {c delta : ℝ} (hc0 : 0 < c) (hc1 : c < 1) (hdelta : 0 < delta)
+    (hscale : 4 * delta ^ 2 ≤ 1 - c) {eta : ENNReal}
+    (hcoeffCore : ENNReal.ofReal
+        (2 * Real.exp (-((n : ℝ) * (1 - c) ^ 2 /
+          (2 * delta ^ 2)))) ≤ eta * ENNReal.ofReal (c ^ n))
+    (hcoeffPoint : ENNReal.ofReal
+        (Real.exp (-((n : ℝ) * ((1 - c) / 2) ^ 2 /
+          (2 * delta ^ 2)))) ≤ eta)
+    {r : ℝ} (hr0 : 0 ≤ r) :
+    ∫⁻ x in c • K ∩ closedBall 0 r, (1 - ell K delta x) ≤
+      eta * volume (c • K ∩ closedBall 0 r) := by
+  by_cases hr : c ≤ r
+  · exact setLIntegral_one_sub_ell_levelCore_le_cv18 hn hKc hKcl
+      hKfin hball hc0 hc1 hdelta hscale hcoeffCore hr
+  · have hpoint : ∀ x ∈ c • K ∩ closedBall 0 r,
+        1 - ell K delta x ≤ eta := by
+      intro x hx
+      have hxnorm : ‖x‖ ≤ c := by
+        have hxr : ‖x‖ ≤ r := by
+          simpa [mem_closedBall, dist_zero_right] using hx.2
+        exact hxr.trans (le_of_not_ge hr)
+      exact (one_sub_ell_le_exp_of_norm_le_core_cv18 hn hKcl.measurableSet
+        hball hc0 hc1 hxnorm hdelta hscale).trans hcoeffPoint
+    calc
+      (∫⁻ x in c • K ∩ closedBall 0 r, (1 - ell K delta x)) ≤
+          ∫⁻ _x in c • K ∩ closedBall 0 r, eta :=
+        setLIntegral_mono'
+          (((isClosedMap_smul_of_ne_zero hc0.ne') K hKcl).inter
+            isClosed_closedBall).measurableSet hpoint
+      _ = eta * volume (c • K ∩ closedBall 0 r) := by
+        simp
+
+/-- Layer-cake integration of the uniform level-section estimate gives the
+Gaussian-weighted KLS core defect used by CV18. -/
+theorem gaussianWeighted_coreDefect_le_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hball : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {c delta sigma : ℝ} (hc0 : 0 < c) (hc1 : c < 1)
+    (hdelta : 0 < delta) (hsigma : 0 < sigma)
+    (hscale : 4 * delta ^ 2 ≤ 1 - c) {eta : ENNReal}
+    (hcoeffCore : ENNReal.ofReal
+        (2 * Real.exp (-((n : ℝ) * (1 - c) ^ 2 /
+          (2 * delta ^ 2)))) ≤ eta * ENNReal.ofReal (c ^ n))
+    (hcoeffPoint : ENNReal.ofReal
+        (Real.exp (-((n : ℝ) * ((1 - c) / 2) ^ 2 /
+          (2 * delta ^ 2)))) ≤ eta) :
+    ∫⁻ x in c • K,
+        (1 - ell K delta x) * gaussianWeight (sigma ^ 2) x ≤
+      eta * ∫⁻ x in c • K, gaussianWeight (sigma ^ 2) x := by
+  let S : Set (EuclideanSpace ℝ (Fin n)) := c • K
+  let f : EuclideanSpace ℝ (Fin n) → ℝ :=
+    gaussianWeightReal (sigma ^ 2)
+  let bad : EuclideanSpace ℝ (Fin n) → ENNReal :=
+    fun x => 1 - ell K delta x
+  let mu : Measure (EuclideanSpace ℝ (Fin n)) := volume.restrict S
+  let nu : Measure (EuclideanSpace ℝ (Fin n)) := mu.withDensity bad
+  have hSm : MeasurableSet S :=
+    ((isClosedMap_smul_of_ne_zero hc0.ne') K hKcl).measurableSet
+  have hfm : Measurable f :=
+    (continuous_gaussianWeightReal (sigma ^ 2)).measurable
+  have hf0 : ∀ x, 0 ≤ f x := fun _ => by
+    dsimp [f, gaussianWeightReal]
+    positivity
+  have hfof : ∀ x, ENNReal.ofReal (f x) = gaussianWeight (sigma ^ 2) x :=
+    fun _ => rfl
+  have hbadm : Measurable bad :=
+    measurable_const.sub (measurable_ell hKcl.measurableSet delta)
+  have hmuLevel : ∀ t, mu {x | t ≤ f x} =
+      volume (S ∩ {x | t ≤ f x}) := by
+    intro t
+    dsimp [mu]
+    rw [Measure.restrict_apply (measurableSet_le measurable_const hfm)]
+    rw [Set.inter_comm]
+  have hnuLevel : ∀ t, nu {x | t ≤ f x} =
+      ∫⁻ x in S ∩ {x | t ≤ f x}, bad x := by
+    intro t
+    dsimp [nu]
+    rw [withDensity_apply _ (measurableSet_le measurable_const hfm)]
+    change (∫⁻ x in {x | t ≤ f x}, bad x ∂volume.restrict S) = _
+    rw [Measure.restrict_restrict (measurableSet_le measurable_const hfm)]
+    congr 2
+    ext x
+    simp [Set.inter_comm]
+  have hcake : ∀ m : Measure (EuclideanSpace ℝ (Fin n)),
+      ∫⁻ x, gaussianWeight (sigma ^ 2) x ∂m =
+        ∫⁻ t in Ioi (0 : ℝ), m {x | t ≤ f x} := by
+    intro m
+    simpa only [hfof] using
+      (lintegral_eq_lintegral_meas_le m
+        (Filter.Eventually.of_forall hf0) hfm.aemeasurable)
+  have hleft : ∫⁻ x, gaussianWeight (sigma ^ 2) x ∂nu =
+      ∫⁻ x in S, bad x * gaussianWeight (sigma ^ 2) x := by
+    change (∫⁻ x, gaussianWeight (sigma ^ 2) x ∂mu.withDensity bad) = _
+    rw [lintegral_withDensity_eq_lintegral_mul _ hbadm
+      (measurable_gaussianWeight _)]
+    rfl
+  have hpoint : ∀ t ∈ Ioi (0 : ℝ),
+      nu {x | t ≤ f x} ≤ eta * mu {x | t ≤ f x} := by
+    intro t ht
+    by_cases ht1 : t ≤ 1
+    · let r : ℝ := Real.sqrt (-(2 * sigma ^ 2 * Real.log t))
+      have hlevel : {x | t ≤ f x} =
+          closedBall (0 : EuclideanSpace ℝ (Fin n)) r := by
+        have h := levelSet_gaussianWeightReal_direct
+          (n := n) (s := sigma ^ 2) (by positivity) ht ht1
+          (Set.univ : Set (EuclideanSpace ℝ (Fin n)))
+        simpa [f, r] using h
+      rw [hnuLevel, hmuLevel, hlevel]
+      exact setLIntegral_one_sub_ell_levelCore_le_uniform_cv18
+        hn hKc hKcl hKfin hball hc0 hc1 hdelta hscale
+        hcoeffCore hcoeffPoint (Real.sqrt_nonneg _)
+    · have hempty : {x | t ≤ f x} = ∅ := by
+        by_contra hne
+        obtain ⟨x, htx⟩ := Set.nonempty_iff_ne_empty.mpr hne
+        have hf1 : f x ≤ 1 :=
+          gaussianWeightReal_le_one (by positivity) x
+        exact ht1 (htx.trans hf1)
+      rw [hempty]
+      simp
+  have htailMu : Measurable fun t => mu {x | t ≤ f x} :=
+    Antitone.measurable fun s t hst => measure_mono fun _ hx => hst.trans hx
+  rw [← hleft, hcake nu]
+  calc
+    (∫⁻ t in Ioi (0 : ℝ), nu {x | t ≤ f x}) ≤
+        ∫⁻ t in Ioi (0 : ℝ), eta * mu {x | t ≤ f x} :=
+      setLIntegral_mono' measurableSet_Ioi hpoint
+    _ = eta * ∫⁻ t in Ioi (0 : ℝ), mu {x | t ≤ f x} := by
+      rw [lintegral_const_mul _ htailMu]
+    _ = eta * ∫⁻ x in S, gaussianWeight (sigma ^ 2) x := by
+      rw [← hcake mu]
+
 end Arlib.MarkovChains
