@@ -665,6 +665,139 @@ theorem half_le_condOn_gaussian_scaleAcceptance_mass_standardCore_cv18
     (half_mul_scaledGaussianMass_le_gaussianMass_standardCore_cv18
       hn hK hKc hzero variance)
 
+/-- The complete two-rejection distributional transfer used after a speedy
+walk phase.  If the approximate speedy law is within `epsilon` of stationarity
+and `epsilon ≤ 1/32`, core rejection, rescaling, and Gaussian correction
+produce a law within `64 * epsilon` of the exact two-stage target law.
+
+The exact target expression is deliberately left normalized as an accepted
+law; the preceding measure identities identify its unnormalized density with
+the restricted Gaussian. -/
+theorem TVLe.speedyToGaussian_twoStage_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hK : MeasurableSet K) (hKc : Convex ℝ K)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {delta variance : ℝ} (hdelta : 0 < delta)
+    (hdelta_n : delta ≤ 1 / (2 * (n : ℝ)))
+    (hvariance : 0 < variance)
+    (hmass0 : ellGaussianMeasure K delta variance Set.univ ≠ 0)
+    (hmasstop : ellGaussianMeasure K delta variance Set.univ ≠ ⊤)
+    (hprop0 :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight
+          (variance / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K ≠ 0)
+    (hproptop :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight
+          (variance / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K ≠ ⊤)
+    {mu : Measure (EuclideanSpace ℝ (Fin n))} [IsProbabilityMeasure mu]
+    {epsilon : ENNReal}
+    (hmix : Arlib.TVLe mu (ellGaussianProb K delta variance) epsilon)
+    (hepsilon : epsilon ≠ ⊤)
+    (hepsilon_small : epsilon ≤ ENNReal.ofReal (1 / 32 : ℝ)) :
+    let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+    let proposal : Measure (EuclideanSpace ℝ (Fin n)) :=
+      Arlib.condOn
+        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight (variance / c ^ 2))) K
+    Arlib.TVLe
+      (Arlib.condOn
+        (((Arlib.condOn mu (c • K)).map (fun x => c⁻¹ • x)).withDensity
+          (gaussianScaleAcceptance variance c)) Set.univ)
+      (Arlib.condOn
+        (proposal.withDensity (gaussianScaleAcceptance variance c)) Set.univ)
+      (64 * epsilon) := by
+  dsimp only
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hnpos : (0 : ℝ) < n := by linarith
+  have hc0 : 0 < c := by
+    dsimp [c]
+    have hle : 1 / (2 * (n : ℝ)) ≤ 1 / 2 := by
+      rw [div_le_div_iff₀ (by positivity) (by norm_num)]
+      nlinarith
+    linarith
+  have hc1 : c < 1 := by
+    dsimp [c]
+    have : 0 < 1 / (2 * (n : ℝ)) := by positivity
+    linarith
+  have hcore : MeasurableSet (c • K) :=
+    measurableSet_smul_set_cv18 hK hc0.ne'
+  let nu : Measure (EuclideanSpace ℝ (Fin n)) :=
+    ellGaussianProb K delta variance
+  let _ : IsProbabilityMeasure nu :=
+    isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
+  have hhalfCore : ENNReal.ofReal (1 / 2 : ℝ) ≤ nu (c • K) := by
+    dsimp [nu, c]
+    exact half_le_ellGaussianProb_standardCore_cv18 hn hK hKc hball
+      hdelta hdelta_n hvariance hmass0 hmasstop
+  have hepsQuarter : epsilon ≤ ENNReal.ofReal (1 / 4 : ℝ) :=
+    hepsilon_small.trans (by norm_num)
+  have hfirst := TVLe.condOn_target_half_cv18 hmix hepsilon
+    hepsQuarter hcore hhalfCore
+  have hquarter_add : ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
+      ENNReal.ofReal (1 / 2 : ℝ) := by
+    calc
+      ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
+          ENNReal.ofReal (1 / 4 : ℝ) + ENNReal.ofReal (1 / 4 : ℝ) := by gcongr
+      _ = ENNReal.ofReal (1 / 2 : ℝ) := by
+        rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 1 / 4)
+          (by norm_num : (0 : ℝ) ≤ 1 / 4)]
+        norm_num
+  have hmuCoreAdd : ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
+      mu (c • K) + epsilon :=
+    hquarter_add.trans (hhalfCore.trans (hmix.right hcore))
+  have hmuCore : ENNReal.ofReal (1 / 4 : ℝ) ≤ mu (c • K) :=
+    ENNReal.le_of_add_le_add_right hepsilon hmuCoreAdd
+  have hmuCore0 : mu (c • K) ≠ 0 :=
+    ne_of_gt ((by norm_num : 0 < ENNReal.ofReal (1 / 4 : ℝ)).trans_le hmuCore)
+  let _ : IsProbabilityMeasure (Arlib.condOn mu (c • K)) :=
+    Arlib.isProbabilityMeasure_condOn mu hmuCore0 (measure_ne_top mu _)
+  have hnuCore0 : nu (c • K) ≠ 0 :=
+    ne_of_gt ((by norm_num : 0 < ENNReal.ofReal (1 / 2 : ℝ)).trans_le hhalfCore)
+  let _ : IsProbabilityMeasure (Arlib.condOn nu (c • K)) :=
+    Arlib.isProbabilityMeasure_condOn nu hnuCore0 (measure_ne_top nu _)
+  have hmap := hfirst.map
+    ((continuous_const_smul c⁻¹).measurable)
+  let _ : IsProbabilityMeasure
+      ((Arlib.condOn mu (c • K)).map (fun x => c⁻¹ • x)) :=
+    Measure.isProbabilityMeasure_map
+      ((continuous_const_smul c⁻¹).measurable.aemeasurable)
+  let proposal : Measure (EuclideanSpace ℝ (Fin n)) :=
+    Arlib.condOn
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (variance / c ^ 2))) K
+  let _ : IsProbabilityMeasure proposal :=
+    Arlib.isProbabilityMeasure_condOn _ hprop0 hproptop
+  have htargetMap :
+      (Arlib.condOn nu (c • K)).map (fun x => c⁻¹ • x) = proposal := by
+    dsimp [nu, proposal]
+    rw [condOn_ellGaussianProb_smul_eq_gaussian_cv18 hK hKc hball
+      hc0 hc1 hdelta (by simpa [c] using hdelta_n) hmass0 hmasstop]
+    exact map_condOn_gaussian_smul_cv18 hK hc0
+  rw [htargetMap] at hmap
+  have heightSmall : 8 * epsilon ≤ ENNReal.ofReal (1 / 4 : ℝ) := by
+    calc
+      8 * epsilon ≤ 8 * ENNReal.ofReal (1 / 32 : ℝ) := by gcongr
+      _ = ENNReal.ofReal (1 / 4 : ℝ) := by
+        rw [show (8 : ENNReal) = ENNReal.ofReal (8 : ℝ) by norm_num]
+        rw [← ENNReal.ofReal_mul (by norm_num : (0 : ℝ) ≤ 8)]
+        norm_num
+  have heightTop : 8 * epsilon ≠ ⊤ :=
+    ENNReal.mul_ne_top (by norm_num) hepsilon
+  have hzero : (0 : EuclideanSpace ℝ (Fin n)) ∈ K :=
+    hball (Metric.mem_ball_self one_pos)
+  have hhalfAccept : ENNReal.ofReal (1 / 2 : ℝ) ≤
+      proposal.withDensity (gaussianScaleAcceptance variance c) Set.univ := by
+    dsimp [proposal, c]
+    exact half_le_condOn_gaussian_scaleAcceptance_mass_standardCore_cv18
+      hn hK hKc hzero hprop0 hproptop
+  have hsecond := TVLe.normalize_withDensity_target_half_cv18
+    hmap heightTop heightSmall (measurable_gaussianScaleAcceptance variance c)
+    (gaussianScaleAcceptance_le_one hvariance hc0 hc1.le) hhalfAccept
+  convert hsecond using 1
+  ring
+
 end Arlib.MarkovChains
 
 namespace ArlibCommunity.Algorithms.CV18
