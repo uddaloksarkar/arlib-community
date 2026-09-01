@@ -204,14 +204,19 @@ lazy Metropolis rejection behavior.
 marks or returns `none` at a raw-proposal cap, with a proved worst-case query
 bound equal to that cap. This supplies the operational cutoff/restart primitive
 that the paper describes but the previous fixed-raw-endpoint program lacked.
+Its full finite semantics is now identified as well:
+`cappedProperMetropolisBallWalk_semantics` proves, for every cap and requested
+proper-step count, that the executable `Option`-valued output law is exactly
+the recursively stopped abstract marked-kernel law. The same induction proves
+the measurability facts needed to compose this program with later phases.
 
 These results still do not by themselves prove CV18 Theorem 1.1 with its
 advertised `O*(n^3)` complexity. The average-local-conductance and
 raw-proposal cutoff obligation at the advertised phase radius is now closed.
 The remaining work is:
 
-1. identify the law of the new capped proper-step oracle program with the
-   stopped marked-chain law, and transfer the speedy stationary law
+1. connect the now-identified finite capped marked law to the restarted
+   total-cost cutoff event, and transfer the speedy stationary law
    proportional to `ell * gaussianWeight` to the phase's restricted-Gaussian
    target (the paper's rejection map must be connected to the executable
    sampler, not merely imported as a standalone theorem); and

@@ -29,6 +29,7 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms truncatedMetropolisMarkedBallStep_map_snd
 #print axioms runEstimate_truncatedMetropolisMarkedBallStep_eq_lazyProperAux
 #print axioms cappedProperMetropolisBallWalk_queryBound
+#print axioms cappedProperMetropolisBallWalk_semantics
 #print axioms half_mul_lintegral_gaussianWeight_le_figureOne
 #print axioms figureOne_base_accuracy_of_mixing
 #print axioms figureOne_base_query_cost

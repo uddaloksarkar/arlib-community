@@ -411,4 +411,192 @@ theorem cappedProperMetropolisBallWalk_queryBound
               (fun result =>
                 ih (if result.1 then properSteps else properSteps + 1) result.2)
 
+open ProbabilityTheory
+
+/-- The finite law obtained by consuming at most `rawCap` marked transitions
+while waiting for `properSteps` true marks. -/
+noncomputable def cappedProperMarkedLaw {S : Type*} [MeasurableSpace S]
+    (Q : Kernel S (Bool × S)) : ℕ → ℕ → S → Measure (Option S)
+  | _, 0, current => Measure.dirac (some current)
+  | 0, _ + 1, _ => Measure.dirac none
+  | rawCap + 1, properSteps + 1, current =>
+      (Q current).bind fun result =>
+        cappedProperMarkedLaw Q rawCap
+          (if result.1 then properSteps else properSteps + 1) result.2
+
+theorem measurable_cappedProperMarkedLaw {S : Type*} [MeasurableSpace S]
+    (Q : Kernel S (Bool × S)) : ∀ rawCap properSteps,
+    Measurable fun current => cappedProperMarkedLaw Q rawCap properSteps current := by
+  intro rawCap
+  induction rawCap with
+  | zero =>
+      intro properSteps
+      cases properSteps with
+      | zero =>
+          exact Measure.measurable_dirac.comp
+            (measurable_some.comp measurable_id)
+      | succ properSteps =>
+          exact Measure.measurable_dirac.comp measurable_const
+  | succ rawCap ih =>
+      intro properSteps
+      cases properSteps with
+      | zero =>
+          exact Measure.measurable_dirac.comp
+            (measurable_some.comp measurable_id)
+      | succ properSteps =>
+          have hnext : Measurable fun result : Bool × S =>
+              cappedProperMarkedLaw Q rawCap
+                (if result.1 then properSteps else properSteps + 1) result.2 := by
+            rw [show (fun result : Bool × S =>
+                cappedProperMarkedLaw Q rawCap
+                  (if result.1 then properSteps else properSteps + 1) result.2) =
+              fun result => if result.1 = true then
+                cappedProperMarkedLaw Q rawCap properSteps result.2 else
+                cappedProperMarkedLaw Q rawCap (properSteps + 1) result.2 by
+              funext result
+              rcases result with ⟨mark, state⟩
+              cases mark <;> rfl]
+            apply Measurable.ite
+            · exact measurable_fst (measurableSet_singleton true)
+            · exact (ih properSteps).comp measurable_snd
+            · exact (ih (properSteps + 1)).comp measurable_snd
+          exact (Measure.measurable_bind' hnext).comp Q.measurable
+
+/-- The executable capped proper-step program realizes exactly the finite
+marked-kernel law.  The first two conjuncts retain the measurability evidence
+needed by subsequent program composition. -/
+theorem cappedProperMetropolisBallWalk_semantics
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) : ∀ rawCap properSteps,
+    (Measurable fun current =>
+      (cappedProperMetropolisBallWalk q sigma2 rawCap properSteps current).runEstimate
+        oracle.query) ∧
+    (∀ current,
+      (cappedProperMetropolisBallWalk q sigma2 rawCap properSteps current).StronglyMeasurable
+        oracle.query) ∧
+    (∀ current,
+      (cappedProperMetropolisBallWalk q sigma2 rawCap properSteps current).runEstimate
+          oracle.query =
+        cappedProperMarkedLaw
+          (Arlib.MarkovChains.lazyProperProposalGaussianAux (truncatedBody q I)
+            (truncatedBody_measurable q I) (figureOneProposalRadius q sigma2)
+            sigma2) rawCap properSteps current) := by
+  intro rawCap
+  induction rawCap with
+  | zero =>
+      intro properSteps
+      cases properSteps with
+      | zero =>
+          constructor
+          · simp only [cappedProperMetropolisBallWalk,
+              MembershipOracleProgram.runEstimate]
+            exact Measure.measurable_dirac.comp
+              (measurable_some.comp measurable_id)
+          constructor
+          · intro current
+            trivial
+          · intro current
+            rfl
+      | succ properSteps =>
+          constructor
+          · simp only [cappedProperMetropolisBallWalk,
+              MembershipOracleProgram.runEstimate]
+            exact Measure.measurable_dirac.comp measurable_const
+          constructor
+          · intro current
+            trivial
+          · intro current
+            rfl
+  | succ rawCap ih =>
+      intro properSteps
+      cases properSteps with
+      | zero =>
+          constructor
+          · simp only [cappedProperMetropolisBallWalk,
+              MembershipOracleProgram.runEstimate]
+            exact Measure.measurable_dirac.comp
+              (measurable_some.comp measurable_id)
+          constructor
+          · intro current
+            trivial
+          · intro current
+            rfl
+      | succ properSteps =>
+          let Q := Arlib.MarkovChains.lazyProperProposalGaussianAux
+            (truncatedBody q I) (truncatedBody_measurable q I)
+            (figureOneProposalRadius q sigma2) sigma2
+          let next : Bool × AmbientSpace q.n →
+              MembershipOracleProgram q.n (Option (AmbientSpace q.n)) :=
+            fun result => cappedProperMetropolisBallWalk q sigma2 rawCap
+              (if result.1 then properSteps else properSteps + 1) result.2
+          have hnextStrong : ∀ result, (next result).StronglyMeasurable oracle.query := by
+            rintro ⟨mark, current⟩
+            cases mark <;> exact (ih _).2.1 current
+          have hnextRun : Measurable fun result => (next result).runEstimate oracle.query := by
+            have heq : (fun result => (next result).runEstimate oracle.query) =
+                fun result => cappedProperMarkedLaw Q rawCap
+                  (if result.1 then properSteps else properSteps + 1) result.2 := by
+              funext result
+              rcases result with ⟨mark, current⟩
+              cases mark <;> exact (ih _).2.2 current
+            rw [heq]
+            rw [show (fun result : Bool × AmbientSpace q.n =>
+                cappedProperMarkedLaw Q rawCap
+                  (if result.1 then properSteps else properSteps + 1) result.2) =
+              fun result => if result.1 = true then
+                cappedProperMarkedLaw Q rawCap properSteps result.2 else
+                cappedProperMarkedLaw Q rawCap (properSteps + 1) result.2 by
+              funext result
+              rcases result with ⟨mark, state⟩
+              cases mark <;> rfl]
+            apply Measurable.ite
+            · exact measurable_fst (measurableSet_singleton true)
+            · exact (measurable_cappedProperMarkedLaw Q rawCap properSteps).comp
+                measurable_snd
+            · exact (measurable_cappedProperMarkedLaw Q rawCap (properSteps + 1)).comp
+                measurable_snd
+          have hstepStrong : ∀ current,
+              (truncatedMetropolisMarkedBallStep q sigma2 current).StronglyMeasurable
+                oracle.query :=
+            fun current => truncatedMetropolisMarkedBallStep_stronglyMeasurable
+              q I oracle sigma2 current
+          constructor
+          · have heq : (fun current =>
+                (cappedProperMetropolisBallWalk q sigma2 (rawCap + 1)
+                  (properSteps + 1) current).runEstimate oracle.query) =
+              fun current => cappedProperMarkedLaw Q (rawCap + 1)
+                (properSteps + 1) current := by
+                funext current
+                simp only [cappedProperMetropolisBallWalk]
+                rw [MembershipOracleProgram.runEstimate_bind oracle.query _ next
+                  (hstepStrong current) hnextStrong hnextRun]
+                rw [runEstimate_truncatedMetropolisMarkedBallStep_eq_lazyProperAux
+                  q I oracle hsigma2 current]
+                simp_rw [show ∀ result, (next result).runEstimate oracle.query =
+                    cappedProperMarkedLaw Q rawCap
+                      (if result.1 then properSteps else properSteps + 1) result.2 by
+                  intro result
+                  rcases result with ⟨mark, state⟩
+                  cases mark <;> exact (ih _).2.2 state]
+                rfl
+            rw [heq]
+            exact measurable_cappedProperMarkedLaw Q _ _
+          constructor
+          · intro current
+            simp only [cappedProperMetropolisBallWalk]
+            exact (hstepStrong current).bind hnextStrong hnextRun
+          · intro current
+            simp only [cappedProperMetropolisBallWalk]
+            rw [MembershipOracleProgram.runEstimate_bind oracle.query _ next
+              (hstepStrong current) hnextStrong hnextRun]
+            rw [runEstimate_truncatedMetropolisMarkedBallStep_eq_lazyProperAux
+              q I oracle hsigma2 current]
+            simp_rw [show ∀ result, (next result).runEstimate oracle.query =
+                cappedProperMarkedLaw Q rawCap
+                  (if result.1 then properSteps else properSteps + 1) result.2 by
+              intro result
+              rcases result with ⟨mark, state⟩
+              cases mark <;> exact (ih _).2.2 state]
+            rfl
+
 end ArlibCommunity.Algorithms.CV18
