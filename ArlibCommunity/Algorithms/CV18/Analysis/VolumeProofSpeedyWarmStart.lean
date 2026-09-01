@@ -184,6 +184,81 @@ theorem figureOneProposalRadius_succ_ratio_le_sqrtTwo
     (figureOneProposalRadius_pos q (scheduleValue_pos q k))).2
     (by simpa [mul_comm] using figureOneProposalRadius_succ_le_sqrtTwo_mul q k)
 
+/-- The actual CV18 cooling schedule gives the sharper fixed-rate radius
+factor.  Above variance one both proposal radii have already saturated, while
+below variance one the update is at most multiplication by `1 + 1 / n`. -/
+theorem figureOneProposalRadius_succ_le_fixedFactor_mul
+    (q : VolumeParams) (k : ℕ) :
+    figureOneProposalRadius q (scheduleValue q (k + 1)) ≤
+      Real.sqrt (1 + 1 / (q.n : ℝ)) *
+        figureOneProposalRadius q (scheduleValue q k) := by
+  let s := scheduleValue q k
+  let t := scheduleValue q (k + 1)
+  have hs : 0 < s := scheduleValue_pos q k
+  have hst : s ≤ t := scheduleValue_mono q (Nat.le_add_right k 1)
+  have hn : (0 : ℝ) < q.n := by
+    exact_mod_cast (lt_of_lt_of_le (by norm_num : 0 < 3) q.dim_ok)
+  let D : ℝ :=
+    4096 * Real.sqrt ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps))
+  have hD : 0 < D := by
+    dsimp [D]
+    have hL : 0 < protectedLog ((q.n : ℝ) / q.eps) :=
+      lt_of_lt_of_le zero_lt_one (le_max_left _ _)
+    positivity
+  unfold figureOneProposalRadius
+  change min (Real.sqrt t) 1 / D ≤
+    Real.sqrt (1 + 1 / (q.n : ℝ)) * (min (Real.sqrt s) 1 / D)
+  apply (div_le_iff₀ hD).2
+  rw [mul_assoc, div_mul_cancel₀ _ hD.ne']
+  by_cases hsone : 1 ≤ s
+  · have htone : 1 ≤ t := hsone.trans hst
+    rw [min_eq_right (Real.one_le_sqrt.mpr hsone),
+      min_eq_right (Real.one_le_sqrt.mpr htone)]
+    simpa using Real.one_le_sqrt.mpr
+      (show (1 : ℝ) ≤ 1 + 1 / (q.n : ℝ) by positivity)
+  · have hslt : s < 1 := lt_of_not_ge hsone
+    have htbound : t ≤ s * (1 + 1 / (q.n : ℝ)) := by
+      rw [show t = nextVariance q s by
+        simpa [s, t] using scheduleValue_succ q k]
+      unfold nextVariance coolingRate
+      rw [if_pos hslt.le]
+      exact min_le_right _ _
+    have hsqrt_s_le : Real.sqrt s ≤ 1 := Real.sqrt_le_one.mpr hslt.le
+    rw [min_eq_left hsqrt_s_le]
+    calc
+      min (Real.sqrt t) 1 ≤ Real.sqrt t := min_le_left _ _
+      _ ≤ Real.sqrt (s * (1 + 1 / (q.n : ℝ))) :=
+        Real.sqrt_le_sqrt htbound
+      _ = Real.sqrt s * Real.sqrt (1 + 1 / (q.n : ℝ)) := by
+        rw [Real.sqrt_mul hs.le]
+      _ = Real.sqrt (1 + 1 / (q.n : ℝ)) * Real.sqrt s := mul_comm _ _
+
+/-- Consequently the full `n`-dimensional proposal-volume ratio is bounded
+by the universal `exp (1/2)`, rather than the exponential `(sqrt 2)^n` bound
+obtained from the coarse two-fold variance comparison. -/
+theorem figureOneProposalRadius_succ_ratio_pow_le_expHalf
+    (q : VolumeParams) (k : ℕ) :
+    (figureOneProposalRadius q (scheduleValue q (k + 1)) /
+        figureOneProposalRadius q (scheduleValue q k)) ^ q.n ≤
+      Real.exp (1 / 2) := by
+  have hratio :
+      figureOneProposalRadius q (scheduleValue q (k + 1)) /
+          figureOneProposalRadius q (scheduleValue q k) ≤
+        Real.sqrt (1 + 1 / (q.n : ℝ)) := by
+    exact (div_le_iff₀
+      (figureOneProposalRadius_pos q (scheduleValue_pos q k))).2
+      (by simpa [mul_comm] using
+        figureOneProposalRadius_succ_le_fixedFactor_mul q k)
+  have hratio0 : 0 ≤
+      figureOneProposalRadius q (scheduleValue q (k + 1)) /
+        figureOneProposalRadius q (scheduleValue q k) :=
+    div_nonneg
+      (figureOneProposalRadius_pos q (scheduleValue_pos q (k + 1))).le
+      (figureOneProposalRadius_pos q (scheduleValue_pos q k)).le
+  exact (pow_le_pow_left₀ hratio0 hratio q.n).trans
+    (fixedRate_sqrt_factor_le q.n
+      (lt_of_lt_of_le (by norm_num : 0 < 3) q.dim_ok))
+
 /-- The local conductance of one accuracy phase is pointwise controlled by
 that of the next phase, with the exact proposal-radius growth factor. -/
 theorem accuracyPhase_ell_adjacent_le (q : VolumeParams) (I : VolumeInput q.n)
@@ -225,6 +300,19 @@ theorem accuracyPhase_ell_adjacent_le_sqrtTwoPow
       (figureOneProposalRadius_succ_ratio_le_sqrtTwo q k) q.n
   exact mul_le_mul'
     (ENNReal.ofReal_le_ofReal hpow) le_rfl
+
+/-- Universal-constant form of the adjacent local-conductance comparison. -/
+theorem accuracyPhase_ell_adjacent_le_expHalf
+    (q : VolumeParams) (I : VolumeInput q.n) (k : ℕ) (x : AmbientSpace q.n) :
+    ell (accuracyPhaseTruncatedBody q I (scheduleValue q k))
+        (figureOneProposalRadius q (scheduleValue q k)) x ≤
+      ENNReal.ofReal (Real.exp (1 / 2)) *
+        ell (accuracyPhaseTruncatedBody q I (scheduleValue q (k + 1)))
+          (figureOneProposalRadius q (scheduleValue q (k + 1))) x := by
+  refine (accuracyPhase_ell_adjacent_le q I k x).trans ?_
+  exact mul_le_mul'
+    (ENNReal.ofReal_le_ofReal
+      (figureOneProposalRadius_succ_ratio_pow_le_expHalf q k)) le_rfl
 
 /-! ## Normalization bridge -/
 
@@ -331,6 +419,45 @@ theorem accuracyPhase_ellGaussianMeasure_adjacent_le
         gaussianWeight (scheduleValue q k) x := by
       exact mul_le_mul' (accuracyPhase_ell_adjacent_le_sqrtTwoPow q I k x) le_rfl
     _ ≤ ENNReal.ofReal ((Real.sqrt 2) ^ q.n) *
+        (ell (accuracyPhaseTruncatedBody q I (scheduleValue q (k + 1)))
+          (figureOneProposalRadius q (scheduleValue q (k + 1))) x *
+          gaussianWeight (scheduleValue q (k + 1)) x) := by
+      rw [mul_assoc]
+      apply mul_le_mul' le_rfl
+      exact mul_le_mul' le_rfl
+        (gaussianWeight_mono_variance_cv18 hs hst x)
+
+/-- Sharp, dimension-independent domination of successive unnormalised speedy
+stationary measures. -/
+theorem accuracyPhase_ellGaussianMeasure_adjacent_le_expHalf
+    (q : VolumeParams) (I : VolumeInput q.n) (k : ℕ) :
+    ellGaussianMeasure
+        (accuracyPhaseTruncatedBody q I (scheduleValue q k))
+        (figureOneProposalRadius q (scheduleValue q k))
+        (scheduleValue q k) ≤
+      ENNReal.ofReal (Real.exp (1 / 2)) •
+        ellGaussianMeasure
+          (accuracyPhaseTruncatedBody q I (scheduleValue q (k + 1)))
+          (figureOneProposalRadius q (scheduleValue q (k + 1)))
+          (scheduleValue q (k + 1)) := by
+  have hs : 0 < scheduleValue q k := scheduleValue_pos q k
+  have hst : scheduleValue q k ≤ scheduleValue q (k + 1) :=
+    scheduleValue_mono q (Nat.le_add_right k 1)
+  apply ellGaussianMeasure_le_smul_of_subset
+    (accuracyPhaseTruncatedBody_measurable q I (scheduleValue q k))
+    (accuracyPhaseTruncatedBody_measurable q I (scheduleValue q (k + 1)))
+    (accuracyPhaseTruncatedBody_mono q I hs.le hst)
+  intro x hx
+  calc
+    ell (accuracyPhaseTruncatedBody q I (scheduleValue q k))
+          (figureOneProposalRadius q (scheduleValue q k)) x *
+        gaussianWeight (scheduleValue q k) x ≤
+      (ENNReal.ofReal (Real.exp (1 / 2)) *
+        ell (accuracyPhaseTruncatedBody q I (scheduleValue q (k + 1)))
+          (figureOneProposalRadius q (scheduleValue q (k + 1))) x) *
+        gaussianWeight (scheduleValue q k) x := by
+      exact mul_le_mul' (accuracyPhase_ell_adjacent_le_expHalf q I k x) le_rfl
+    _ ≤ ENNReal.ofReal (Real.exp (1 / 2)) *
         (ell (accuracyPhaseTruncatedBody q I (scheduleValue q (k + 1)))
           (figureOneProposalRadius q (scheduleValue q (k + 1))) x *
           gaussianWeight (scheduleValue q (k + 1)) x) := by
@@ -521,7 +648,7 @@ theorem accuracyPhase_ellGaussianMass_adjacent_le
 /-- A real-valued warmness constant for carrying speedy endpoints between
 successive cooling phases. -/
 noncomputable def speedyAdjacentWarmConstant (q : VolumeParams) : ℝ :=
-  (Real.sqrt 2) ^ q.n * (4 * Real.exp (1 / 2))
+  Real.exp (1 / 2) * (4 * Real.exp (1 / 2))
 
 theorem speedyAdjacentWarmConstant_pos (q : VolumeParams) :
     0 < speedyAdjacentWarmConstant q := by
@@ -577,9 +704,9 @@ theorem accuracyPhase_speedyStationary_adjacent_isWarm
     dsimp [muNext]
     exact ellGaussianMeasure_ne_top_cv18
       (accuracyPhaseTruncatedBody_volume_ne_top q I t) dt ht
-  have hdom : mus ≤ ENNReal.ofReal ((Real.sqrt 2) ^ q.n) • muNext := by
+  have hdom : mus ≤ ENNReal.ofReal (Real.exp (1 / 2)) • muNext := by
     simpa [mus, muNext, Ks, Kt, ds, dt, s, t] using
-      accuracyPhase_ellGaussianMeasure_adjacent_le q I k
+      accuracyPhase_ellGaussianMeasure_adjacent_le_expHalf q I k
   have hmass : muNext Set.univ ≤
       (ENNReal.ofReal 4 * ENNReal.ofReal (Real.exp (1 / 2))) * mus Set.univ := by
     simpa [mus, muNext, Ks, Kt, ds, dt, s, t] using
@@ -589,7 +716,7 @@ theorem accuracyPhase_speedyStationary_adjacent_isWarm
     ((mus Set.univ)⁻¹ • mus) ((muNext Set.univ)⁻¹ • muNext)
   convert hw using 1
   unfold speedyAdjacentWarmConstant
-  rw [ENNReal.ofReal_mul (pow_nonneg (Real.sqrt_nonneg _) _),
+  rw [ENNReal.ofReal_mul (Real.exp_pos _).le,
     ENNReal.ofReal_mul (by norm_num : (0 : ℝ) ≤ 4)]
 
 
