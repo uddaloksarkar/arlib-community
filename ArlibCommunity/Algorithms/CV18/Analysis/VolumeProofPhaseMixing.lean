@@ -1,10 +1,11 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.Convexity.SpeedyGaussianMixing
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofTruncation
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKLSCore
 
 namespace Arlib.MarkovChains
 
 open MeasureTheory Metric Set
-open scoped ENNReal
+open scoped ENNReal Pointwise
 
 variable {n : ℕ}
 
@@ -135,7 +136,7 @@ end Arlib.MarkovChains
 namespace ArlibCommunity.Algorithms.CV18
 
 open MeasureTheory Metric Set
-open scoped ENNReal
+open scoped ENNReal Pointwise
 
 /-- The phase-local body from CV18 Figure 1, intersected with the fixed radial
 truncation already used to reduce the well-rounded input to a bounded body. -/
@@ -151,6 +152,34 @@ theorem phaseTruncatedBody_measurable (q : VolumeParams) (I : VolumeInput q.n)
 theorem phaseTruncatedBody_convex (q : VolumeParams) (I : VolumeInput q.n)
     (sigma2 : ℝ) : Convex ℝ (phaseTruncatedBody q I sigma2) :=
   (truncatedVolumeInput q I).body.convex.inter (convex_closedBall 0 _)
+
+theorem phaseTruncatedBody_isCompact (q : VolumeParams) (I : VolumeInput q.n)
+    (sigma2 : ℝ) : IsCompact (phaseTruncatedBody q I sigma2) :=
+  (truncatedVolumeInput q I).body.isCompact.inter_right isClosed_closedBall
+
+theorem phaseTruncatedBody_isClosed (q : VolumeParams) (I : VolumeInput q.n)
+    (sigma2 : ℝ) : IsClosed (phaseTruncatedBody q I sigma2) :=
+  (phaseTruncatedBody_isCompact q I sigma2).isClosed
+
+theorem phaseTruncatedBody_isBounded (q : VolumeParams) (I : VolumeInput q.n)
+    (sigma2 : ℝ) : Bornology.IsBounded (phaseTruncatedBody q I sigma2) :=
+  (phaseTruncatedBody_isCompact q I sigma2).isBounded
+
+theorem phaseTruncatedBody_volume_ne_top (q : VolumeParams)
+    (I : VolumeInput q.n) (sigma2 : ℝ) :
+    volume (phaseTruncatedBody q I sigma2) ≠ ⊤ :=
+  (phaseTruncatedBody_isCompact q I sigma2).measure_lt_top.ne
+
+theorem unitBall_subset_phaseTruncatedBody (q : VolumeParams)
+    (I : VolumeInput q.n) {sigma2 : ℝ}
+    (hradius : 1 ≤ 4 * Real.sqrt sigma2 * Real.sqrt q.n) :
+    Metric.closedBall (0 : AmbientSpace q.n) 1 ⊆
+      phaseTruncatedBody q I sigma2 := by
+  intro x hx
+  refine ⟨unitBall_subset_truncatedBody q I ?_, ?_⟩
+  · simpa [unitBall] using hx
+  · rw [Metric.mem_closedBall, dist_zero_right] at hx ⊢
+    exact hx.trans hradius
 
 theorem phaseTruncatedBody_norm_le (q : VolumeParams) (I : VolumeInput q.n)
     {sigma2 : ℝ} {x : AmbientSpace q.n}
@@ -233,5 +262,71 @@ theorem mixesWithin_phaseTruncatedBody_cv18
       hR (fun _ hx => phaseTruncatedBody_norm_le q I hx) le_rfl
       hM hwarm' heps0 heps1 ht
   simpa [Real.sq_sqrt hsigma2.le] using hmix
+
+/-- A complete phase-local CV18 sampler theorem.  The warm-start conductance
+bound produces a speedy sample, and the KLS core conversion turns it into the
+restricted Gaussian target with explicit total-variation error. -/
+theorem phaseSampleToGaussian_of_paperStep_cv18
+    (q : VolumeParams) (I : VolumeInput q.n) (hn : 21 ≤ q.n)
+    {sigma2 delta coreError mixError : ℝ}
+    (hsigma2 : 0 < sigma2) (hdelta0 : 0 < delta)
+    (hradius : 1 ≤ 4 * Real.sqrt sigma2 * Real.sqrt q.n)
+    (hmixingStep : delta ≤ Real.sqrt sigma2 / (8 * Real.sqrt q.n))
+    (hcoreError0 : 0 < coreError) (hcoreError16 : coreError ≤ 1 / 16)
+    (hpaperStep : delta ≤
+      1 / (8 * Real.sqrt
+        ((q.n : ℝ) * Real.log ((q.n : ℝ) / coreError))))
+    {mu0 : Measure (AmbientSpace q.n)} [IsProbabilityMeasure mu0]
+    {M : ℝ} (hM : 1 ≤ M)
+    (hwarm : Arlib.IsWarm (ENNReal.ofReal M) mu0
+      (Arlib.MarkovChains.ellGaussianProb
+        (phaseTruncatedBody q I sigma2) delta sigma2))
+    (hmixError0 : 0 < mixError) (hmixError1 : mixError ≤ 1)
+    {t : ℕ} (ht : 4 * ((Real.log M + 2 * Real.log (1 / mixError)) /
+      (delta * Real.log 2 /
+        (640 * Real.sqrt sigma2 * Real.sqrt q.n)) ^ 2) + 1 ≤ (t : ℝ))
+    (hcombined : 8 * ENNReal.ofReal mixError +
+        4 * ENNReal.ofReal coreError ≤ ENNReal.ofReal (1 / 4 : ℝ)) :
+    let K := phaseTruncatedBody q I sigma2
+    let P := Arlib.MarkovChains.lazy
+      (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2)
+    let mu := Arlib.MarkovChains.iterate P mu0 t
+    let c : ℝ := 1 - 1 / (2 * (q.n : ℝ))
+    Arlib.TVLe
+      (Arlib.condOn
+        (((Arlib.condOn mu (c • K)).map (fun x => c⁻¹ • x)).withDensity
+          (Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c)) Set.univ)
+      (Arlib.condOn
+        ((volume : Measure (AmbientSpace q.n)).withDensity
+          (Arlib.MarkovChains.gaussianWeight sigma2)) K)
+      (64 * ENNReal.ofReal mixError + 32 * ENNReal.ofReal coreError) := by
+  dsimp only
+  let K := phaseTruncatedBody q I sigma2
+  let P := Arlib.MarkovChains.lazy
+    (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2)
+  let mu := Arlib.MarkovChains.iterate P mu0 t
+  have hmixPhase := mixesWithin_phaseTruncatedBody_cv18 q I hn hsigma2
+    hdelta0 hmixingStep hM hwarm hmixError0 hmixError1 ht
+  have hmix : Arlib.TVLe mu
+      (Arlib.MarkovChains.ellGaussianProb K delta sigma2)
+      (ENNReal.ofReal mixError) := by
+    simpa [Arlib.MarkovChains.MixesWithin, mu, P, K] using hmixPhase
+  have hsigma : 0 < Real.sqrt sigma2 := Real.sqrt_pos.2 hsigma2
+  have hmix' : Arlib.TVLe mu
+      (Arlib.MarkovChains.ellGaussianProb K delta (Real.sqrt sigma2 ^ 2))
+      (ENNReal.ofReal mixError) := by
+    simpa [Real.sq_sqrt hsigma2.le] using hmix
+  have htransfer :=
+    Arlib.MarkovChains.TVLe.speedyToGaussian_of_paperStep_of_body_cv18
+      (n := q.n) (K := K) (le_trans (by norm_num) q.dim_ok)
+      (phaseTruncatedBody_convex q I sigma2)
+      (phaseTruncatedBody_isClosed q I sigma2)
+      (phaseTruncatedBody_isBounded q I sigma2)
+      (phaseTruncatedBody_volume_ne_zero q I hsigma2)
+      (phaseTruncatedBody_volume_ne_top q I sigma2)
+      (unitBall_subset_phaseTruncatedBody q I hradius)
+      hdelta0 hsigma hcoreError0 hcoreError16 hpaperStep
+      hmix' ENNReal.ofReal_ne_top hcombined
+  simpa [K, Real.sq_sqrt hsigma2.le] using htransfer
 
 end ArlibCommunity.Algorithms.CV18
