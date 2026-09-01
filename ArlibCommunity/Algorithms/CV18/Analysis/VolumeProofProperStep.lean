@@ -227,8 +227,10 @@ section BallWalk
 
 variable {n : ℕ}
 
-/-- The CV proper-proposal kernel: geometric waiting cost with success
-probability equal to local conductance, followed by one speedy step. -/
+/-- The uniform ball-walk proper-proposal kernel: geometric waiting cost with
+success probability equal to local conductance, followed by one speedy step.
+CV18 uses this proposal conditioning together with a Gaussian Metropolis
+filter; that specialization is a subsequent layer. -/
 noncomputable def ballWalkProperStepWithCost
     (K : Set (EuclideanSpace ℝ (Fin n))) (delta : ℝ) :
     Kernel (EuclideanSpace ℝ (Fin n)) (ℕ × EuclideanSpace ℝ (Fin n)) :=
