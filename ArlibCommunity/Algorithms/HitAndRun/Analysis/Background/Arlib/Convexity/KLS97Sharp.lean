@@ -133,7 +133,7 @@ private lemma mul_exp_neg_le {b : ℝ} (hb : 0 < b) (h : ℝ) :
     _ ≤ 1 := hkey
 
 /-- `∫_{(d,∞)} a·e^{c−a h} dh = e^{c−a d}`, as a lower Lebesgue integral. -/
-private lemma lintegral_Ioi_exp_neg {a : ℝ} (ha : 0 < a) (c d : ℝ) :
+theorem lintegral_Ioi_exp_neg {a : ℝ} (ha : 0 < a) (c d : ℝ) :
     ∫⁻ h in Set.Ioi d, ENNReal.ofReal (a * Real.exp (c - a * h))
       = ENNReal.ofReal (Real.exp (c - a * d)) := by
   have hderiv : ∀ x : ℝ,
