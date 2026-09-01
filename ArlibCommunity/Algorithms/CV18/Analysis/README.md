@@ -125,9 +125,18 @@ and mean `1 / ell`.  Independent stopped trajectories are then restarted for
 law, while their expected total proposal count is bounded by the explicit sum
 of per-state exit-time integrals along the speedy marginals.
 
-The next missing analytic result is the quantitative bound on that integral
-sum—the paper's average-local-conductance or `10/3` wasted-step estimate—under
-the phase radius and warm-start hypotheses.  After it, Markov's inequality
-gives the cutoff/restart failure bound.  The remaining larger obligation is
-the speedy Gaussian mixing estimate needed to combine that cutoff error with
-the target truncated-Gaussian sampling error.
+The warm-start and cutoff algebra is now proved for the correct proper-proposal
+cost.  The `ell` factor in the speedy stationary density cancels `1 / ell`
+exactly, and `mul_lintegral_properProposalTotalCost_le` bounds the honest
+trajectory's expected total raw-proposal cost.  Markov's inequality then gives
+`mul_mul_measure_properProposalTotalCost_ge_le`, the cutoff/restart failure
+bound.  Both theorems depend only on the paper's weighted
+average-local-conductance lower bound `lambda` and the phase warm-start bound;
+no extra Metropolis-acceptance penalty is needed because a rejected
+Metropolis test is still a proper proposal.
+
+The next missing analytic results are therefore (1) the quantitative weighted
+average-local-conductance lower bound for CV18's phase step size and body, and
+(2) the speedy Gaussian mixing estimate.  These instantiate the now-proved
+cost/cutoff theorem and combine its failure probability with the target
+truncated-Gaussian sampling error.
