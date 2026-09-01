@@ -232,6 +232,14 @@ probability is at least `exp (-8)`. Thus the paper's underspecified
 distributional identity and both loops' constant success probabilities no
 longer remain assumptions.
 
+The second loop in fact admits a stronger bound that resolves one concern
+about the current executable's fixed terminal truncation.  Homothetic Gaussian
+scaling proves its *average* acceptance probability is at least `1/2` on any
+convex body containing the origin, without an outer-radius assumption.
+Therefore the current larger body does not by itself make the target rejection
+expensive; phase-radius truncation is needed elsewhere in the mixing argument,
+not for this rejection-cost bound.
+
 These results still do not by themselves prove CV18 Theorem 1.1 with its
 advertised `O*(n^3)` complexity. The average-local-conductance and
 raw-proposal cutoff obligation at the advertised phase radius is now closed.

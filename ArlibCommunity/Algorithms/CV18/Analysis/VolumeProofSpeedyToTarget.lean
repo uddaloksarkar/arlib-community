@@ -339,4 +339,91 @@ theorem gaussianScaleAcceptance_withDensity_cv18
           gaussianScaleAcceptance variance c x) = _
   rw [hfun, ← restrict_withDensity hK]
 
+/-- The second rejection has average acceptance at least one half on every
+convex body containing the origin; no outer-radius hypothesis is needed. -/
+theorem half_mul_scaledGaussianMass_le_gaussianMass_standardCore_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hK : MeasurableSet K) (hKc : Convex ℝ K)
+    (hzero : (0 : EuclideanSpace ℝ (Fin n)) ∈ K) (variance : ℝ) :
+    ENNReal.ofReal (1 / 2) *
+        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight
+            (variance / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K ≤
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight variance)) K := by
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hnpos : (0 : ℝ) < n := by linarith
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hfrac : 0 < 1 / (2 * (n : ℝ)) := by positivity
+  have hc0 : 0 < c := by
+    dsimp [c]
+    have hle : 1 / (2 * (n : ℝ)) ≤ 1 / 2 := by
+      rw [div_le_div_iff₀ (by positivity) (by norm_num)]
+      nlinarith
+    linarith
+  have hc1 : c < 1 := by dsimp [c]; linarith
+  have hsub : c • K ⊆ K := by
+    rintro _ ⟨x, hx, rfl⟩
+    exact hKc.smul_mem_of_zero_mem hzero hx ⟨hc0.le, hc1.le⟩
+  have hhalf : ENNReal.ofReal (1 / 2) ≤ ENNReal.ofReal (c ^ n) :=
+    ENNReal.ofReal_le_ofReal (by
+      dsimp [c]
+      exact half_le_one_sub_inv_two_mul_pow_cv18 hn)
+  rw [withDensity_apply _ hK, withDensity_apply _ hK]
+  change ENNReal.ofReal (1 / 2) *
+      (∫⁻ x in K, gaussianWeight (variance / c ^ 2) x) ≤
+    ∫⁻ x in K, gaussianWeight variance x
+  calc
+    ENNReal.ofReal (1 / 2) *
+          (∫⁻ x in K, gaussianWeight (variance / c ^ 2) x) ≤
+        ENNReal.ofReal (c ^ n) *
+          (∫⁻ x in K, gaussianWeight (variance / c ^ 2) x) := by gcongr
+    _ = ∫⁻ x in c • K, gaussianWeight variance x :=
+      (lintegral_gaussianWeight_smul_set_cv18 hK hc0 variance).symm
+    _ ≤ ∫⁻ x in K, gaussianWeight variance x :=
+      lintegral_mono' (Measure.restrict_mono hsub le_rfl) le_rfl
+
+/-- Reweighting the normalized scaled proposal by the executable acceptance
+probability gives the target restriction, divided by the proposal mass. -/
+theorem condOn_gaussian_withDensity_scaleAcceptance_cv18
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (variance c : ℝ) :
+    (Arlib.condOn
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (variance / c ^ 2))) K).withDensity
+          (gaussianScaleAcceptance variance c) =
+      ((((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (variance / c ^ 2))) K)⁻¹) •
+        (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight variance)).restrict K) := by
+  rw [Arlib.condOn_def, withDensity_smul_measure,
+    gaussianScaleAcceptance_withDensity_cv18 hK variance c]
+
+/-- Hence the normalized scaled proposal accepts with probability at least
+one half on the whole convex body. -/
+theorem half_le_condOn_gaussian_scaleAcceptance_mass_standardCore_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hK : MeasurableSet K) (hKc : Convex ℝ K)
+    (hzero : (0 : EuclideanSpace ℝ (Fin n)) ∈ K) {variance : ℝ}
+    (hprop0 :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight
+          (variance / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K ≠ 0)
+    (hproptop :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight
+          (variance / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K ≠ ⊤) :
+    ENNReal.ofReal (1 / 2) ≤
+      (Arlib.condOn
+        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight
+            (variance / (1 - 1 / (2 * (n : ℝ))) ^ 2))) K).withDensity
+        (gaussianScaleAcceptance variance (1 - 1 / (2 * (n : ℝ)))) Set.univ := by
+  rw [condOn_gaussian_withDensity_scaleAcceptance_cv18 hK,
+    Measure.smul_apply, smul_eq_mul, Measure.restrict_apply_univ,
+    ← ENNReal.div_eq_inv_mul]
+  exact (ENNReal.le_div_iff_mul_le (Or.inl hprop0) (Or.inl hproptop)).2
+    (half_mul_scaledGaussianMass_le_gaussianMass_standardCore_cv18
+      hn hK hKc hzero variance)
+
 end Arlib.MarkovChains
