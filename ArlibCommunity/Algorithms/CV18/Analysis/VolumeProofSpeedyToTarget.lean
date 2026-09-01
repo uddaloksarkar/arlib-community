@@ -1,4 +1,6 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAverageConductance
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofTruncation
+import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.MarkovChains.Continuous.MetropolisConductance
 import ArlibCommunity.Algorithms.HitAndRun.Analysis.Background.Arlib.Probability.Rejection
 
 namespace Arlib.MarkovChains
@@ -427,3 +429,45 @@ theorem half_le_condOn_gaussian_scaleAcceptance_mass_standardCore_cv18
       hn hK hKc hzero variance)
 
 end Arlib.MarkovChains
+
+namespace ArlibCommunity.Algorithms.CV18
+
+open MeasureTheory
+open scoped ENNReal
+
+/-- The global one-half acceptance bound specialized to the exact fixed body
+used by the current Figure-1 executable. -/
+theorem half_le_truncatedBody_gaussianScaleAcceptance_mass
+    (q : VolumeParams) (I : VolumeInput q.n) {variance : ℝ}
+    (hvariance : 0 < variance) :
+    ENNReal.ofReal (1 / 2) ≤
+      (Arlib.condOn
+        ((volume : Measure (AmbientSpace q.n)).withDensity
+          (Arlib.MarkovChains.gaussianWeight
+            (variance / (1 - 1 / (2 * (q.n : ℝ))) ^ 2)))
+        (truncatedBody q I)).withDensity
+          (Arlib.MarkovChains.gaussianScaleAcceptance variance
+            (1 - 1 / (2 * (q.n : ℝ)))) Set.univ := by
+  have hn : 1 ≤ q.n := le_trans (by norm_num) q.dim_ok
+  have hnR : (0 : ℝ) < q.n := by exact_mod_cast (lt_of_lt_of_le Nat.zero_lt_one hn)
+  have hc0 : 0 < 1 - 1 / (2 * (q.n : ℝ)) := by
+    rw [sub_pos, div_lt_one (by positivity)]
+    have hnRone : (1 : ℝ) ≤ q.n := by exact_mod_cast hn
+    nlinarith
+  have hscaled :
+      0 < variance / (1 - 1 / (2 * (q.n : ℝ))) ^ 2 := by positivity
+  have hK0 : volume (truncatedBody q I) ≠ 0 := by
+    apply ne_of_gt
+    exact (Metric.measure_ball_pos volume (0 : AmbientSpace q.n) one_pos).trans_le
+      (measure_mono fun x hx =>
+        unitBall_subset_truncatedBody q I (Metric.ball_subset_closedBall hx))
+  have hKtop : volume (truncatedBody q I) ≠ ⊤ :=
+    (truncatedVolumeInput q I).body.isCompact.measure_lt_top.ne
+  exact Arlib.MarkovChains.half_le_condOn_gaussian_scaleAcceptance_mass_standardCore_cv18
+    hn (truncatedBody_measurable q I) (truncatedVolumeInput q I).body.convex
+    (unitBall_subset_truncatedBody q I (by simp [unitBall]))
+    (Arlib.MarkovChains.withDensity_gaussianWeight_ne_zero _ hK0)
+    (Arlib.MarkovChains.withDensity_gaussianWeight_ne_top
+      hscaled (truncatedBody_measurable q I) hKtop)
+
+end ArlibCommunity.Algorithms.CV18

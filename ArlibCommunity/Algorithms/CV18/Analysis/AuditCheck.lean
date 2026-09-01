@@ -40,6 +40,7 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms Arlib.MarkovChains.gaussianScaleAcceptance_withDensity_cv18
 #print axioms Arlib.MarkovChains.exp_neg_eight_le_gaussianScaleAcceptance_standardCore_cv18
 #print axioms Arlib.MarkovChains.half_le_condOn_gaussian_scaleAcceptance_mass_standardCore_cv18
+#print axioms half_le_truncatedBody_gaussianScaleAcceptance_mass
 #print axioms half_mul_lintegral_gaussianWeight_le_figureOne
 #print axioms figureOne_base_accuracy_of_mixing
 #print axioms figureOne_base_query_cost
