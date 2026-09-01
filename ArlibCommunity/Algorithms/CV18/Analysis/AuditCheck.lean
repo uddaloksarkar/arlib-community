@@ -38,6 +38,7 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms Arlib.MarkovChains.TVLe.withDensity_le_one_cv18
 #print axioms Arlib.MarkovChains.TVLe.withDensity_of_one_sub_lintegral_le_cv18
 #print axioms Arlib.MarkovChains.TVLe.normalize_withDensity_of_defect_cv18
+#print axioms Arlib.MarkovChains.TVLe.condOn_ellGaussianProb_gaussian_of_coreDefect_cv18
 #print axioms Arlib.MarkovChains.TVLe.condOn_cv18
 #print axioms Arlib.MarkovChains.TVLe.condOn_target_half_cv18
 #print axioms Arlib.MarkovChains.TVLe.normalize_withDensity_target_half_cv18
@@ -47,6 +48,7 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms Arlib.MarkovChains.condOn_ellGaussianProb_smul_eq_gaussian_radius_cv18
 #print axioms Arlib.MarkovChains.condOn_gaussian_scaleAcceptance_eq_target_cv18
 #print axioms Arlib.MarkovChains.TVLe.speedyToGaussian_twoStage_cv18
+#print axioms Arlib.MarkovChains.TVLe.speedyToGaussian_twoStage_of_coreDefect_cv18
 #print axioms Arlib.MarkovChains.acceptance_floor_of_cv_four_cv18
 #print axioms Arlib.MarkovChains.conductance_speedyMetropolisGaussian_ge_phaseRadius_cv18
 #print axioms Arlib.MarkovChains.mixesWithin_lazy_speedyMetropolisGaussian_phaseRadius_cv18
