@@ -115,7 +115,19 @@ after any `t` cost-accumulating steps, forgetting the cost gives exactly the
 `t`-fold state-kernel iterate.  Its Gaussian specialization identifies the
 state marginal with the `t`-fold `speedyMetropolisGaussian` kernel.
 
-The next missing results are to identify this costed kernel with the concrete
-recursive raw-proposal program and to lift the paper's average-local-
-conductance estimate to an accumulated-cost/cutoff bound.  The cutoff/restart
-failure probability can then be composed with the speedy-chain mixing error.
+The raw-trajectory side is now formalized as well.  A Boolean-marked Gaussian
+Metropolis chain exposes whether each actual proposal landed in the body;
+forgetting the mark recovers the ordinary Gaussian Metropolis chain at every
+deterministic time.  Stopping at the first `true` mark gives exactly one speedy
+Gaussian step, and the first-proper waiting time has the exact geometric tail
+and mean `1 / ell`.  Independent stopped trajectories are then restarted for
+`t` proper steps.  Their output law is exactly the `t`-step speedy Gaussian
+law, while their expected total proposal count is bounded by the explicit sum
+of per-state exit-time integrals along the speedy marginals.
+
+The next missing analytic result is the quantitative bound on that integral
+sum—the paper's average-local-conductance or `10/3` wasted-step estimate—under
+the phase radius and warm-start hypotheses.  After it, Markov's inequality
+gives the cutoff/restart failure bound.  The remaining larger obligation is
+the speedy Gaussian mixing estimate needed to combine that cutoff error with
+the target truncated-Gaussian sampling error.
