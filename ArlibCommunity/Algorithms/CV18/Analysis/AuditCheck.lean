@@ -7,6 +7,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperProgram
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperFailure
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofSpeedyToTarget
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofPhaseMixing
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKLSCore
 import ArlibCommunity.Algorithms.CV18.Analysis.TheoremProof
 
 /-!
@@ -49,6 +50,9 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms Arlib.MarkovChains.condOn_gaussian_scaleAcceptance_eq_target_cv18
 #print axioms Arlib.MarkovChains.TVLe.speedyToGaussian_twoStage_cv18
 #print axioms Arlib.MarkovChains.TVLe.speedyToGaussian_twoStage_of_coreDefect_cv18
+#print axioms Arlib.MarkovChains.ball_smul_subset_outer_smul_cv18
+#print axioms Arlib.MarkovChains.sub_le_infDist_smul_of_not_mem_outer_smul_cv18
+#print axioms Arlib.MarkovChains.volume_core_inter_closedBall_le_exp_cv18
 #print axioms Arlib.MarkovChains.acceptance_floor_of_cv_four_cv18
 #print axioms Arlib.MarkovChains.conductance_speedyMetropolisGaussian_ge_phaseRadius_cv18
 #print axioms Arlib.MarkovChains.mixesWithin_lazy_speedyMetropolisGaussian_phaseRadius_cv18

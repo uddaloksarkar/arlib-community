@@ -279,7 +279,7 @@ private lemma exists_unit_supporting (hKc : Convex ℝ K) (hKcl : IsClosed K) (h
 
 /-- The spherical cap cut off a ball of radius `t` by a hyperplane at distance `h` from the
 centre lies in a ball of radius `√(t²−h²)`; hence the bound on `vol(K ∩ B(y,t))`. -/
-private lemma volume_inter_closedBall_le_sqrt (hKc : Convex ℝ K) (hKcl : IsClosed K)
+theorem volume_inter_closedBall_le_sqrt (hKc : Convex ℝ K) (hKcl : IsClosed K)
     (hKne : K.Nonempty) {y : EuclideanSpace ℝ (Fin n)} (hy : y ∉ K) (t : ℝ) :
     volume (K ∩ Metric.closedBall y t)
       ≤ ENNReal.ofReal (Real.sqrt (t ^ 2 - Metric.infDist y K ^ 2) ^ n)
@@ -358,6 +358,39 @@ private lemma sqrt_pow_le_exp {n : ℕ} {t h : ℝ} (ht : 0 < t) :
     ring
   rw [hkey]
   positivity
+
+/-- The unrelaxed Gaussian spherical-cap factor used by KLS97 Theorem 4.16. -/
+theorem sqrt_pow_le_gaussian_exp {n : ℕ} {t h : ℝ} (ht : 0 < t) :
+    Real.sqrt (t ^ 2 - h ^ 2) ^ n ≤
+      Real.exp (-((n : ℝ) * h ^ 2 / (2 * t ^ 2))) * t ^ n := by
+  have hstep : Real.sqrt (t ^ 2 - h ^ 2) ≤
+      t * Real.exp (-(h ^ 2 / (2 * t ^ 2))) := by
+    rw [Real.sqrt_le_left (by positivity)]
+    have hE : (t * Real.exp (-(h ^ 2 / (2 * t ^ 2)))) ^ 2 =
+        t ^ 2 * Real.exp (-(h ^ 2 / t ^ 2)) := by
+      rw [mul_pow, ← Real.exp_nat_mul]
+      congr 2
+      field_simp
+      ring
+    rw [hE]
+    have hbase : 1 - h ^ 2 / t ^ 2 ≤
+        Real.exp (-(h ^ 2 / t ^ 2)) := by
+      have h := Real.add_one_le_exp (-(h ^ 2 / t ^ 2))
+      linarith
+    have ht2 : (0 : ℝ) < t ^ 2 := by positivity
+    have hmul := mul_le_mul_of_nonneg_left hbase ht2.le
+    calc
+      t ^ 2 - h ^ 2 = t ^ 2 * (1 - h ^ 2 / t ^ 2) := by field_simp
+      _ ≤ t ^ 2 * Real.exp (-(h ^ 2 / t ^ 2)) := hmul
+  calc
+    Real.sqrt (t ^ 2 - h ^ 2) ^ n ≤
+        (t * Real.exp (-(h ^ 2 / (2 * t ^ 2)))) ^ n :=
+      pow_le_pow_left₀ (Real.sqrt_nonneg _) hstep n
+    _ = Real.exp (-((n : ℝ) * h ^ 2 / (2 * t ^ 2))) * t ^ n := by
+      rw [mul_pow, ← Real.exp_nat_mul]
+      rw [mul_comm]
+      congr 1
+      ring
 
 end Cap
 
