@@ -220,14 +220,23 @@ paper-shaped inequality
 now applies to the membership-oracle program itself, not only to a separately
 constructed stopped trajectory.
 
+`VolumeProofSpeedyToTarget.lean` formalizes the exact measure-theoretic core of
+CV18's speedy-to-ball rejection map.  A speedy-stationary draw lands in
+`(1 - 1/(2n)) K` with probability at least one half; on that core `ell = 1`, so
+conditioning removes the speedy weight exactly.  Scaling the accepted point
+back to `K` changes the Gaussian variance from `sigma2` to
+`sigma2 / (1 - 1/(2n))^2`.  A second, pointwise-valid rejection probability is
+proved to change that scaled law exactly into the desired restricted Gaussian.
+Thus the paper's underspecified distributional identity and the first loop's
+constant success probability no longer remain assumptions.
+
 These results still do not by themselves prove CV18 Theorem 1.1 with its
 advertised `O*(n^3)` complexity. The average-local-conductance and
 raw-proposal cutoff obligation at the advertised phase radius is now closed.
 The remaining work is:
 
-1. transfer the speedy stationary law
-   proportional to `ell * gaussianWeight` to the phase's restricted-Gaussian
-   target (the paper's rejection map must be connected to the executable
-   sampler, not merely imported as a standalone theorem); and
-2. instantiate those facts phase by phase and compose them into
+1. package the now-proved speedy-to-target measure identities as a capped
+   executable rejection sampler and bound the second rejection loop on the
+   paper's phase-radius truncation; and
+2. instantiate the walk, truncation, and rejection facts phase by phase and compose them into
    `FigureOnePostInitialMixingBound` for the executable dependent program.
