@@ -3,6 +3,7 @@ Copyright (c) 2026. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.MarkovChains.Continuous.HoldingTime
+import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.MarkovChains.Continuous.SpeedyGaussian
 import Mathlib.Probability.Kernel.Composition.MapComap
 import Mathlib.Probability.Kernel.WithDensity
 
@@ -268,6 +269,133 @@ theorem ballWalkProperStepWithCost_expectedCost
       (ell K delta x)⁻¹ := by
   exact geometricCostKernel_lintegral_fst (measurable_ell hK delta)
     (fun y => ell_le_one K delta y) (speedyWalk K delta) x hx
+
+/-! ## Gaussian Metropolis proper proposals -/
+
+/-- A Gaussian Metropolis step with a geometric count of uniform-ball
+proposals through the first proposal which lands in `K`.  Metropolis rejection
+is deliberately retained as a self-loop of `speedyMetropolisGaussian`. -/
+noncomputable def gaussianProperStepWithCost
+    (K : Set (EuclideanSpace ℝ (Fin n))) (delta variance : ℝ) :
+    Kernel (EuclideanSpace ℝ (Fin n)) (ℕ × EuclideanSpace ℝ (Fin n)) :=
+  geometricCostKernel (ell K delta)
+    (speedyMetropolisGaussian K delta variance)
+
+/-- Forgetting the proposal count gives exactly one speedy Gaussian
+Metropolis step. -/
+theorem gaussianProperStepWithCost_stateMarginal
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) (x : EuclideanSpace ℝ (Fin n))
+    (hx : ell K delta x ≠ 0)
+    {S : Set (EuclideanSpace ℝ (Fin n))} (hS : MeasurableSet S) :
+    gaussianProperStepWithCost K delta variance x (Prod.snd ⁻¹' S) =
+      speedyMetropolisGaussian K delta variance x S := by
+  exact geometricCostKernel_apply_preimage_snd (measurable_ell hK delta)
+    (fun y => ell_le_one K delta y)
+    (speedyMetropolisGaussian K delta variance) x hx hS
+
+/-- The cost of the Gaussian proper-proposal step is still exactly
+`1 / ell(x)`: the Metropolis test happens after the proper proposal and
+therefore does not enter the proposal clock. -/
+theorem gaussianProperStepWithCost_expectedCost
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) (x : EuclideanSpace ℝ (Fin n))
+    (hx : ell K delta x ≠ 0) :
+    ∫⁻ z, (z.1 : ℝ≥0∞) ∂gaussianProperStepWithCost K delta variance x =
+      (ell K delta x)⁻¹ := by
+  exact geometricCostKernel_lintegral_fst (measurable_ell hK delta)
+    (fun y => ell_le_one K delta y)
+    (speedyMetropolisGaussian K delta variance) x hx
+
+/-- The ordinary Gaussian Metropolis move probability factors into the chance
+of making a proper proposal and the conditional Metropolis acceptance
+probability. -/
+theorem metropolisMove_eq_ell_mul_speedyMetropolisMove
+    (K : Set (EuclideanSpace ℝ (Fin n))) (delta variance : ℝ)
+    (x : EuclideanSpace ℝ (Fin n)) :
+    metropolisMove K delta variance x =
+      ell K delta x * speedyMetropolisMove K delta variance x := by
+  have hNW : (∫⁻ y in K, metropolisDensity variance delta x y) ≤
+      volume (Metric.ball x delta ∩ K) :=
+    lintegral_metropolisDensity_le K delta variance x
+  rw [metropolisMove_apply, ell_apply, speedyMetropolisMove_apply]
+  rcases eq_or_ne (volume (Metric.ball x delta ∩ K)) 0 with hW0 | hW0
+  · have hN0 : (∫⁻ y in K, metropolisDensity variance delta x y) = 0 := by
+      rw [hW0] at hNW
+      exact le_zero_iff.1 hNW
+    rw [hW0, hN0]
+    simp
+  · have hWtop : volume (Metric.ball x delta ∩ K) ≠ ⊤ :=
+      ne_top_of_le_ne_top measure_ball_lt_top.ne
+        (measure_mono Set.inter_subset_left)
+    rw [ENNReal.div_eq_inv_mul, ENNReal.div_eq_inv_mul,
+      ENNReal.div_eq_inv_mul]
+    calc
+      (volume (Metric.ball x delta))⁻¹ *
+          ∫⁻ y in K, metropolisDensity variance delta x y =
+        (volume (Metric.ball x delta ∩ K) *
+            (volume (Metric.ball x delta ∩ K))⁻¹) *
+          ((volume (Metric.ball x delta))⁻¹ *
+            ∫⁻ y in K, metropolisDensity variance delta x y) := by
+              rw [ENNReal.mul_inv_cancel hW0 hWtop, one_mul]
+      _ = (volume (Metric.ball x delta))⁻¹ *
+            volume (Metric.ball x delta ∩ K) *
+          ((volume (Metric.ball x delta ∩ K))⁻¹ *
+            ∫⁻ y in K, metropolisDensity variance delta x y) := by
+              ring
+
+/-- Algebra for the holding coefficient in the proper/improper Gaussian
+proposal decomposition. -/
+theorem ell_mul_one_sub_speedyMetropolisMove_add_one_sub_ell
+    (K : Set (EuclideanSpace ℝ (Fin n))) (delta variance : ℝ)
+    (x : EuclideanSpace ℝ (Fin n)) :
+    ell K delta x * (1 - speedyMetropolisMove K delta variance x) +
+        (1 - ell K delta x) =
+      1 - metropolisMove K delta variance x := by
+  have ha : ell K delta x ≠ ⊤ :=
+    ne_top_of_le_ne_top ENNReal.one_ne_top (ell_le_one K delta x)
+  rw [metropolisMove_eq_ell_mul_speedyMetropolisMove,
+    ENNReal.mul_sub (fun _ _ => ha), mul_one]
+  have hab : ell K delta x * speedyMetropolisMove K delta variance x ≤
+      ell K delta x := by
+    simpa only [mul_one] using
+      mul_le_mul_right (speedyMetropolisMove_le_one K delta variance x)
+        (ell K delta x)
+  have habt : ell K delta x * speedyMetropolisMove K delta variance x ≠ ⊤ :=
+    ne_top_of_le_ne_top ha hab
+  rw [ENNReal.sub_add_eq_add_sub hab habt,
+    add_tsub_cancel_of_le (ell_le_one K delta x)]
+
+/-- Exact one-step bridge to the ordinary Gaussian Metropolis kernel.  An
+ordinary step first has a proper proposal with probability `ell(x)` and then
+takes one speedy Gaussian step; an improper proposal stays at `x`.
+
+This confirms formally that Metropolis rejection must not be counted as an
+improper proposal. -/
+theorem metropolisGaussian_apply_eq_properProposalMixture
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) (x : EuclideanSpace ℝ (Fin n)) :
+    metropolisGaussian K delta variance x =
+      ell K delta x • speedyMetropolisGaussian K delta variance x +
+        (1 - ell K delta x) • Measure.dirac x := by
+  ext S hS
+  rw [metropolisGaussian_apply_set K delta variance x hS,
+    Measure.add_apply, Measure.smul_apply, Measure.smul_apply,
+    smul_eq_mul, smul_eq_mul,
+    speedyMetropolisGaussian_apply_set hK delta variance x hS,
+    Measure.dirac_apply' _ hS, mul_add]
+  have hmove :
+      ell K delta x *
+          ((volume (Metric.ball x delta ∩ K))⁻¹ *
+            (∫⁻ y in S ∩ K, metropolisDensity variance delta x y)) =
+        (volume (Metric.ball x delta))⁻¹ *
+          (∫⁻ y in S ∩ K, metropolisDensity variance delta x y) := by
+    rw [volume_ball_eq x delta]
+    apply ell_mul_inv_volume_inter_ball K delta x
+    exact (lintegral_metropolisDensity_le (S ∩ K) delta variance x).trans
+      (measure_mono (Set.inter_subset_inter_right _ Set.inter_subset_right))
+  rw [hmove, add_assoc, ← mul_assoc, ← add_mul,
+    ell_mul_one_sub_speedyMetropolisMove_add_one_sub_ell K delta variance x]
 
 end BallWalk
 

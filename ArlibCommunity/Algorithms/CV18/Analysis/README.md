@@ -98,14 +98,17 @@ the next proper state.  The following are proved:
 - specializing the success probability to `ell K delta` makes the returned
   state exactly one `speedyWalk K delta` step.
 
-This first specialization is the uniform ball-walk proposal component.  CV18's
-actual returned-state kernel additionally applies the Gaussian Metropolis
-filter after a proposal has landed in the body.  The generic cost kernel can be
-reused unchanged once that Gaussian speedy kernel is ported.
+The Gaussian Metropolis and speedy-Gaussian kernels have now also been ported.
+`gaussianProperStepWithCost` specializes the same construction to CV18's
+actual proper step: the proposal must land in the body, while a failed
+Metropolis test remains a self-loop inside the returned speedy-Gaussian step.
+The file proves that its state marginal is exactly
+`speedyMetropolisGaussian`, that its expected raw-proposal cost is exactly
+`1 / ell K delta x`, and the exact mixture identity expressing one ordinary
+Gaussian Metropolis step as a proper speedy step or an improper self-loop.
 
-The next missing results are therefore the Gaussian-Metropolis specialization
-and the iterated bridge: accumulate these costs over `t` state-dependent proper
-steps, identify the state marginal with the `t`-fold Gaussian speedy walk, and
-identify that costed execution with the concrete raw proposal loop.  The
-average-local-conductance expectation and cutoff/restart bounds can then be
-applied to that accumulated cost.
+The next missing result is the iterated bridge: accumulate these costs over
+`t` state-dependent proper steps, identify the state marginal with the
+`t`-fold Gaussian speedy walk, and identify that costed execution with the
+concrete raw proposal loop.  The average-local-conductance expectation and
+cutoff/restart bounds can then be applied to that accumulated cost.
