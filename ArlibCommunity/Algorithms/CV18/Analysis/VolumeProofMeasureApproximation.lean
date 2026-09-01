@@ -3,6 +3,9 @@ Copyright (c) 2026. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.ContinuousProgramSemantics
+import ArlibCommunity.Algorithms.HitAndRun.Analysis.Background.Arlib.Probability.TV
+import Mathlib.MeasureTheory.Measure.SubFinite
+import Mathlib.MeasureTheory.VectorMeasure.Decomposition.JordanSub
 
 open MeasureTheory
 
@@ -23,6 +26,41 @@ whose total mass is at most `δ`. -/
 def MeasureLeUpTo {α : Type*} [MeasurableSpace α]
     (μ ν : Measure α) (δ : ENNReal) : Prop :=
   ∃ error : Measure α, μ ≤ ν + error ∧ error Set.univ ≤ δ
+
+/-- A total-variation estimate between finite measures supplies the positive
+error measure required by dependent `MeasureLeUpTo` composition, with no loss
+in the error budget.  The error is the positive measure difference `μ - ν`;
+Hahn decomposition identifies its total mass with a single measurable-event
+discrepancy controlled by TV. -/
+theorem MeasureLeUpTo.of_tvLe
+    {α : Type*} [MeasurableSpace α]
+    {μ ν : Measure α} [IsFiniteMeasure μ] [IsFiniteMeasure ν]
+    {ε : ENNReal} (h : Arlib.TVLe μ ν ε) :
+    MeasureLeUpTo μ ν ε := by
+  let error : Measure α := μ - ν
+  refine ⟨error, ?_, ?_⟩
+  · have hle := (Measure.sub_le_iff_le_add
+      (μ := μ) (ν := ν) (ξ := error)).mp le_rfl
+    simpa [error, add_comm] using hle
+  · obtain ⟨S, hS⟩ := exists_isHahnDecomposition μ ν
+    have hzero : error S = 0 := by
+      exact Measure.sub_apply_eq_zero_of_isHahnDecomposition hS
+    have happly : error Sᶜ = μ Sᶜ - ν Sᶜ := by
+      calc
+        error Sᶜ = error.restrict Sᶜ Set.univ := by
+          rw [Measure.restrict_apply MeasurableSet.univ]
+          simp
+        _ = (μ.restrict Sᶜ - ν.restrict Sᶜ) Set.univ := by
+          rw [Measure.restrict_sub_eq_restrict_sub_restrict hS.measurableSet.compl]
+        _ = μ.restrict Sᶜ Set.univ - ν.restrict Sᶜ Set.univ :=
+          Measure.sub_apply MeasurableSet.univ hS.compl.le_on
+        _ = μ Sᶜ - ν Sᶜ := by
+          rw [Measure.restrict_apply MeasurableSet.univ,
+            Measure.restrict_apply MeasurableSet.univ]
+          simp
+    rw [← measure_add_measure_compl hS.measurableSet, hzero, zero_add, happly]
+    apply tsub_le_iff_right.mpr
+    simpa [add_comm] using h.left hS.measurableSet.compl
 
 theorem MeasureLeUpTo.refl {α : Type*} [MeasurableSpace α]
     (μ : Measure α) : MeasureLeUpTo μ μ 0 := by
