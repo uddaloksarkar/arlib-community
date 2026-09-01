@@ -14,6 +14,8 @@ deterministic raw-query cap.
 
 namespace ArlibCommunity.Algorithms.CV18
 
+open MeasureTheory
+
 /-- The executable proposal program with the proper-proposal bit retained.
 A proposal is proper exactly when it lies in the fixed truncated body. A
 Metropolis rejection on that branch is still marked proper. -/
@@ -93,6 +95,287 @@ theorem truncatedMetropolisMarkedBallStep_queryBound
   intro proposal
   exact truncatedMetropolisMarkedProposalProgram_queryBound
     q sigma2 current proposal
+
+/-- Under the executable proposal law, the probability of landing in the
+truncated body is exactly its abstract local conductance. -/
+theorem uniformClosedBallMeasure_truncatedBody
+    (q : VolumeParams) (I : VolumeInput q.n) (current : AmbientSpace q.n)
+    {radius : ℝ} (hradius : 0 < radius) :
+    uniformClosedBallMeasure q.n current radius (truncatedBody q I) =
+      Arlib.MarkovChains.ell (truncatedBody q I) radius current := by
+  let _ : NeZero q.n :=
+    ⟨Nat.ne_of_gt (lt_of_lt_of_le (by norm_num : 0 < 3) q.dim_ok)⟩
+  rw [uniformClosedBallMeasure_eq_openBall current hradius,
+    Measure.smul_apply, smul_eq_mul, Measure.restrict_apply
+      (truncatedBody_measurable q I), Arlib.MarkovChains.ell_apply,
+    ENNReal.div_eq_inv_mul]
+  congr 1
+  rw [Set.inter_comm]
+
+theorem uniformClosedBallMeasure_truncatedBody_compl
+    (q : VolumeParams) (I : VolumeInput q.n) (current : AmbientSpace q.n)
+    {radius : ℝ} (hradius : 0 < radius) :
+    uniformClosedBallMeasure q.n current radius (truncatedBody q I)ᶜ =
+      1 - Arlib.MarkovChains.ell (truncatedBody q I) radius current := by
+  rw [measure_compl (truncatedBody_measurable q I) (measure_ne_top _ _),
+    measure_univ, uniformClosedBallMeasure_truncatedBody q I current hradius]
+
+theorem truncatedMetropolisMarkedProposalProgram_stronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (current proposal : AmbientSpace q.n) :
+    (truncatedMetropolisMarkedProposalProgram q sigma2 current proposal).StronglyMeasurable
+      oracle.query := by
+  simp only [truncatedMetropolisMarkedProposalProgram,
+    MembershipOracleProgram.StronglyMeasurable]
+  by_cases hproper : oracle.query proposal = true ∧
+      ‖proposal‖ ≤ Real.sqrt (terminalVariance q)
+  · simp only [if_pos hproper, MembershipOracleProgram.runEstimate,
+      MembershipOracleProgram.StronglyMeasurable]
+    constructor
+    · apply Measure.measurable_dirac.comp
+      exact measurable_const.prodMk <|
+        Measurable.ite measurableSet_Iic measurable_const measurable_const
+    · exact fun _ => trivial
+  · simp only [if_neg hproper, MembershipOracleProgram.runEstimate,
+      MembershipOracleProgram.StronglyMeasurable]
+    exact ⟨Measure.measurable_dirac.comp measurable_const, fun _ => trivial⟩
+
+theorem truncatedMetropolisMarkedBallStep_stronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    (truncatedMetropolisMarkedBallStep q sigma2 current).StronglyMeasurable
+      oracle.query := by
+  simp only [truncatedMetropolisMarkedBallStep,
+    MembershipOracleProgram.StronglyMeasurable]
+  let output : AmbientSpace q.n → ℝ → Bool × AmbientSpace q.n :=
+      fun point coin =>
+        if oracle.query point = true ∧
+            ‖point‖ ≤ Real.sqrt (terminalVariance q) then
+          (true, if coin ≤ lazyGaussianMetropolisAcceptance sigma2 current point
+            then point else current)
+        else (false, current)
+  have horacle : Measurable fun p : AmbientSpace q.n × ℝ =>
+      oracle.query p.1 := oracle.measurable_query.comp measurable_fst
+  have hnorm : Measurable fun p : AmbientSpace q.n × ℝ => ‖p.1‖ := by
+    fun_prop
+  have haccept : Measurable fun p : AmbientSpace q.n × ℝ =>
+      lazyGaussianMetropolisAcceptance sigma2 current p.1 := by
+    unfold lazyGaussianMetropolisAcceptance gaussianMetropolisAcceptance
+    fun_prop
+  have hout : Measurable fun p : AmbientSpace q.n × ℝ =>
+      output p.1 p.2 := by
+    apply Measurable.ite
+    · exact (horacle (measurableSet_singleton true)).inter
+        (measurableSet_le hnorm measurable_const)
+    · apply measurable_const.prodMk
+      exact Measurable.ite (measurableSet_le measurable_snd haccept)
+        measurable_fst measurable_const
+    · exact measurable_const
+  constructor
+  · rw [show (fun point =>
+        (truncatedMetropolisMarkedProposalProgram q sigma2 current point).runEstimate
+          oracle.query) =
+        fun point => uniformUnitIntervalMeasure.map (output point) by
+      funext point
+      simp only [truncatedMetropolisMarkedProposalProgram,
+        MembershipOracleProgram.runEstimate]
+      have hinner : (fun coin =>
+          MembershipOracleProgram.runEstimate oracle.query
+            (if oracle.query point = true ∧
+                ‖point‖ ≤ Real.sqrt (terminalVariance q) then
+              .pure (true, if coin ≤
+                lazyGaussianMetropolisAcceptance sigma2 current point
+                then point else current)
+            else .pure (false, current))) =
+          fun coin => Measure.dirac (output point coin) := by
+        funext coin
+        by_cases hproper : oracle.query point = true ∧
+            ‖point‖ ≤ Real.sqrt (terminalVariance q)
+        · simp [hproper, output, MembershipOracleProgram.runEstimate]
+        · simp [hproper, output, MembershipOracleProgram.runEstimate]
+      rw [hinner]
+      exact Measure.bind_dirac_eq_map uniformUnitIntervalMeasure
+        (hout.comp (measurable_const.prodMk measurable_id))]
+    exact measurable_measure_map_param uniformUnitIntervalMeasure hout
+  · intro proposal
+    exact truncatedMetropolisMarkedProposalProgram_stronglyMeasurable
+      q I oracle sigma2 current proposal
+
+/-- The state marginal of the marked executable step is exactly the existing
+Figure-1 kernel. -/
+theorem map_snd_runEstimate_truncatedMetropolisMarkedBallStep
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    ((truncatedMetropolisMarkedBallStep q sigma2 current).runEstimate
+      oracle.query).map Prod.snd =
+        truncatedMetropolisKernel q I oracle sigma2 current := by
+  have hrun := MembershipOracleProgram.runEstimate_bind oracle.query
+    (truncatedMetropolisMarkedBallStep q sigma2 current)
+    (fun p => .pure p.2)
+    (truncatedMetropolisMarkedBallStep_stronglyMeasurable
+      q I oracle sigma2 current)
+    (fun p => by trivial)
+    (by
+      simp only [MembershipOracleProgram.runEstimate]
+      exact Measure.measurable_dirac.comp measurable_snd)
+  rw [truncatedMetropolisMarkedBallStep_map_snd] at hrun
+  simp only [MembershipOracleProgram.runEstimate] at hrun
+  change _ = truncatedMetropolisBallStepEstimateLaw q oracle.query sigma2 current
+  rw [← runEstimate_truncatedMetropolisBallStep q I oracle sigma2 current,
+    hrun, Measure.bind_dirac_eq_map _ measurable_snd]
+
+/-- The false-mark slice of the executable marked law is exactly the
+improper-proposal self-loop of the abstract marked kernel. -/
+theorem runEstimate_truncatedMetropolisMarkedBallStep_apply_false_prod
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n)
+    {t : Set (AmbientSpace q.n)} (ht : MeasurableSet t) :
+    (truncatedMetropolisMarkedBallStep q sigma2 current).runEstimate oracle.query
+        ({false} ×ˢ t) =
+      (1 - Arlib.MarkovChains.ell (truncatedBody q I)
+        (figureOneProposalRadius q sigma2) current) * t.indicator 1 current := by
+  let U := uniformClosedBallMeasure q.n current
+    (figureOneProposalRadius q sigma2)
+  have hset : MeasurableSet ({false} ×ˢ t) :=
+    (measurableSet_singleton false).prod ht
+  have hmeas : AEMeasurable (fun proposal =>
+      (truncatedMetropolisMarkedProposalProgram q sigma2 current proposal).runEstimate
+        oracle.query) U :=
+    (truncatedMetropolisMarkedBallStep_stronglyMeasurable
+      q I oracle sigma2 current).estimateMeasurable.1
+  simp only [truncatedMetropolisMarkedBallStep,
+    MembershipOracleProgram.runEstimate]
+  rw [Measure.bind_apply hset hmeas]
+  have hinner : ∀ proposal : AmbientSpace q.n,
+      (truncatedMetropolisMarkedProposalProgram q sigma2 current proposal).runEstimate
+          oracle.query ({false} ×ˢ t) =
+        (truncatedBody q I)ᶜ.indicator
+          (fun _ => t.indicator 1 current) proposal := by
+    intro proposal
+    simp only [truncatedMetropolisMarkedProposalProgram,
+      MembershipOracleProgram.runEstimate]
+    by_cases hp : proposal ∈ truncatedBody q I
+    · simp only [
+        (oracle_and_radius_iff_mem_truncatedBody q I oracle proposal).mpr hp]
+      rw [Measure.bind_apply hset]
+      · simp only [true_and, if_true,
+          MembershipOracleProgram.runEstimate]
+        rw [Set.indicator_of_notMem (by simpa using hp)]
+        change (∫⁻ coin, Measure.dirac
+            (true, if coin ≤ lazyGaussianMetropolisAcceptance sigma2 current proposal
+              then proposal else current) ({false} ×ˢ t)
+          ∂uniformUnitIntervalMeasure) = 0
+        simp [Measure.dirac_apply' _ hset]
+      · exact (Measure.measurable_dirac.comp <|
+          measurable_const.prodMk <|
+            Measurable.ite measurableSet_Iic measurable_const measurable_const).aemeasurable
+    · simp only [
+        (oracle_and_radius_iff_mem_truncatedBody q I oracle proposal).not.mpr hp]
+      simp only [if_false, MembershipOracleProgram.runEstimate]
+      rw [Measure.bind_const, measure_univ, one_smul]
+      change Measure.dirac (false, current) ({false} ×ˢ t) =
+        (truncatedBody q I)ᶜ.indicator
+          (fun _ => t.indicator 1 current) proposal
+      rw [Measure.dirac_apply' _ hset]
+      by_cases hc : current ∈ t <;> simp [hp, hc]
+  simp_rw [hinner]
+  rw [lintegral_indicator (truncatedBody_measurable q I).compl]
+  rw [setLIntegral_const]
+  rw [uniformClosedBallMeasure_truncatedBody_compl q I current
+    (figureOneProposalRadius_pos q hsigma2)]
+  ring
+
+/-- Measures on `Bool × α` are determined by their two measurable
+singleton slices. -/
+theorem measure_bool_prod_ext {α : Type*} [MeasurableSpace α]
+    {μ ν : Measure (Bool × α)}
+    (hslice : ∀ (b : Bool) (t : Set α), MeasurableSet t →
+      μ ({b} ×ˢ t) = ν ({b} ×ˢ t)) :
+    μ = ν := by
+  ext S hS
+  let sf : Set α := (fun x => (false, x)) ⁻¹' S
+  let st : Set α := (fun x => (true, x)) ⁻¹' S
+  have hsf : MeasurableSet sf := hS.preimage (measurable_const.prodMk measurable_id)
+  have hst : MeasurableSet st := hS.preimage (measurable_const.prodMk measurable_id)
+  have hdecomp : S = ({false} ×ˢ sf) ∪ ({true} ×ˢ st) := by
+    ext p
+    rcases p with ⟨b, x⟩
+    cases b <;> simp [sf, st]
+  have hdisj : Disjoint ({false} ×ˢ sf) ({true} ×ˢ st) := by
+    apply Set.disjoint_left.2
+    rintro ⟨b, x⟩ hpFalse hpTrue
+    cases b <;> simp at hpFalse hpTrue
+  rw [hdecomp, measure_union hdisj ((measurableSet_singleton true).prod hst),
+    measure_union hdisj ((measurableSet_singleton true).prod hst),
+    hslice false sf hsf, hslice true st hst]
+
+/-- The marked membership-oracle step has exactly the abstract marked-kernel
+law used by the lazy proper-proposal clock. -/
+theorem runEstimate_truncatedMetropolisMarkedBallStep_eq_lazyProperAux
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    (truncatedMetropolisMarkedBallStep q sigma2 current).runEstimate oracle.query =
+      Arlib.MarkovChains.lazyProperProposalGaussianAux (truncatedBody q I)
+        (truncatedBody_measurable q I) (figureOneProposalRadius q sigma2)
+        sigma2 current := by
+  let μ : Measure (Bool × AmbientSpace q.n) :=
+    (truncatedMetropolisMarkedBallStep q sigma2 current).runEstimate oracle.query
+  let ν : Measure (Bool × AmbientSpace q.n) :=
+    Arlib.MarkovChains.lazyProperProposalGaussianAux (truncatedBody q I)
+      (truncatedBody_measurable q I) (figureOneProposalRadius q sigma2)
+      sigma2 current
+  let _ : IsProbabilityMeasure μ :=
+    MembershipOracleProgram.runEstimate_isProbabilityMeasure oracle.query _
+      (truncatedMetropolisMarkedBallStep_stronglyMeasurable
+        q I oracle sigma2 current).estimateMeasurable
+  let _ : IsProbabilityMeasure ν := by
+    dsimp [ν]
+    infer_instance
+  have hstate : μ.map Prod.snd = ν.map Prod.snd := by
+    calc
+      μ.map Prod.snd = truncatedMetropolisKernel q I oracle sigma2 current :=
+        map_snd_runEstimate_truncatedMetropolisMarkedBallStep
+          q I oracle sigma2 current
+      _ = ν.map Prod.snd :=
+        (map_snd_lazyProperProposalGaussianAux_figureOne
+          q I oracle hsigma2 current).symm
+  have hfalse : ∀ (t : Set (AmbientSpace q.n)), MeasurableSet t →
+      μ ({false} ×ˢ t) = ν ({false} ×ˢ t) := by
+    intro t ht
+    rw [runEstimate_truncatedMetropolisMarkedBallStep_apply_false_prod
+      q I oracle hsigma2 current ht]
+    dsimp [ν]
+    rw [Arlib.MarkovChains.lazyProperProposalGaussianAux_apply_set
+      (truncatedBody_measurable q I) (figureOneProposalRadius q sigma2)
+      sigma2 current ((measurableSet_singleton false).prod ht)]
+    by_cases hc : current ∈ t <;> simp [hc]
+  apply measure_bool_prod_ext
+  intro b t ht
+  cases b with
+  | false => exact hfalse t ht
+  | true =>
+      have hpre : Prod.snd ⁻¹' t =
+          ({false} ×ˢ t) ∪ ({true} ×ˢ t) := by
+        ext p
+        rcases p with ⟨b, x⟩
+        cases b <;> simp
+      have hdisj : Disjoint ({false} ×ˢ t) ({true} ×ˢ t) := by
+        apply Set.disjoint_left.2
+        rintro ⟨b, x⟩ hf ht'
+        cases b <;> simp at hf ht'
+      have hsumμ : μ ({false} ×ˢ t) + μ ({true} ×ˢ t) =
+          μ.map Prod.snd t := by
+        rw [Measure.map_apply measurable_snd ht, hpre,
+          measure_union hdisj ((measurableSet_singleton true).prod ht)]
+      have hsumν : ν ({false} ×ˢ t) + ν ({true} ×ˢ t) =
+          ν.map Prod.snd t := by
+        rw [Measure.map_apply measurable_snd ht, hpre,
+          measure_union hdisj ((measurableSet_singleton true).prod ht)]
+      have hadd : μ ({false} ×ˢ t) + μ ({true} ×ˢ t) =
+          ν ({false} ×ˢ t) + ν ({true} ×ˢ t) := by
+        rw [hsumμ, hsumν, hstate]
+      rw [hfalse t ht] at hadd
+      exact WithTop.add_left_cancel (measure_ne_top ν ({false} ×ˢ t)) hadd
 
 /-- Run until `properSteps` marked proposals have occurred, but abort with
 `none` after `rawCap` raw proposals. -/

@@ -196,6 +196,10 @@ the executable Figure-1 transition rather than a parallel abstract chain.
 membership-oracle program. Its marked step records body membership before the
 Metropolis coin, so a coin rejection remains a proper proposal. Erasing the
 mark is proved equal to the existing Figure-1 step at the program-syntax level.
+Its full joint estimate law is also proved equal to
+`lazyProperProposalGaussianAux`: body-hit probability is exactly `ell`, the
+false slice is exactly the improper self-loop, and the true slice retains the
+lazy Metropolis rejection behavior.
 `cappedProperMetropolisBallWalk` then runs until a requested number of proper
 marks or returns `none` at a raw-proposal cap, with a proved worst-case query
 bound equal to that cap. This supplies the operational cutoff/restart primitive
