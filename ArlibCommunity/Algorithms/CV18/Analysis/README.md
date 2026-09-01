@@ -240,6 +240,26 @@ Therefore the current larger body does not by itself make the target rejection
 expensive; phase-radius truncation is needed elsewhere in the mixing argument,
 not for this rejection-cost bound.
 
+The TV effect of rejection is now formalized as well. Common measurable
+acceptance weighting cannot increase setwise TV error, and normalizing an
+accepted subprobability law amplifies error by at most `2/p` when both
+acceptance masses are at least `p`. In the CV18 use case, an exact acceptance
+mass of `1/2` and incoming error at most `1/4` force approximate acceptance at
+least `1/4`, yielding a complete `8 * epsilon` rejection-stage bound. Thus
+neither rejection identity nor rejection stability remains implicit.
+
+`VolumeProofPhaseMixing.lean` closes a tight constant mismatch between the
+ported conductance theorem and the paper. The previous theorem required outer
+radius `2 * sigma * sqrt n`, while Figure 1 truncates at
+`4 * sigma * sqrt n`. At the larger endpoint the Metropolis floor is
+`exp (-65/128)`, just above `3/5`; a certified fifth-order Taylor remainder
+proves this margin. The module consequently proves the same speedy-walk
+conductance and warm-start TV mixing rate on the full paper radius, defines
+the phase-truncated body, discharges its convexity, measurability, positive
+volume, and radius obligations, and packages the resulting phase mixing
+theorem. This theorem currently covers `n >= 21`, matching the available
+sharp overlap theorem.
+
 These results still do not by themselves prove CV18 Theorem 1.1 with its
 advertised `O*(n^3)` complexity. The average-local-conductance and
 raw-proposal cutoff obligation at the advertised phase radius is now closed.
@@ -247,5 +267,8 @@ The remaining work is:
 
 1. package the now-proved speedy-to-target measure identities as a capped
    executable rejection sampler; and
-2. instantiate the walk, truncation, and rejection facts phase by phase and compose them into
-   `FigureOnePostInitialMixingBound` for the executable dependent program.
+2. connect the fixed-body Figure-1 primitive to the phase-truncated
+   proper-step/rejection implementation (or replace the primitive with that
+   proved implementation), compose the phase errors into
+   `FigureOnePostInitialMixingBound`, and handle the finite range
+   `3 <= n < 21` separately.
