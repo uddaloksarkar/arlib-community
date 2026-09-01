@@ -1093,4 +1093,91 @@ theorem gaussianWeighted_coreDefect_le_cv18
     _ = eta * ∫⁻ x in S, gaussianWeight (sigma ^ 2) x := by
       rw [← hcake mu]
 
+/-- Probability-normalized form of the weighted core defect, ready to fill
+the `hcoreDefect` input of CV18's speedy-to-target theorem. -/
+theorem condOn_gaussian_coreDefect_le_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hball : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {c delta sigma : ℝ} (hc0 : 0 < c) (hc1 : c < 1)
+    (hdelta : 0 < delta) (hsigma : 0 < sigma)
+    (hscale : 4 * delta ^ 2 ≤ 1 - c) {eta : ENNReal}
+    (hcoeffCore : ENNReal.ofReal
+        (2 * Real.exp (-((n : ℝ) * (1 - c) ^ 2 /
+          (2 * delta ^ 2)))) ≤ eta * ENNReal.ofReal (c ^ n))
+    (hcoeffPoint : ENNReal.ofReal
+        (Real.exp (-((n : ℝ) * ((1 - c) / 2) ^ 2 /
+          (2 * delta ^ 2)))) ≤ eta)
+    (hmass0 :
+      (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2))).restrict K) (c • K) ≠ 0)
+    (hmasstop :
+      (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2))).restrict K) (c • K) ≠ ⊤) :
+    ∫⁻ x, (1 - ell K delta x)
+      ∂Arlib.condOn
+        (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight (sigma ^ 2))).restrict K) (c • K) ≤ eta := by
+  let S : Set (EuclideanSpace ℝ (Fin n)) := c • K
+  let w : EuclideanSpace ℝ (Fin n) → ENNReal := gaussianWeight (sigma ^ 2)
+  let bad : EuclideanSpace ℝ (Fin n) → ENNReal := fun x => 1 - ell K delta x
+  let gammaK : Measure (EuclideanSpace ℝ (Fin n)) :=
+    ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity w).restrict K
+  have hSm : MeasurableSet S :=
+    ((isClosedMap_smul_of_ne_zero hc0.ne') K hKcl).measurableSet
+  have hwm : Measurable w := by
+    dsimp [w]
+    exact measurable_gaussianWeight _
+  have hbadm : Measurable bad := by
+    dsimp [bad]
+    exact measurable_const.sub (measurable_ell hKcl.measurableSet delta)
+  change gammaK S ≠ 0 at hmass0
+  change gammaK S ≠ ⊤ at hmasstop
+  have hSK : S ∩ K = S := by
+    apply Set.inter_eq_left.2
+    intro x hx
+    obtain ⟨y, hy, rfl⟩ := hx
+    have hzero : (0 : EuclideanSpace ℝ (Fin n)) ∈ K :=
+      hball (Metric.mem_closedBall_self zero_le_one)
+    exact hKc.smul_mem_of_zero_mem hzero hy ⟨hc0.le, hc1.le⟩
+  have hmass : gammaK S = ∫⁻ x in S, w x := by
+    dsimp [gammaK]
+    rw [Measure.restrict_apply hSm, hSK,
+      withDensity_apply _ hSm]
+  have hraw : ∫⁻ x in S, bad x ∂gammaK =
+      ∫⁻ x in S, bad x * w x := by
+    change (∫⁻ x, bad x ∂gammaK.restrict S) = _
+    dsimp [gammaK]
+    rw [Measure.restrict_restrict hSm, hSK]
+    change (∫⁻ x in S, bad x ∂
+      (volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity w) = _
+    rw [setLIntegral_withDensity_eq_setLIntegral_mul _ hwm hbadm hSm]
+    apply setLIntegral_congr_fun hSm
+    intro x _
+    exact mul_comm _ _
+  have hweighted : ∫⁻ x in S, bad x * w x ≤
+      eta * ∫⁻ x in S, w x := by
+    exact gaussianWeighted_coreDefect_le_cv18 hn hKc hKcl hKfin hball
+      hc0 hc1 hdelta hsigma hscale hcoeffCore hcoeffPoint
+  rw [Arlib.condOn_def, lintegral_smul_measure]
+  change (gammaK S)⁻¹ * (∫⁻ x in S, bad x ∂gammaK) ≤ eta
+  rw [hraw, hmass]
+  calc
+    (∫⁻ x in S, w x)⁻¹ * (∫⁻ x in S, bad x * w x) ≤
+        (∫⁻ x in S, w x)⁻¹ *
+          (eta * ∫⁻ x in S, w x) := by gcongr
+    _ = eta := by
+      calc
+        (∫⁻ x in S, w x)⁻¹ *
+              (eta * ∫⁻ x in S, w x) =
+            eta * ((∫⁻ x in S, w x)⁻¹ * ∫⁻ x in S, w x) := by
+          ac_rfl
+        _ = eta := by
+          rw [ENNReal.inv_mul_cancel]
+          · simp
+          · rw [← hmass]
+            exact hmass0
+          · rw [← hmass]
+            exact hmasstop
+
 end Arlib.MarkovChains
