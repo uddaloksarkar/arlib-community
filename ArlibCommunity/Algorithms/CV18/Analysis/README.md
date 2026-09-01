@@ -135,8 +135,22 @@ average-local-conductance lower bound `lambda` and the phase warm-start bound;
 no extra Metropolis-acceptance penalty is needed because a rejected
 Metropolis test is still a proper proposal.
 
-The next missing analytic results are therefore (1) the quantitative weighted
-average-local-conductance lower bound for CV18's phase step size and body, and
-(2) the speedy Gaussian mixing estimate.  These instantiate the now-proved
-cost/cutoff theorem and combine its failure probability with the target
-truncated-Gaussian sampling error.
+`VolumeProofAverageConductance.lean` now proves an unconditional version of
+the weighted average-local-conductance estimate at the smaller step size
+`delta ≤ 1/(2n)`.  The proof uses the homothetic core
+`(1 - 1/(2n)) • K`: convexity and the unit-ball inclusion make every proposal
+from the core proper, while Gaussian scaling and Bernoulli's inequality show
+that the core retains at least half the Gaussian mass.  Consequently Lean now
+proves `lambda = 1/2`, discharges both normalization guards for a finite-volume
+body, and derives concrete expected-cost and cutoff theorems for the restarted
+proper-proposal execution.
+
+This small-step result is a genuine unconditional operational bridge, but it
+does not yet prove CV18 Theorem 1.1 with its advertised `O*(n^3)` complexity.
+The paper uses the substantially larger phase step
+`min{sigma,1}/(8 * sqrt(n * log(n/epsilon)))`; replacing it by `1/(2n)` loses
+the required mixing exponent.  The remaining analytic results are therefore
+(1) the weighted average-local-conductance/smoothing estimate at that larger
+phase-dependent step, and (2) the speedy Gaussian mixing estimate.  Those two
+facts instantiate the already-proved trajectory cost/cutoff bridge and combine
+its failure probability with the target truncated-Gaussian sampling error.
