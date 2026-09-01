@@ -1312,4 +1312,136 @@ theorem seven_sixteenths_le_ellGaussianProb_standardCore_of_defect_cv18
         _ ≤ 1 * G := by gcongr <;> norm_num
         _ = G := one_mul _
 
+/-- The elementary parameter calculation behind CV18's choice of proposal
+radius.  A logarithmic rate bound implies both exponential coefficients
+required by `condOn_gaussian_coreDefect_le_cv18`. -/
+theorem standardCore_exp_coefficients_cv18
+    (hn : 1 ≤ n) {delta eps : ℝ}
+    (hdelta : 0 < delta) (heps0 : 0 < eps) (heps1 : eps ≤ 1 / 10)
+    (hrate : Real.log ((n : ℝ) / eps) ≤
+      1 / (32 * (n : ℝ) * delta ^ 2)) :
+    let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+    ENNReal.ofReal
+        (Real.exp (-((n : ℝ) * ((1 - c) / 2) ^ 2 /
+          (2 * delta ^ 2)))) ≤ ENNReal.ofReal eps ∧
+      ENNReal.ofReal
+        (2 * Real.exp (-((n : ℝ) * (1 - c) ^ 2 /
+          (2 * delta ^ 2)))) ≤
+        ENNReal.ofReal eps * ENNReal.ofReal (c ^ n) := by
+  dsimp only
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hn0 : (0 : ℝ) < n := by linarith
+  have hq0 : 0 < (n : ℝ) / eps := div_pos hn0 heps0
+  let rate : ℝ := 1 / (32 * (n : ℝ) * delta ^ 2)
+  have hpointEq : (n : ℝ) * ((1 - c) / 2) ^ 2 /
+      (2 * delta ^ 2) = rate := by
+    dsimp [c, rate]
+    field_simp
+    ring
+  have hcoreEq : (n : ℝ) * (1 - c) ^ 2 /
+      (2 * delta ^ 2) = 4 * rate := by
+    dsimp [c, rate]
+    field_simp
+    ring
+  have hexpLog : Real.exp (-Real.log ((n : ℝ) / eps)) =
+      eps / (n : ℝ) := by
+    rw [Real.exp_neg, Real.exp_log hq0]
+    field_simp
+  have hratio : eps / (n : ℝ) ≤ eps := by
+    rw [div_le_iff₀ hn0]
+    nlinarith
+  have hpointReal : Real.exp (-rate) ≤ eps := by
+    calc
+      Real.exp (-rate) ≤ Real.exp (-Real.log ((n : ℝ) / eps)) := by
+        exact Real.exp_le_exp.mpr (neg_le_neg hrate)
+      _ = eps / (n : ℝ) := hexpLog
+      _ ≤ eps := hratio
+  have hexpFour : Real.exp (-4 * Real.log ((n : ℝ) / eps)) =
+      (eps / (n : ℝ)) ^ 4 := by
+    calc
+      Real.exp (-4 * Real.log ((n : ℝ) / eps)) =
+          Real.exp (-Real.log ((n : ℝ) / eps)) ^ 4 := by
+        rw [← Real.exp_nat_mul]
+        congr 1
+        ring
+      _ = (eps / (n : ℝ)) ^ 4 := by rw [hexpLog]
+  have hcoreExp : Real.exp (-(4 * rate)) ≤
+      (eps / (n : ℝ)) ^ 4 := by
+    calc
+      Real.exp (-(4 * rate)) ≤
+          Real.exp (-4 * Real.log ((n : ℝ) / eps)) := by
+        apply Real.exp_le_exp.mpr
+        nlinarith [hrate]
+      _ = _ := hexpFour
+  have hratio0 : 0 ≤ eps / (n : ℝ) := (div_pos heps0 hn0).le
+  have hratioPow : (eps / (n : ℝ)) ^ 4 ≤ eps ^ 4 :=
+    pow_le_pow_left₀ hratio0 hratio 4
+  have heps3 : eps ^ 3 ≤ (1 / 10 : ℝ) ^ 3 :=
+    pow_le_pow_left₀ heps0.le heps1 3
+  have heps4 : 2 * eps ^ 4 ≤ eps / 2 := by
+    have hmul := mul_le_mul_of_nonneg_left heps3 heps0.le
+    have heq : eps * eps ^ 3 = eps ^ 4 := by ring
+    rw [heq] at hmul
+    norm_num at hmul ⊢
+    linarith
+  have hcoreReal : 2 * Real.exp (-(4 * rate)) ≤ eps / 2 := by
+    calc
+      2 * Real.exp (-(4 * rate)) ≤
+          2 * (eps / (n : ℝ)) ^ 4 := by gcongr
+      _ ≤ 2 * eps ^ 4 := by gcongr
+      _ ≤ eps / 2 := heps4
+  have hcpow : (1 : ℝ) / 2 ≤ c ^ n := by
+    dsimp [c]
+    exact half_le_one_sub_inv_two_mul_pow_cv18 hn
+  constructor
+  · apply ENNReal.ofReal_le_ofReal
+    rw [hpointEq]
+    exact hpointReal
+  · rw [← ENNReal.ofReal_mul heps0.le]
+    apply ENNReal.ofReal_le_ofReal
+    rw [hcoreEq]
+    change 2 * Real.exp (-(4 * rate)) ≤ eps * c ^ n
+    have hcpow' : (2 : ℝ)⁻¹ ≤ c ^ n := by
+      simpa [one_div] using hcpow
+    exact hcoreReal.trans (mul_le_mul_of_nonneg_left hcpow' heps0.le)
+
+/-- CV18's displayed proposal-radius condition implies the logarithmic rate
+hypothesis used by `standardCore_exp_coefficients_cv18`. -/
+theorem paper_step_implies_standardCore_rate_cv18
+    (hn : 1 ≤ n) {delta eps : ℝ}
+    (hdelta : 0 < delta) (heps0 : 0 < eps) (heps1 : eps ≤ 1 / 10)
+    (hstep : delta ≤
+      1 / (8 * Real.sqrt ((n : ℝ) * Real.log ((n : ℝ) / eps)))) :
+    Real.log ((n : ℝ) / eps) ≤
+      1 / (32 * (n : ℝ) * delta ^ 2) := by
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hn0 : (0 : ℝ) < n := by linarith
+  have hratio : 1 < (n : ℝ) / eps := by
+    rw [lt_div_iff₀ heps0]
+    linarith
+  have hlog : 0 < Real.log ((n : ℝ) / eps) := Real.log_pos hratio
+  let L : ℝ := Real.log ((n : ℝ) / eps)
+  let b : ℝ := 1 / (8 * Real.sqrt ((n : ℝ) * L))
+  have hsqrt : 0 < Real.sqrt ((n : ℝ) * L) :=
+    Real.sqrt_pos.2 (mul_pos hn0 (by simpa [L] using hlog))
+  have hb0 : 0 < b := by dsimp [b]; positivity
+  have hsq : delta ^ 2 ≤ b ^ 2 := by
+    nlinarith [sq_nonneg (b - delta)]
+  have hbSq : b ^ 2 = 1 / (64 * (n : ℝ) * L) := by
+    dsimp [b]
+    rw [div_pow, one_pow, mul_pow, show (8 : ℝ) ^ 2 = 64 by norm_num,
+      Real.sq_sqrt (mul_nonneg hn0.le (by simpa [L] using hlog.le))]
+    ring
+  rw [hbSq] at hsq
+  change L ≤ 1 / (32 * (n : ℝ) * delta ^ 2)
+  rw [le_div_iff₀ (by positivity : 0 < 32 * (n : ℝ) * delta ^ 2)]
+  have hmul := mul_le_mul_of_nonneg_left hsq
+    (show 0 ≤ 32 * (n : ℝ) * L by positivity)
+  have hLne : L ≠ 0 := ne_of_gt (by simpa [L] using hlog)
+  have hnNe : (n : ℝ) ≠ 0 := ne_of_gt hn0
+  field_simp [hLne, hnNe] at hmul
+  rw [div_self hLne] at hmul
+  nlinarith
+
 end Arlib.MarkovChains
