@@ -155,6 +155,17 @@ explicit warm-start mixing count for the lazy speedy Metropolis-Gaussian walk.
 The axiom audits of these capstones contain only Lean's standard `propext`,
 choice, and quotient axioms.
 
+`VolumeProofKernelBridge.lean` now removes the two one-step representation
+mismatches between the executable walk and the abstract Metropolis library.
+It proves that the normalized closed proposal ball used by the program is the
+same measure as the normalized open ball used by `metropolisGaussian` (the
+boundary sphere is Lebesgue-null), including after translation to the current
+state.  It also proves that the program's body-filtered coin threshold is
+exactly one half of `metropolisAccept`.  Thus the implementation's explicit
+half-acceptance is the same laziness represented abstractly by `lazy`; the
+remaining mismatch is no longer geometric or pointwise, but the
+trajectory-level proper-step clock and its dependent phase composition.
+
 These results still do not prove CV18 Theorem 1.1 with its advertised
 `O*(n^3)` complexity.  Figure 1 uses the phase step
 `min{sigma,1}/(4096 * sqrt(n * log(n/epsilon)))`.  The paper's smoothing lemma
@@ -165,8 +176,11 @@ asymptotic mixing exponent.  The remaining work is now:
 
 1. prove the weighted average-local-conductance/smoothing estimate, hence the
    raw-proposal cutoff, at that larger phase-dependent step;
-2. align the proved lazy speedy-chain law with the formal proper-step execution
-   and transfer its stationary law proportional to `ell * gaussianWeight` to
-   the phase's restricted-Gaussian target; and
+2. lift the existing non-lazy proper-step clock to the lazy executable law,
+   use its cutoff event to compare a fixed number of raw transitions with the
+   proved lazy speedy-chain iterate, and transfer the speedy stationary law
+   proportional to `ell * gaussianWeight` to the phase's restricted-Gaussian
+   target (the paper's rejection map must be connected to the executable
+   sampler, not merely imported as a standalone theorem); and
 3. instantiate those facts phase by phase and compose them into
    `FigureOnePostInitialMixingBound` for the executable dependent program.

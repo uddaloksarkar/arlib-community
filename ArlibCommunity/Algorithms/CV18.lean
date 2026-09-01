@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.AuditCheck
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAverageConductance
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKernelBridge
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.Convexity.SpeedyGaussianMixing
 
 /-!
