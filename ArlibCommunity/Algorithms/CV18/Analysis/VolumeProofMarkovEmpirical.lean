@@ -42,6 +42,30 @@ theorem measurable_markovSumStep (P : Kernel S S) [IsMarkovKernel P]
   exact measurable_snd.prodMk
     ((measurable_snd.comp measurable_fst).add (hf.comp measurable_snd))
 
+/-- The accumulator update as a Markov kernel. -/
+noncomputable def markovSumKernel (P : Kernel S S) [IsMarkovKernel P]
+    (f : S → ℝ) (hf : Measurable f) : Kernel (S × ℝ) (S × ℝ) :=
+  ⟨fun stateSum =>
+      (P stateSum.1).map fun next => (next, stateSum.2 + f next),
+    measurable_markovSumStep P hf⟩
+
+instance markovSumKernel_isMarkovKernel
+    (P : Kernel S S) [IsMarkovKernel P] (f : S → ℝ) (hf : Measurable f) :
+    IsMarkovKernel (markovSumKernel P f hf) :=
+  ⟨fun _ => Measure.isProbabilityMeasure_map (by fun_prop)⟩
+
+@[simp] theorem markovSumKernel_apply
+    (P : Kernel S S) [IsMarkovKernel P] (f : S → ℝ) (hf : Measurable f)
+    (stateSum : S × ℝ) :
+    markovSumKernel P f hf stateSum =
+      (P stateSum.1).map fun next => (next, stateSum.2 + f next) := rfl
+
+theorem markovSumLaw_succ_eq_comp
+    (P : Kernel S S) [IsMarkovKernel P] (f : S → ℝ) (hf : Measurable f)
+    (samples : ℕ) (mu : Measure S) :
+    markovSumLaw P f (samples + 1) mu =
+      markovSumKernel P f hf ∘ₘ markovSumLaw P f samples mu := rfl
+
 theorem markovSumLaw_isProbabilityMeasure
     (P : Kernel S S) [IsMarkovKernel P] {f : S → ℝ}
     (hf : Measurable f) (mu : Measure S) [IsProbabilityMeasure mu] :
@@ -57,6 +81,154 @@ theorem markovSumLaw_isProbabilityMeasure
         (measurable_markovSumStep P hf).aemeasurable
       filter_upwards with stateSum
       exact Measure.isProbabilityMeasure_map (by fun_prop)
+
+/-- The state component after `samples` accumulator updates is the ordinary
+`samples`-step Markov marginal. -/
+theorem markovSumLaw_map_fst
+    (P : Kernel S S) [IsMarkovKernel P] {f : S → ℝ}
+    (hf : Measurable f) (mu : Measure S) : ∀ samples,
+    (markovSumLaw P f samples mu).map Prod.fst = iterate P mu samples := by
+  intro samples
+  induction samples with
+  | zero =>
+      rw [markovSumLaw, Measure.map_map measurable_fst (by fun_prop)]
+      simp [Function.comp_def]
+  | succ samples ih =>
+      rw [markovSumLaw_succ_eq_comp P f hf,
+        Measure.map_comp _ _ measurable_fst]
+      have hkernel : (markovSumKernel P f hf).map Prod.fst =
+          P.comap Prod.fst measurable_fst := by
+        ext stateSum A hA
+        rw [Kernel.map_apply' _ measurable_fst _ hA,
+          Kernel.comap_apply, markovSumKernel_apply]
+        have hm : Measurable (fun next : S =>
+            (next, stateSum.2 + f next)) := by fun_prop
+        rw [Measure.map_apply hm (measurable_fst hA)]
+        rfl
+      rw [hkernel]
+      calc
+        P.comap Prod.fst measurable_fst ∘ₘ markovSumLaw P f samples mu =
+            P ∘ₘ ((Kernel.deterministic Prod.fst measurable_fst) ∘ₘ
+              markovSumLaw P f samples mu) := by
+                rw [Measure.comp_assoc, Kernel.comp_deterministic_eq_comap]
+        _ = P ∘ₘ (markovSumLaw P f samples mu).map Prod.fst := by
+              congr 1
+              exact Measure.deterministic_comp_eq_map measurable_fst
+        _ = P ∘ₘ iterate P mu samples := by rw [ih]
+        _ = iterate P mu (samples + 1) := by rw [iterate_succ]; rfl
+
+/-- A uniformly bounded observable gives a deterministic bound on the finite
+accumulator.  This supplies all integrability facts needed below. -/
+theorem markovSumLaw_ae_abs_snd_le
+    (P : Kernel S S) [IsMarkovKernel P] {f : S → ℝ}
+    (hf : Measurable f) {B : ℝ} (hB : 0 ≤ B)
+    (hbound : ∀ x, |f x| ≤ B) (mu : Measure S) : ∀ samples : ℕ,
+    ∀ᵐ stateSum ∂markovSumLaw P f samples mu,
+      |stateSum.2| ≤ (samples : ℝ) * B := by
+  have habs : Measurable (fun stateSum : S × ℝ => |stateSum.2|) := by fun_prop
+  intro samples
+  induction samples with
+  | zero =>
+      rw [markovSumLaw]
+      apply (ae_map_iff (by fun_prop)
+        (measurableSet_le habs measurable_const)).2
+      filter_upwards with x
+      simp [hB]
+  | succ samples ih =>
+      rw [markovSumLaw_succ_eq_comp P f hf]
+      apply Measure.ae_comp_of_ae_ae
+        (measurableSet_le habs measurable_const)
+      filter_upwards [ih] with stateSum hsum
+      rw [markovSumKernel_apply]
+      have hm : Measurable (fun next : S =>
+          (next, stateSum.2 + f next)) := by fun_prop
+      apply (ae_map_iff hm.aemeasurable
+        (measurableSet_le habs measurable_const)).2
+      filter_upwards with next
+      calc
+        |stateSum.2 + f next| ≤ |stateSum.2| + |f next| := abs_add_le _ _
+        _ ≤ (samples : ℝ) * B + B := add_le_add hsum (hbound next)
+        _ = (samples + 1 : ℕ) * B := by push_cast; ring
+
+theorem integrable_snd_mul_fst_markovSumLaw
+    (P : Kernel S S) [IsMarkovKernel P] {f : S → ℝ}
+    (hf : Measurable f) {B : ℝ} (hB : 0 ≤ B)
+    (hbound : ∀ x, |f x| ≤ B) (mu : Measure S)
+    [IsProbabilityMeasure mu] {g : S → ℝ} (hg : Measurable g)
+    {C : ℝ} (hC : 0 ≤ C) (hgbound : ∀ x, |g x| ≤ C)
+    (samples : ℕ) :
+    Integrable (fun stateSum => stateSum.2 * g stateSum.1)
+      (markovSumLaw P f samples mu) := by
+  let _ : IsProbabilityMeasure (markovSumLaw P f samples mu) :=
+    markovSumLaw_isProbabilityMeasure P hf mu samples
+  apply Integrable.of_bound (by fun_prop) ((samples : ℝ) * B * C)
+  filter_upwards [markovSumLaw_ae_abs_snd_le P hf hB hbound mu samples]
+    with stateSum hsum
+  rw [Real.norm_eq_abs, abs_mul]
+  exact mul_le_mul hsum (hgbound stateSum.1) (abs_nonneg _) (mul_nonneg (by positivity) hB)
+
+theorem markovSumLaw_map_fst_of_invariant
+    (P : Kernel S S) [IsMarkovKernel P] {f : S → ℝ}
+    (hf : Measurable f) {pi : Measure S} (hinv : Kernel.Invariant P pi)
+    (samples : ℕ) :
+    (markovSumLaw P f samples pi).map Prod.fst = pi := by
+  rw [markovSumLaw_map_fst P hf pi samples, iterate_invariant hinv]
+
+theorem integral_fst_markovSumLaw_of_invariant
+    (P : Kernel S S) [IsMarkovKernel P] {f h : S → ℝ}
+    (hf : Measurable f) (hh : Measurable h) {pi : Measure S}
+    (hinv : Kernel.Invariant P pi) (samples : ℕ) :
+    (∫ stateSum, h stateSum.1 ∂markovSumLaw P f samples pi) =
+      ∫ x, h x ∂pi := by
+  calc
+    (∫ stateSum, h stateSum.1 ∂markovSumLaw P f samples pi) =
+        ∫ x, h x ∂(markovSumLaw P f samples pi).map Prod.fst :=
+      (integral_map measurable_fst.aemeasurable hh.aestronglyMeasurable).symm
+    _ = ∫ x, h x ∂pi := by
+      rw [markovSumLaw_map_fst_of_invariant P hf hinv samples]
+
+theorem abs_markovOp_le_of_abs_le
+    (P : Kernel S S) [IsMarkovKernel P] {g : S → ℝ}
+    (hg : Measurable g) {C : ℝ} (hC : 0 ≤ C)
+    (hbound : ∀ x, |g x| ≤ C) (x : S) :
+    |markovOp P g x| ≤ C := by
+  let _ : IsProbabilityMeasure (P x) := IsMarkovKernel.isProbabilityMeasure x
+  have hgint : Integrable g (P x) :=
+    Integrable.of_bound hg.aestronglyMeasurable C <|
+      ae_of_all _ fun y => by simpa [Real.norm_eq_abs] using hbound y
+  unfold markovOp
+  calc
+    |∫ y, g y ∂P x| ≤ ∫ y, |g y| ∂P x := abs_integral_le_integral_abs
+    _ ≤ ∫ _y, C ∂P x := integral_mono hgint.abs (integrable_const C) hbound
+    _ = C := by simp
+
+theorem integral_markovSumKernel_snd_mul
+    (P : Kernel S S) [IsMarkovKernel P] {f g : S → ℝ}
+    (hf : Measurable f) (hg : Measurable g)
+    {B C : ℝ} (hfbound : ∀ x, |f x| ≤ B)
+    (hgbound : ∀ x, |g x| ≤ C) (stateSum : S × ℝ) :
+    (∫ nextSum, nextSum.2 * g nextSum.1
+      ∂markovSumKernel P f hf stateSum) =
+      stateSum.2 * markovOp P g stateSum.1 +
+        markovOp P (fun y => f y * g y) stateSum.1 := by
+  let _ : IsProbabilityMeasure (P stateSum.1) :=
+    IsMarkovKernel.isProbabilityMeasure stateSum.1
+  have hgint : Integrable g (P stateSum.1) :=
+    Integrable.of_bound hg.aestronglyMeasurable C <|
+      ae_of_all _ fun y => by simpa [Real.norm_eq_abs] using hgbound y
+  have hfgint : Integrable (fun y => f y * g y) (P stateSum.1) := by
+    apply hgint.bdd_mul (hf.aestronglyMeasurable)
+    exact ae_of_all _ fun y => by simpa [Real.norm_eq_abs] using hfbound y
+  rw [markovSumKernel_apply]
+  have hm : Measurable (fun next : S =>
+      (next, stateSum.2 + f next)) := by fun_prop
+  rw [integral_map hm.aemeasurable (by fun_prop)]
+  have hfun : (fun next : S => (stateSum.2 + f next) * g next) =
+      fun next => stateSum.2 * g next + f next * g next := by
+    funext next
+    ring
+  rw [hfun, integral_add (hgint.const_mul _) hfgint, integral_const_mul]
+  rfl
 
 /-- Initial-law domination is preserved by the complete finite dependent
 sampling experiment. -/
