@@ -222,6 +222,75 @@ theorem phaseTruncatedBody_radius_bundle (q : VolumeParams)
     phaseTruncatedBody_volume_ne_zero q I hsigma2,
     fun _ hx => phaseTruncatedBody_norm_le q I hx⟩
 
+/-- The executable Figure-1 radius is far below the generic speedy-mixing
+step cap. -/
+theorem figureOneProposalRadius_le_phaseMixingStep
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    figureOneProposalRadius q sigma2 ≤
+      Real.sqrt sigma2 / (8 * Real.sqrt q.n) := by
+  have hn0 : (0 : ℝ) < q.n := by
+    exact_mod_cast (lt_of_lt_of_le (by norm_num : 0 < 3) q.dim_ok)
+  have hL : 1 ≤ protectedLog ((q.n : ℝ) / q.eps) := le_max_left _ _
+  have hmul : (q.n : ℝ) ≤
+      (q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps) := by nlinarith
+  have hsqrtLe : Real.sqrt q.n ≤
+      Real.sqrt ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps)) :=
+    Real.sqrt_le_sqrt hmul
+  unfold figureOneProposalRadius
+  calc
+    min (Real.sqrt sigma2) 1 /
+          (4096 * Real.sqrt
+            ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps))) ≤
+        Real.sqrt sigma2 /
+          (4096 * Real.sqrt
+            ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps))) := by
+      gcongr
+      exact min_le_left _ _
+    _ ≤ Real.sqrt sigma2 / (8 * Real.sqrt q.n) := by
+      apply div_le_div_of_nonneg_left (Real.sqrt_nonneg _)
+      · positivity
+      · nlinarith [Real.sqrt_nonneg
+          ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps))]
+
+/-- The same executable radius satisfies the KLS core condition with the
+algorithm's global accuracy parameter as core error. -/
+theorem figureOneProposalRadius_le_paperCoreStep
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    figureOneProposalRadius q sigma2 ≤
+      1 / (8 * Real.sqrt
+        ((q.n : ℝ) * Real.log ((q.n : ℝ) / q.eps))) := by
+  have hn0 : (0 : ℝ) < q.n := by
+    exact_mod_cast (lt_of_lt_of_le (by norm_num : 0 < 3) q.dim_ok)
+  have hratio : 1 < (q.n : ℝ) / q.eps := by
+    rw [lt_div_iff₀ q.heps.1]
+    have hn1 : (1 : ℝ) ≤ q.n := by exact_mod_cast (le_trans (by norm_num) q.dim_ok)
+    nlinarith [q.heps.2]
+  have hlog0 : 0 < Real.log ((q.n : ℝ) / q.eps) := Real.log_pos hratio
+  have hL : Real.log ((q.n : ℝ) / q.eps) ≤
+      protectedLog ((q.n : ℝ) / q.eps) := le_max_right _ _
+  have hmul : (q.n : ℝ) * Real.log ((q.n : ℝ) / q.eps) ≤
+      (q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps) := by gcongr
+  have hsqrtLe : Real.sqrt
+        ((q.n : ℝ) * Real.log ((q.n : ℝ) / q.eps)) ≤
+      Real.sqrt ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps)) :=
+    Real.sqrt_le_sqrt hmul
+  unfold figureOneProposalRadius
+  calc
+    min (Real.sqrt sigma2) 1 /
+          (4096 * Real.sqrt
+            ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps))) ≤
+        1 /
+          (4096 * Real.sqrt
+            ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps))) := by
+      gcongr
+      exact min_le_right _ _
+    _ ≤ 1 / (8 * Real.sqrt
+          ((q.n : ℝ) * Real.log ((q.n : ℝ) / q.eps))) := by
+      apply div_le_div_of_nonneg_left zero_le_one
+      · positivity
+      · nlinarith [Real.sqrt_nonneg
+          ((q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps))]
+
 /-- The strengthened speedy-walk mixing theorem instantiated on CV18's
 phase-local body.  All geometry is discharged; the remaining hypotheses are
 exactly the warm start, error, and advertised step-count arithmetic consumed
