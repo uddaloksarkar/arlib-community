@@ -3,6 +3,7 @@ Copyright (c) 2026. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAnalyticCore
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAverageConductanceLV
 import ArlibCommunity.Algorithms.CV18.Analysis.TheoremProof
 
 /-!
@@ -18,6 +19,10 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms figureOne_base_accuracy_of_analytic_inputs
 #print axioms figureOneSharpAcceleratedMoments
 #print axioms figureOneRadialTruncationBound
+#print axioms Arlib.MarkovChains.gaussian_rejectedMass_le_direct
+#print axioms Arlib.MarkovChains.half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct
+#print axioms Arlib.MarkovChains.half_mul_mul_measure_properProposalTotalCost_ge_le_LVStep
+#print axioms half_mul_lintegral_gaussianWeight_le_figureOne
 #print axioms figureOne_base_accuracy_of_mixing
 #print axioms figureOne_base_query_cost
 #print axioms volume_proof_amplification

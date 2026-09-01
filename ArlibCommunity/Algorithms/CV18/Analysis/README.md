@@ -135,7 +135,7 @@ average-local-conductance lower bound `lambda` and the phase warm-start bound;
 no extra Metropolis-acceptance penalty is needed because a rejected
 Metropolis test is still a proper proposal.
 
-`VolumeProofAverageConductance.lean` now proves an unconditional version of
+`VolumeProofAverageConductance.lean` proves an unconditional version of
 the weighted average-local-conductance estimate at the smaller step size
 `delta ≤ 1/(2n)`.  The proof uses the homothetic core
 `(1 - 1/(2n)) • K`: convexity and the unit-ball inclusion make every proposal
@@ -144,6 +144,18 @@ that the core retains at least half the Gaussian mass.  Consequently Lean now
 proves `lambda = 1/2`, discharges both normalization guards for a finite-volume
 body, and derives concrete expected-cost and cutoff theorems for the restarted
 proper-proposal execution.
+
+`VolumeProofAverageConductanceLV.lean` proves the corresponding estimate at
+CV18's advertised Figure-1 step. It follows the layer-cake mechanism of
+Lovász--Vempala Lemma 6.3, but applies the KLS convex-body escape estimate
+directly to the rejected-proposal probability. Splitting Gaussian level sets
+at radius `min{sigma,1}/4` bounds the rejected mass by
+`(1/4 + 20 * delta * sqrt(n) / min{sigma,1})` times the total mass. Thus the
+paper condition `delta <= min{sigma,1}/(4096*sqrt(n))` gives weighted average
+local conductance at least `1/2`. The file specializes this theorem to
+`figureOneProposalRadius` on `truncatedBody` and derives the nonzero
+normalization, expected raw-proposal cost, and Markov-cutoff bounds. Its only
+geometric input is the already formalized sharp-order KLS escape estimate.
 
 The speedy-Gaussian conductance and mixing chain is now also ported and proved
 without a stale-directory import.  In particular,
@@ -170,21 +182,16 @@ The remaining mismatch is therefore no longer geometric, pointwise, or
 one-step semantic; it is the trajectory-level proper-step clock, cutoff, and
 dependent phase composition.
 
-These results still do not prove CV18 Theorem 1.1 with its advertised
-`O*(n^3)` complexity.  Figure 1 uses the phase step
-`min{sigma,1}/(4096 * sqrt(n * log(n/epsilon)))`.  The paper's smoothing lemma
-is intended to prove average local conductance at this scale.  The elementary
-homothetic-core proof above applies only when that step also satisfies
-`delta ≤ 1/(2n)`; using `1/(2n)` as a uniform replacement loses the required
-asymptotic mixing exponent.  The remaining work is now:
+These results still do not by themselves prove CV18 Theorem 1.1 with its
+advertised `O*(n^3)` complexity. The average-local-conductance and
+raw-proposal cutoff obligation at the advertised phase radius is now closed.
+The remaining work is:
 
-1. prove the weighted average-local-conductance/smoothing estimate, hence the
-   raw-proposal cutoff, at that larger phase-dependent step;
-2. lift the existing non-lazy proper-step clock to the lazy executable law,
+1. lift the existing non-lazy proper-step clock to the lazy executable law,
    use its cutoff event to compare a fixed number of raw transitions with the
    proved lazy speedy-chain iterate, and transfer the speedy stationary law
    proportional to `ell * gaussianWeight` to the phase's restricted-Gaussian
    target (the paper's rejection map must be connected to the executable
    sampler, not merely imported as a standalone theorem); and
-3. instantiate those facts phase by phase and compose them into
+2. instantiate those facts phase by phase and compose them into
    `FigureOnePostInitialMixingBound` for the executable dependent program.

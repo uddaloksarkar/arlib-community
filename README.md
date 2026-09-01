@@ -31,7 +31,7 @@ Three algorithm entries so far.
 | --- | --- | --- |
 | `Algorithms/TPA` | Huber's Tootsie Pop Algorithm: its contraction-counter tail, Poisson law, almost-sure termination, and two-phase run-count schedule. | [ArlibCommunity/Algorithms/TPA.lean](ArlibCommunity/Algorithms/TPA.lean) |
 | `Algorithms/HitAndRun` | Lovász's direction/chord sampler, finite-facet realization, stationarity, and a corrected unconditional mixing theorem. The compact statement surface is under `Model/`; proof background is under `Analysis/`. | [ArlibCommunity/Algorithms/HitAndRun.lean](ArlibCommunity/Algorithms/HitAndRun.lean) |
-| `Algorithms/CV18` | Cousins--Vempala accelerated Gaussian cooling: an executable membership-oracle program and its discharged schedule, measure, sharp accelerated-moment, product, and cost analysis. The two remaining analytic inputs are explicit hypotheses; no unconditional capstone is asserted. | [ArlibCommunity/Algorithms/CV18.lean](ArlibCommunity/Algorithms/CV18.lean) |
+| `Algorithms/CV18` | Cousins--Vempala accelerated Gaussian cooling: an executable membership-oracle program and its discharged schedule, measure, sharp accelerated-moment, advertised-step average-conductance, product, and cost analysis. The remaining dependent walk/composition input is explicit; no unconditional capstone is asserted. | [ArlibCommunity/Algorithms/CV18.lean](ArlibCommunity/Algorithms/CV18.lean) |
 
 `import ArlibCommunity` gives you everything; `import ArlibCommunity.Algorithms`
 gives you one area; importing a single module gives you one piece. Every
