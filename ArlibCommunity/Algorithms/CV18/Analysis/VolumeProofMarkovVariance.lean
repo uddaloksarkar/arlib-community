@@ -595,8 +595,40 @@ theorem markovSumLaw_meas_abs_snd_ge_le
     (integral_markovSumLaw_sq_le P hrev hpsd hne hf hmem hmean
       hB hfbound hgap samples) (sq_nonneg c)
 
+/-- Warm-start version of the dependent Markov Chebyshev bound. Warmness is
+paid once for the whole finite experiment, rather than once per sample. -/
+theorem markovSumLaw_meas_abs_snd_ge_le_of_isWarm
+    (P : Kernel S S) [IsMarkovKernel P] {mu pi : Measure S}
+    [IsProbabilityMeasure mu] [IsProbabilityMeasure pi]
+    (hrev : IsReversible P pi) (hpsd : HasNonnegSpectrum P pi)
+    (hne : (rayleighSet P pi).Nonempty)
+    {f : S → ℝ} (hf : Measurable f) (hmem : MemLp f 2 pi)
+    (hmean : ∫ x, f x ∂pi = 0)
+    {B : ℝ} (hB : 0 ≤ B) (hfbound : ∀ x, |f x| ≤ B)
+    (hgap : 0 < spectralGap P pi) {M : ENNReal}
+    (hwarm : Arlib.IsWarm M mu pi) (samples : ℕ)
+    {c : ℝ} (hc : 0 < c) :
+    markovSumLaw P f samples mu {stateSum | c ≤ |stateSum.2|} ≤
+      M * ENNReal.ofReal (((samples : ℝ) *
+        (3 * ((spectralGap P pi)⁻¹ * varianceReal pi f))) / c ^ 2) := by
+  calc
+    markovSumLaw P f samples mu {stateSum | c ≤ |stateSum.2|} ≤
+        (M • markovSumLaw P f samples pi)
+          {stateSum | c ≤ |stateSum.2|} :=
+      markovSumLaw_le_smul_of_isWarm P hf hwarm samples
+        {stateSum | c ≤ |stateSum.2|}
+    _ = M * markovSumLaw P f samples pi
+          {stateSum | c ≤ |stateSum.2|} := by
+      rw [Measure.smul_apply, smul_eq_mul]
+    _ ≤ M * ENNReal.ofReal (((samples : ℝ) *
+          (3 * ((spectralGap P pi)⁻¹ * varianceReal pi f))) / c ^ 2) := by
+      gcongr
+      exact markovSumLaw_meas_abs_snd_ge_le P hrev hpsd hne hf hmem
+        hmean hB hfbound hgap samples hc
+
 end Arlib.MarkovChains
 
 #print axioms Arlib.MarkovChains.integral_markovSumLaw_mul_eq_sum_correlations
 #print axioms Arlib.MarkovChains.integral_markovSumLaw_sq_le
 #print axioms Arlib.MarkovChains.markovSumLaw_meas_abs_snd_ge_le
+#print axioms Arlib.MarkovChains.markovSumLaw_meas_abs_snd_ge_le_of_isWarm
