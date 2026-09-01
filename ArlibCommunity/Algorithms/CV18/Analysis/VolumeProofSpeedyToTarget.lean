@@ -260,6 +260,59 @@ theorem gaussianScaleAcceptance_le_one {variance c : ℝ}
     (gaussianWeight_ne_top (variance / c ^ 2) x)]
   simpa using gaussianWeight_mono_variance_cv18 hvariance hvar x
 
+/-- On CV18's phase truncation `‖x‖ ≤ 4 * sqrt(variance*n)`, the second
+rejection accepts with probability at least `exp (-8)`, an absolute constant. -/
+theorem exp_neg_eight_le_gaussianScaleAcceptance_standardCore_cv18
+    (hn : 1 ≤ n) {variance : ℝ} (hvariance : 0 < variance)
+    {x : EuclideanSpace ℝ (Fin n)}
+    (hx : ‖x‖ ^ 2 ≤ 16 * variance * (n : ℝ)) :
+    ENNReal.ofReal (Real.exp (-8)) ≤
+      gaussianScaleAcceptance variance (1 - 1 / (2 * (n : ℝ))) x := by
+  have hnR : (0 : ℝ) < n := by exact_mod_cast (lt_of_lt_of_le Nat.zero_lt_one hn)
+  have hnRone : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hc0 : 0 < c := by
+    dsimp [c]
+    rw [sub_pos, div_lt_one (by positivity)]
+    nlinarith
+  have hc1 : c ≤ 1 := by
+    dsimp [c]
+    have : 0 ≤ 1 / (2 * (n : ℝ)) := by positivity
+    linarith
+  have hc2pos : 0 < c ^ 2 := sq_pos_of_pos hc0
+  have hscalePos : 0 < variance / c ^ 2 := div_pos hvariance hc2pos
+  have hcLoss : (n : ℝ) * (1 - c ^ 2) ≤ 1 := by
+    dsimp [c]
+    field_simp
+    nlinarith [sq_nonneg (n : ℝ)]
+  have hx0 : 0 ≤ ‖x‖ ^ 2 := sq_nonneg _
+  have hcLoss0 : 0 ≤ 1 - c ^ 2 := by nlinarith [hc0.le, hc1]
+  have hloss : (1 - c ^ 2) * ‖x‖ ^ 2 ≤ 16 * variance := by
+    have h1 := mul_le_mul_of_nonneg_right hcLoss hx0
+    have h2 := hx
+    nlinarith [mul_nonneg hcLoss0 hx0]
+  unfold gaussianScaleAcceptance gaussianWeight gaussianWeightReal
+  rw [ENNReal.le_div_iff_mul_le
+    (Or.inl (ENNReal.ofReal_ne_zero_iff.mpr (Real.exp_pos _)))
+    (Or.inl ENNReal.ofReal_ne_top)]
+  rw [← ENNReal.ofReal_mul (Real.exp_pos _).le]
+  apply ENNReal.ofReal_le_ofReal
+  rw [← Real.exp_add]
+  apply Real.exp_le_exp.mpr
+  have hexponent :
+      -(8 : ℝ) + -(‖x‖ ^ 2 / (2 * (variance / c ^ 2))) ≤
+        -(‖x‖ ^ 2 / (2 * variance)) := by
+    have hratio : (1 - c ^ 2) * ‖x‖ ^ 2 / (2 * variance) ≤ 8 := by
+      rw [div_le_iff₀ (by positivity)]
+      nlinarith
+    have hid :
+        ‖x‖ ^ 2 / (2 * variance) - ‖x‖ ^ 2 / (2 * (variance / c ^ 2)) =
+          (1 - c ^ 2) * ‖x‖ ^ 2 / (2 * variance) := by
+      field_simp
+    linarith
+  dsimp [c] at hexponent ⊢
+  convert hexponent using 1 <;> ring
+
 /-- Variable-probability rejection after the scaling step has exactly the
 desired unnormalised Gaussian law on `K`. -/
 theorem gaussianScaleAcceptance_withDensity_cv18

@@ -227,8 +227,10 @@ conditioning removes the speedy weight exactly.  Scaling the accepted point
 back to `K` changes the Gaussian variance from `sigma2` to
 `sigma2 / (1 - 1/(2n))^2`.  A second, pointwise-valid rejection probability is
 proved to change that scaled law exactly into the desired restricted Gaussian.
-Thus the paper's underspecified distributional identity and the first loop's
-constant success probability no longer remain assumptions.
+On the paper's phase radius, Lean also proves that this second acceptance
+probability is at least `exp (-8)`. Thus the paper's underspecified
+distributional identity and both loops' constant success probabilities no
+longer remain assumptions.
 
 These results still do not by themselves prove CV18 Theorem 1.1 with its
 advertised `O*(n^3)` complexity. The average-local-conductance and
@@ -236,7 +238,6 @@ raw-proposal cutoff obligation at the advertised phase radius is now closed.
 The remaining work is:
 
 1. package the now-proved speedy-to-target measure identities as a capped
-   executable rejection sampler and bound the second rejection loop on the
-   paper's phase-radius truncation; and
+   executable rejection sampler; and
 2. instantiate the walk, truncation, and rejection facts phase by phase and compose them into
    `FigureOnePostInitialMixingBound` for the executable dependent program.

@@ -38,6 +38,7 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms Arlib.MarkovChains.condOn_ellGaussianProb_smul_eq_gaussian_cv18
 #print axioms Arlib.MarkovChains.map_condOn_gaussian_smul_cv18
 #print axioms Arlib.MarkovChains.gaussianScaleAcceptance_withDensity_cv18
+#print axioms Arlib.MarkovChains.exp_neg_eight_le_gaussianScaleAcceptance_standardCore_cv18
 #print axioms half_mul_lintegral_gaussianWeight_le_figureOne
 #print axioms figureOne_base_accuracy_of_mixing
 #print axioms figureOne_base_query_cost
