@@ -1444,4 +1444,113 @@ theorem paper_step_implies_standardCore_rate_cv18
   rw [div_self hLne] at hmul
   nlinarith
 
+/-- The same displayed CV18 proposal-radius condition also supplies the
+geometric scale separation required by the KLS core argument. -/
+theorem paper_step_implies_standardCore_scale_cv18
+    (hn : 1 ≤ n) {delta eps : ℝ}
+    (hdelta : 0 < delta) (heps0 : 0 < eps) (heps1 : eps ≤ 1 / 10)
+    (hstep : delta ≤
+      1 / (8 * Real.sqrt ((n : ℝ) * Real.log ((n : ℝ) / eps)))) :
+    let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+    4 * delta ^ 2 ≤ 1 - c := by
+  dsimp only
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hn0 : (0 : ℝ) < n := lt_of_lt_of_le zero_lt_one hnR
+  have hratio10 : 10 ≤ (n : ℝ) / eps := by
+    rw [le_div_iff₀ heps0]
+    nlinarith
+  have hratio0 : 0 < (n : ℝ) / eps := div_pos hn0 heps0
+  have hlog1 : 1 ≤ Real.log ((n : ℝ) / eps) :=
+    (Real.le_log_iff_exp_le hratio0).2
+      (Real.exp_one_lt_three.le.trans
+        ((by norm_num : (3 : ℝ) ≤ 10).trans hratio10))
+  let L : ℝ := Real.log ((n : ℝ) / eps)
+  let b : ℝ := 1 / (8 * Real.sqrt ((n : ℝ) * L))
+  have hsqrt : 0 < Real.sqrt ((n : ℝ) * L) :=
+    Real.sqrt_pos.2 (mul_pos hn0 (by simpa [L] using (lt_of_lt_of_le zero_lt_one hlog1)))
+  have hb0 : 0 < b := by dsimp [b]; positivity
+  have hsq : delta ^ 2 ≤ b ^ 2 := by
+    nlinarith [sq_nonneg (b - delta)]
+  have hbSq : b ^ 2 = 1 / (64 * (n : ℝ) * L) := by
+    dsimp [b]
+    rw [div_pow, one_pow, mul_pow, show (8 : ℝ) ^ 2 = 64 by norm_num,
+      Real.sq_sqrt (mul_nonneg hn0.le (by dsimp [L]; linarith))]
+    ring
+  rw [hbSq] at hsq
+  calc
+    4 * delta ^ 2 ≤ 4 * (1 / (64 * (n : ℝ) * L)) := by gcongr
+    _ = 1 / (16 * (n : ℝ) * L) := by ring
+    _ ≤ 1 / (2 * (n : ℝ)) := by
+      apply one_div_le_one_div_of_le
+      · positivity
+      · have : (1 : ℝ) ≤ L := by simpa [L] using hlog1
+        nlinarith
+    _ = 1 - (1 - 1 / (2 * (n : ℝ))) := by ring
+
+/-- Paper-shaped packaging of the KLS calculation.  Under CV18's displayed
+proposal-radius condition, the standard homothetic core simultaneously has
+small normalized local-conductance defect and constant speedy mass. -/
+theorem standardCore_defect_and_speedyMass_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hball : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {delta sigma eps : ℝ} (hdelta : 0 < delta) (hsigma : 0 < sigma)
+    (heps0 : 0 < eps) (heps16 : eps ≤ 1 / 16)
+    (hstep : delta ≤
+      1 / (8 * Real.sqrt ((n : ℝ) * Real.log ((n : ℝ) / eps))))
+    (hgaussCore0 :
+      (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2))).restrict K)
+          ((1 - 1 / (2 * (n : ℝ))) • K) ≠ 0)
+    (hgaussCoretop :
+      (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2))).restrict K)
+          ((1 - 1 / (2 * (n : ℝ))) • K) ≠ ⊤)
+    (hspeedy0 : ellGaussianMeasure K delta (sigma ^ 2) Set.univ ≠ 0)
+    (hspeedytop : ellGaussianMeasure K delta (sigma ^ 2) Set.univ ≠ ⊤) :
+    let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+    (∫⁻ x, (1 - ell K delta x)
+        ∂Arlib.condOn
+          (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+            (gaussianWeight (sigma ^ 2))).restrict K) (c • K)) ≤
+          ENNReal.ofReal eps ∧
+      ENNReal.ofReal (7 / 16 : ℝ) ≤
+        ellGaussianProb K delta (sigma ^ 2) (c • K) := by
+  dsimp only
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hn0 : (0 : ℝ) < n := lt_of_lt_of_le zero_lt_one hnR
+  have hc0 : 0 < c := by
+    dsimp [c]
+    have : 1 / (2 * (n : ℝ)) ≤ 1 / 2 := by
+      rw [div_le_div_iff₀ (by positivity) (by norm_num)]
+      nlinarith
+    linarith
+  have hc1 : c < 1 := by
+    dsimp [c]
+    have : 0 < 1 / (2 * (n : ℝ)) := by positivity
+    linarith
+  have heps10 : eps ≤ 1 / 10 := by linarith
+  have hrate := paper_step_implies_standardCore_rate_cv18
+    hn hdelta heps0 heps10 hstep
+  have hcoeff := standardCore_exp_coefficients_cv18
+    hn hdelta heps0 heps10 hrate
+  have hscale : 4 * delta ^ 2 ≤ 1 - c := by
+    simpa [c] using paper_step_implies_standardCore_scale_cv18
+      hn hdelta heps0 heps10 hstep
+  have hraw := gaussianWeighted_coreDefect_le_cv18
+    hn hKc hKcl hKfin hball hc0 hc1 hdelta hsigma hscale
+      hcoeff.2 hcoeff.1
+  constructor
+  · exact condOn_gaussian_coreDefect_le_cv18
+      hn hKc hKcl hKfin hball hc0 hc1 hdelta hsigma hscale
+        hcoeff.2 hcoeff.1 hgaussCore0 hgaussCoretop
+  · have heta : ENNReal.ofReal eps ≤ ENNReal.ofReal (1 / 16 : ℝ) :=
+      ENNReal.ofReal_le_ofReal heps16
+    simpa [c] using
+      (seven_sixteenths_le_ellGaussianProb_standardCore_of_defect_cv18
+        hn hKc hKcl hKfin
+        (hball (Metric.mem_closedBall_self zero_le_one))
+        (by positivity : 0 < sigma ^ 2) hspeedy0 hspeedytop heta hraw)
+
 end Arlib.MarkovChains
