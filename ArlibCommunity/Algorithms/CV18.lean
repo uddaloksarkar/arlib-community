@@ -8,6 +8,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperFailure
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofSpeedyToTarget
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofPhaseMixing
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofStrongStepMixing
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPhaseMixing
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKLSCore
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.Convexity.SpeedyGaussianMixing
 
