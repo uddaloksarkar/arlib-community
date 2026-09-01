@@ -1,5 +1,6 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofSpeedyToTarget
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAverageConductanceLV
+import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.MarkovChains.Continuous.SpeedyGaussianConductance
 import ArlibCommunity.Algorithms.HitAndRun.Analysis.Background.Arlib.Convexity.KLS97Sharp
 
 /-!
@@ -1615,6 +1616,93 @@ theorem TVLe.speedyToGaussian_of_paperStep_cv18
       (by simpa [c] using hgaussCore0)
       (by simpa [c] using hgaussCoretop)
       hetaTop hetaHalf (by simpa [c] using hpaper.1)
+      hmix hmixTop hcombined
+
+/-- Guard-free body-level version of `speedyToGaussian_of_paperStep_cv18`.
+Positive finite volume and bounded convex geometry discharge every
+normalization side condition. -/
+theorem TVLe.speedyToGaussian_of_paperStep_of_body_cv18
+    (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKb : Bornology.IsBounded K)
+    (hK0 : volume K ≠ 0) (hKfin : volume K ≠ ⊤)
+    (hball : closedBall (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {delta sigma coreError : ℝ} (hdelta : 0 < delta) (hsigma : 0 < sigma)
+    (hcoreError0 : 0 < coreError) (hcoreError16 : coreError ≤ 1 / 16)
+    (hstep : delta ≤
+      1 / (8 * Real.sqrt
+        ((n : ℝ) * Real.log ((n : ℝ) / coreError))))
+    {mu : Measure (EuclideanSpace ℝ (Fin n))} [IsProbabilityMeasure mu]
+    {mixError : ENNReal}
+    (hmix : Arlib.TVLe mu (ellGaussianProb K delta (sigma ^ 2)) mixError)
+    (hmixTop : mixError ≠ ⊤)
+    (hcombined : 8 * mixError + 4 * ENNReal.ofReal coreError ≤
+      ENNReal.ofReal (1 / 4 : ℝ)) :
+    let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+    Arlib.TVLe
+      (Arlib.condOn
+        (((Arlib.condOn mu (c • K)).map (fun x => c⁻¹ • x)).withDensity
+          (gaussianScaleAcceptance (sigma ^ 2) c)) Set.univ)
+      (Arlib.condOn
+        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight (sigma ^ 2))) K)
+      (64 * mixError + 32 * ENNReal.ofReal coreError) := by
+  dsimp only
+  let c : ℝ := 1 - 1 / (2 * (n : ℝ))
+  have hnR : (1 : ℝ) ≤ n := by exact_mod_cast hn
+  have hn0 : (0 : ℝ) < n := lt_of_lt_of_le zero_lt_one hnR
+  have hc0 : 0 < c := by
+    dsimp [c]
+    have : 1 / (2 * (n : ℝ)) ≤ 1 / 2 := by
+      rw [div_le_div_iff₀ (by positivity) (by norm_num)]
+      nlinarith
+    linarith
+  have hc1 : c < 1 := by
+    dsimp [c]
+    have : 0 < 1 / (2 * (n : ℝ)) := by positivity
+    linarith
+  have hcoreM : MeasurableSet (c • K) :=
+    ((isClosedMap_smul_of_ne_zero hc0.ne') K hKcl).measurableSet
+  have hsub : c • K ⊆ K := by
+    rintro _ ⟨x, hx, rfl⟩
+    exact hKc.smul_mem_of_zero_mem
+      (hball (Metric.mem_closedBall_self zero_le_one)) hx ⟨hc0.le, hc1.le⟩
+  have hcoreVol0 : volume (c • K) ≠ 0 := by
+    rw [Arlib.volume_smul_euclidean hc0.le]
+    exact mul_ne_zero
+      (ENNReal.ofReal_ne_zero_iff.mpr (pow_pos hc0 n)) hK0
+  have hcoreVoltop : volume (c • K) ≠ ⊤ := by
+    rw [Arlib.volume_smul_euclidean hc0.le]
+    exact ENNReal.mul_ne_top ENNReal.ofReal_ne_top hKfin
+  have hgaussCore0 :
+      (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2))).restrict K) (c • K) ≠ 0 := by
+    rw [Measure.restrict_apply hcoreM, Set.inter_eq_left.2 hsub]
+    exact withDensity_gaussianWeight_ne_zero _ hcoreVol0
+  have hgaussCoretop :
+      (((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2))).restrict K) (c • K) ≠ ⊤ := by
+    rw [Measure.restrict_apply hcoreM, Set.inter_eq_left.2 hsub]
+    exact withDensity_gaussianWeight_ne_top (by positivity) hcoreM hcoreVoltop
+  have hspeedy0 : ellGaussianMeasure K delta (sigma ^ 2) Set.univ ≠ 0 :=
+    ellGaussianMeasure_univ_ne_zero hKcl.measurableSet hKc hKb hK0 hdelta _
+  have hspeedytop : ellGaussianMeasure K delta (sigma ^ 2) Set.univ ≠ ⊤ :=
+    ellGaussianMeasure_ne_top_cv18 hKfin delta (by positivity)
+  have hscaled : 0 < sigma ^ 2 / c ^ 2 := by positivity
+  have hproposal0 :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2 / c ^ 2))) K ≠ 0 :=
+    withDensity_gaussianWeight_ne_zero _ hK0
+  have hproposaltop :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (sigma ^ 2 / c ^ 2))) K ≠ ⊤ :=
+    withDensity_gaussianWeight_ne_top hscaled hKcl.measurableSet hKfin
+  exact TVLe.speedyToGaussian_of_paperStep_cv18
+    hn hKc hKcl hKfin hball hdelta hsigma hcoreError0 hcoreError16 hstep
+      (by simpa [c] using hgaussCore0)
+      (by simpa [c] using hgaussCoretop)
+      hspeedy0 hspeedytop
+      (by simpa [c] using hproposal0)
+      (by simpa [c] using hproposaltop)
       hmix hmixTop hcombined
 
 end Arlib.MarkovChains
