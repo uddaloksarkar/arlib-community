@@ -599,7 +599,7 @@ theorem markovSumLaw_meas_abs_snd_ge_le
 paid once for the whole finite experiment, rather than once per sample. -/
 theorem markovSumLaw_meas_abs_snd_ge_le_of_isWarm
     (P : Kernel S S) [IsMarkovKernel P] {mu pi : Measure S}
-    [IsProbabilityMeasure mu] [IsProbabilityMeasure pi]
+    [IsProbabilityMeasure pi]
     (hrev : IsReversible P pi) (hpsd : HasNonnegSpectrum P pi)
     (hne : (rayleighSet P pi).Nonempty)
     {f : S → ℝ} (hf : Measurable f) (hmem : MemLp f 2 pi)

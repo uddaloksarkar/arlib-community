@@ -19,6 +19,28 @@ def optionSomeEvent {α : Type*} (A : Set α) : Set (Option α) :=
     | none => False
     | some x => x ∈ A}
 
+/-- Discard a failed optional collector result and retain the endpoint of a
+successful result.  The resulting law is generally a subprobability measure. -/
+noncomputable def successfulEndpointKernel
+    {S : Type*} [MeasurableSpace S] :
+    Option (ℝ × S) → Measure S
+  | none => 0
+  | some output => Measure.dirac output.2
+
+theorem measurable_successfulEndpointKernel
+    {S : Type*} [MeasurableSpace S] :
+    Measurable (successfulEndpointKernel : Option (ℝ × S) → Measure S) := by
+  have hsome : Measurable fun output : ℝ × S => Measure.dirac output.2 :=
+    Measure.measurable_dirac.comp measurable_snd
+  convert Measurable.optionElim (0 : Measure S) hsome using 1
+  funext output
+  cases output <;> rfl
+
+noncomputable def successfulEndpointLaw
+    {S : Type*} [MeasurableSpace S]
+    (L : Measure (Option (ℝ × S))) : Measure S :=
+  L.bind successfulEndpointKernel
+
 theorem measurableSet_optionSomeEvent {α : Type*} [MeasurableSpace α]
     {A : Set α} (hA : MeasurableSet A) :
     MeasurableSet (optionSomeEvent A) := by
@@ -41,6 +63,28 @@ theorem measurableSet_optionSomeEvent {α : Type*} [MeasurableSpace α]
     | some x =>
         by_cases hx : x ∈ A <;> simp [optionSomeEvent, member, hx]]
   exact hoption (measurableSet_singleton true)
+
+theorem successfulEndpointLaw_apply
+    {S : Type*} [MeasurableSpace S]
+    (L : Measure (Option (ℝ × S))) {B : Set S} (hB : MeasurableSet B) :
+    successfulEndpointLaw L B =
+      L (optionSomeEvent ((fun output : ℝ × S => output.2) ⁻¹' B)) := by
+  rw [successfulEndpointLaw,
+    Measure.bind_apply hB measurable_successfulEndpointKernel.aemeasurable]
+  have hevent : MeasurableSet
+      (optionSomeEvent ((fun output : ℝ × S => output.2) ⁻¹' B)) :=
+    measurableSet_optionSomeEvent (measurable_snd hB)
+  have hfun : (fun output : Option (ℝ × S) =>
+      successfulEndpointKernel output B) =
+      (optionSomeEvent ((fun output : ℝ × S => output.2) ⁻¹' B)).indicator 1 := by
+    funext output
+    cases output with
+    | none => simp [successfulEndpointKernel, optionSomeEvent]
+    | some value =>
+        rw [successfulEndpointKernel, Measure.dirac_apply' _ hB]
+        by_cases hv : value.2 ∈ B <;>
+          simp [optionSomeEvent, hv]
+  rw [hfun, lintegral_indicator_one hevent]
 
 /-- The uncapped collector: advance `remainingProper` ideal proper steps,
 record the first observation, then use full `properStride` blocks. -/
@@ -228,6 +272,49 @@ theorem idealProperCollectLaw_eq_frontMarkovCollectLaw
     funext tail
     rfl, Measure.map_id]
 
+/-- Subtracting a constant from every observation is equivalent to subtracting
+`samples * m` from the final accumulated sum. -/
+theorem frontMarkovCollectLaw_map_sub_const
+    {S : Type*} [MeasurableSpace S]
+    (P : Kernel S S) [IsMarkovKernel P]
+    {f : S → ℝ} (hf : Measurable f) (m : ℝ) : ∀ samples current,
+    (frontMarkovCollectLaw P f samples current).map
+        (fun output => (output.1 - (samples : ℝ) * m, output.2)) =
+      frontMarkovCollectLaw P (fun x => f x - m) samples current := by
+  intro samples
+  induction samples with
+  | zero =>
+      intro current
+      simp only [frontMarkovCollectLaw, Nat.cast_zero, zero_mul, sub_zero]
+      rw [Measure.map_dirac' (by fun_prop)]
+  | succ samples ih =>
+      intro current
+      let T : S → Measure (ℝ × S) := fun next =>
+        (frontMarkovCollectLaw P f samples next).map fun tail =>
+          (f next + tail.1, tail.2)
+      have hT : Measurable T := by
+        dsimp only [T]
+        have hfront := frontMarkovCollectLaw_measurable_and_probability P hf samples
+        apply measurable_measure_map_param_variable hfront.1 hfront.2
+        fun_prop
+      rw [frontMarkovCollectLaw, frontMarkovCollectLaw]
+      change ((P current).bind T).map
+          (fun output =>
+            (output.1 - ((samples + 1 : ℕ) : ℝ) * m, output.2)) = _
+      rw [map_bind_eq_bind_map_of_measurable (P current) hT (by fun_prop)]
+      apply Measure.bind_congr_right
+      filter_upwards with next
+      dsimp only [T]
+      rw [← ih next]
+      rw [Measure.map_map (by fun_prop) (by fun_prop),
+        Measure.map_map (by fun_prop) (by fun_prop)]
+      congr 1
+      funext tail
+      simp only [Function.comp_apply]
+      congr 1
+      push_cast
+      ring
+
 /-- The successful part of the globally capped executable proper collector is
 dominated by the uncapped lazy-speedy collector.  The missing mass is exactly
 the explicit `none` outcome caused by exhausting the raw-proposal cap. -/
@@ -388,5 +475,210 @@ theorem cappedProperCollectLawAux_optionSomeEvent_le_ideal
                 _ = idealProperCollectLawAux P f properStride
                       (remainingProper + 1) (samples + 1) total current A := by
                   rw [← add_mul, add_tsub_cancel_of_le hp, one_mul]
+
+/-- Public, zero-initialized form of successful-law domination. -/
+theorem cappedProperCollectLaw_optionSomeEvent_le_frontMarkovCollectLaw
+    {n : ℕ}
+    (K : Set (EuclideanSpace ℝ (Fin n))) (hK : MeasurableSet K)
+    (delta s : ℝ) {f : EuclideanSpace ℝ (Fin n) → ℝ}
+    (hf : Measurable f) (rawCap properStride samples : ℕ)
+    (current : EuclideanSpace ℝ (Fin n)) {A : Set (ℝ ×
+      EuclideanSpace ℝ (Fin n))} (hA : MeasurableSet A) :
+    cappedProperCollectLaw
+        (lazyProperProposalGaussianAux K hK delta s) f
+        rawCap properStride samples current (optionSomeEvent A) ≤
+      frontMarkovCollectLaw
+        ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride)
+        f samples current A := by
+  unfold cappedProperCollectLaw
+  calc
+    _ ≤ idealProperCollectLawAux
+          (lazy (speedyMetropolisGaussian K delta s)) f properStride
+          properStride samples 0 current A :=
+      cappedProperCollectLawAux_optionSomeEvent_le_ideal
+        K hK delta s hf properStride rawCap properStride samples 0 current A hA
+    _ = _ := by
+      rw [idealProperCollectLawAux_stride_eq_front
+        (lazy (speedyMetropolisGaussian K delta s)) hf]
+      rw [Measure.map_apply (by fun_prop) hA]
+      congr 1
+      ext tail
+      simp
+
+/-- Domination remains valid after drawing the initial state from an
+arbitrary measure.  No conditioning or probability normalization is used. -/
+theorem bind_cappedProperCollectLaw_optionSomeEvent_le_frontMarkovCollectLaw
+    {n : ℕ}
+    (K : Set (EuclideanSpace ℝ (Fin n))) (hK : MeasurableSet K)
+    (delta s : ℝ) {f : EuclideanSpace ℝ (Fin n) → ℝ}
+    (hf : Measurable f) (rawCap properStride samples : ℕ)
+    (mu : Measure (EuclideanSpace ℝ (Fin n)))
+    {A : Set (ℝ × EuclideanSpace ℝ (Fin n))} (hA : MeasurableSet A) :
+    (mu.bind fun current => cappedProperCollectLaw
+        (lazyProperProposalGaussianAux K hK delta s) f
+        rawCap properStride samples current) (optionSomeEvent A) ≤
+      (mu.bind <| frontMarkovCollectLaw
+        ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride)
+        f samples) A := by
+  let Q := lazyProperProposalGaussianAux K hK delta s
+  let P := (lazy (speedyMetropolisGaussian K delta s)) ^ properStride
+  have hcap : Measurable fun current =>
+      cappedProperCollectLaw Q f rawCap properStride samples current := by
+    unfold cappedProperCollectLaw
+    exact (cappedProperCollectLawAux_measurable_and_probability
+      Q hf properStride rawCap properStride samples).1.comp
+        (measurable_const.prodMk measurable_id)
+  have hfront : Measurable (frontMarkovCollectLaw P f samples) :=
+    (frontMarkovCollectLaw_measurable_and_probability P hf samples).1
+  rw [Measure.bind_apply (measurableSet_optionSomeEvent hA) hcap.aemeasurable,
+    Measure.bind_apply hA hfront.aemeasurable]
+  apply lintegral_mono
+  intro current
+  exact cappedProperCollectLaw_optionSomeEvent_le_frontMarkovCollectLaw
+    K hK delta s hf rawCap properStride samples current hA
+
+/-- The successful endpoint sublaw is dominated by the ordinary endpoint of
+the ideal lazy-speedy trajectory. -/
+theorem successfulEndpointLaw_bind_cappedProperCollectLaw_le_iterate
+    {n : ℕ}
+    (K : Set (EuclideanSpace ℝ (Fin n))) (hK : MeasurableSet K)
+    (delta s : ℝ) {f : EuclideanSpace ℝ (Fin n) → ℝ}
+    (hf : Measurable f) (rawCap properStride samples : ℕ)
+    (mu : Measure (EuclideanSpace ℝ (Fin n))) :
+    successfulEndpointLaw
+        (mu.bind fun current => cappedProperCollectLaw
+          (lazyProperProposalGaussianAux K hK delta s) f
+          rawCap properStride samples current) ≤
+      iterate ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride)
+        mu samples := by
+  let P := (lazy (speedyMetropolisGaussian K delta s)) ^ properStride
+  apply Measure.le_iff.mpr
+  intro B hB
+  rw [successfulEndpointLaw_apply _ hB]
+  calc
+    (mu.bind fun current => cappedProperCollectLaw
+        (lazyProperProposalGaussianAux K hK delta s) f
+        rawCap properStride samples current)
+        (optionSomeEvent ((fun output : ℝ × EuclideanSpace ℝ (Fin n) =>
+          output.2) ⁻¹' B)) ≤
+      (mu.bind <| frontMarkovCollectLaw P f samples)
+        ((fun output : ℝ × EuclideanSpace ℝ (Fin n) => output.2) ⁻¹' B) :=
+      bind_cappedProperCollectLaw_optionSomeEvent_le_frontMarkovCollectLaw
+        K hK delta s hf rawCap properStride samples mu (measurable_snd hB)
+    _ = ((markovSumLaw P f samples mu).map
+        (fun stateSum => (stateSum.2, stateSum.1)))
+          ((fun output : ℝ × EuclideanSpace ℝ (Fin n) => output.2) ⁻¹' B) := by
+      rw [bind_frontMarkovCollectLaw_eq_markovSumLaw_map_swap P hf]
+    _ = (markovSumLaw P f samples mu)
+        ((fun stateSum : EuclideanSpace ℝ (Fin n) × ℝ => stateSum.1) ⁻¹' B) := by
+      rw [Measure.map_apply (by fun_prop) (measurable_snd hB)]
+      rfl
+    _ = ((markovSumLaw P f samples mu).map
+        (fun stateSum : EuclideanSpace ℝ (Fin n) × ℝ => stateSum.1)) B := by
+      rw [Measure.map_apply (by fun_prop) hB]
+    _ = iterate P mu samples B := by
+      rw [markovSumLaw_map_fst P hf]
+
+/-- Consequently a warm initial law yields an equally warm successful
+endpoint sublaw; loss of success mass never worsens warmness. -/
+theorem successfulEndpointLaw_bind_cappedProperCollectLaw_isWarm
+    {n : ℕ}
+    (K : Set (EuclideanSpace ℝ (Fin n))) (hK : MeasurableSet K)
+    (delta s : ℝ) {f : EuclideanSpace ℝ (Fin n) → ℝ}
+    (hf : Measurable f) (rawCap properStride samples : ℕ)
+    {mu pi : Measure (EuclideanSpace ℝ (Fin n))} {M : ℝ≥0∞}
+    (hwarm : Arlib.IsWarm M mu pi)
+    (hinv : Kernel.Invariant
+      ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride) pi) :
+    Arlib.IsWarm M
+      (successfulEndpointLaw
+        (mu.bind fun current => cappedProperCollectLaw
+          (lazyProperProposalGaussianAux K hK delta s) f
+          rawCap properStride samples current)) pi := by
+  let P := (lazy (speedyMetropolisGaussian K delta s)) ^ properStride
+  have hle := successfulEndpointLaw_bind_cappedProperCollectLaw_le_iterate
+    K hK delta s hf rawCap properStride samples mu
+  have hwarmIter : Arlib.IsWarm M (iterate P mu samples) pi :=
+    isWarm_iterate_of_invariant hwarm hinv samples
+  intro B hB
+  exact (Measure.le_iff.mp hle B hB).trans (hwarmIter B hB)
+
+/-- Warm-start concentration for the successful output of a capped proper
+collector.  The cap-failure outcome is deliberately excluded here and can be
+combined separately with the explicit cutoff theorem. -/
+theorem bind_cappedProperCollectLaw_success_deviation_le_of_isWarm
+    {n : ℕ}
+    (K : Set (EuclideanSpace ℝ (Fin n))) (hK : MeasurableSet K)
+    (delta s : ℝ) {f : EuclideanSpace ℝ (Fin n) → ℝ}
+    (hf : Measurable f) (rawCap properStride samples : ℕ)
+    {mu pi : Measure (EuclideanSpace ℝ (Fin n))}
+    [IsProbabilityMeasure pi]
+    (hrev : IsReversible
+      ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride) pi)
+    (hpsd : HasNonnegSpectrum
+      ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride) pi)
+    (hne : (rayleighSet
+      ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride) pi).Nonempty)
+    (m : ℝ)
+    (hmean : ∫ x, (f x - m) ∂pi = 0)
+    (hmem : MemLp (fun x => f x - m) 2 pi)
+    {B : ℝ} (hB : 0 ≤ B) (hbound : ∀ x, |f x - m| ≤ B)
+    (hgap : 0 < spectralGap
+      ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride) pi)
+    {M : ℝ≥0∞} (hwarm : Arlib.IsWarm M mu pi)
+    {c : ℝ} (hc : 0 < c) :
+    (mu.bind fun current => cappedProperCollectLaw
+        (lazyProperProposalGaussianAux K hK delta s) f
+        rawCap properStride samples current)
+      (optionSomeEvent {output | c ≤
+        |output.1 - (samples : ℝ) * m|}) ≤
+      M * ENNReal.ofReal (((samples : ℝ) *
+        (3 * ((spectralGap
+          ((lazy (speedyMetropolisGaussian K delta s)) ^ properStride) pi)⁻¹ *
+            varianceReal pi (fun x => f x - m)))) / c ^ 2) := by
+  let P := (lazy (speedyMetropolisGaussian K delta s)) ^ properStride
+  let centered : EuclideanSpace ℝ (Fin n) → ℝ := fun x => f x - m
+  let A : Set (ℝ × EuclideanSpace ℝ (Fin n)) :=
+    {output | c ≤ |output.1 - (samples : ℝ) * m|}
+  let A0 : Set (ℝ × EuclideanSpace ℝ (Fin n)) :=
+    {output | c ≤ |output.1|}
+  have hA : MeasurableSet A :=
+    measurableSet_le measurable_const <| by fun_prop
+  have hA0 : MeasurableSet A0 :=
+    measurableSet_le measurable_const <| by fun_prop
+  calc
+    (mu.bind fun current => cappedProperCollectLaw
+        (lazyProperProposalGaussianAux K hK delta s) f
+        rawCap properStride samples current) (optionSomeEvent A) ≤
+      (mu.bind <| frontMarkovCollectLaw P f samples) A := by
+        exact bind_cappedProperCollectLaw_optionSomeEvent_le_frontMarkovCollectLaw
+          K hK delta s hf rawCap properStride samples mu hA
+    _ = (mu.bind <| frontMarkovCollectLaw P centered samples) A0 := by
+      have hfrontF : Measurable (frontMarkovCollectLaw P f samples) :=
+        (frontMarkovCollectLaw_measurable_and_probability P hf samples).1
+      have hcentered : Measurable centered := hf.sub measurable_const
+      have hfrontC : Measurable (frontMarkovCollectLaw P centered samples) :=
+        (frontMarkovCollectLaw_measurable_and_probability P hcentered samples).1
+      rw [Measure.bind_apply hA hfrontF.aemeasurable,
+        Measure.bind_apply hA0 hfrontC.aemeasurable]
+      apply lintegral_congr
+      intro current
+      have hshift := frontMarkovCollectLaw_map_sub_const P hf m samples current
+      rw [← hshift, Measure.map_apply (by fun_prop) hA0]
+      rfl
+    _ = (markovSumLaw P centered samples mu).map
+        (fun stateSum => (stateSum.2, stateSum.1)) A0 := by
+      exact congrArg (fun ν : Measure (ℝ × EuclideanSpace ℝ (Fin n)) => ν A0)
+        (bind_frontMarkovCollectLaw_eq_markovSumLaw_map_swap
+          P (hf.sub measurable_const) samples mu)
+    _ = markovSumLaw P centered samples mu
+        {stateSum | c ≤ |stateSum.2|} := by
+      rw [Measure.map_apply (by fun_prop) hA0]
+      rfl
+    _ ≤ M * ENNReal.ofReal (((samples : ℝ) *
+        (3 * ((spectralGap P pi)⁻¹ *
+          varianceReal pi centered))) / c ^ 2) :=
+      markovSumLaw_meas_abs_snd_ge_le_of_isWarm P hrev hpsd hne
+        (hf.sub measurable_const) hmem hmean hB hbound hgap hwarm samples hc
 
 end ArlibCommunity.Algorithms.CV18
