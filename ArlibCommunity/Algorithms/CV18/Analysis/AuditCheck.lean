@@ -9,6 +9,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofSpeedyToTarget
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofPhaseMixing
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofStrongStepMixing
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPhaseMixing
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScaleInvariant
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKLSCore
 import ArlibCommunity.Algorithms.CV18.Analysis.TheoremProof
 
@@ -77,6 +78,7 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms TVLe.condOn_of_compl_le_cv18
 #print axioms TVLe.accuracyPhase_condOn_truncatedGaussian_cv18
 #print axioms mixesWithin_accuracyPhaseTruncatedBody_figureOne_cv18
+#print axioms Arlib.MarkovChains.ell_inv_smul_cv18
 #print axioms MeasureLeUpTo.of_tvLe
 #print axioms Arlib.MarkovChains.half_le_ellGaussianProb_standardCore_cv18
 #print axioms Arlib.MarkovChains.condOn_ellGaussianProb_smul_eq_gaussian_cv18

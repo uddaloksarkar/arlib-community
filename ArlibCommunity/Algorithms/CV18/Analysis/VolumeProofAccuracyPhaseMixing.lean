@@ -26,6 +26,11 @@ noncomputable def accuracyPhaseTruncatedBody (q : VolumeParams)
     (I : VolumeInput q.n) (sigma2 : ℝ) : Set (AmbientSpace q.n) :=
   truncatedBody q I ∩ Metric.closedBall 0 (accuracyPhaseRadius q sigma2)
 
+/-- The largest centered inball inherited simultaneously from the input's
+unit inball and the accuracy-dependent radial cutoff. -/
+noncomputable def accuracyPhaseInradius (q : VolumeParams) (sigma2 : ℝ) : ℝ :=
+  min 1 (accuracyPhaseRadius q sigma2)
+
 theorem accuracyPhaseRadius_pos (q : VolumeParams) {sigma2 : ℝ}
     (hsigma2 : 0 < sigma2) : 0 < accuracyPhaseRadius q sigma2 := by
   unfold accuracyPhaseRadius
@@ -78,6 +83,84 @@ theorem accuracyPhaseTruncatedBody_volume_ne_zero (q : VolumeParams)
       refine ⟨unitBall_subset_truncatedBody q I ?_, ?_⟩
       · simpa [unitBall, Metric.mem_closedBall, dist_comm] using hdist_one
       · simpa [Metric.mem_closedBall, dist_comm] using hdist_radius)
+
+theorem accuracyPhaseInradius_pos (q : VolumeParams) {sigma2 : ℝ}
+    (hsigma2 : 0 < sigma2) : 0 < accuracyPhaseInradius q sigma2 := by
+  exact lt_min one_pos (accuracyPhaseRadius_pos q hsigma2)
+
+theorem ball_accuracyPhaseInradius_subset (q : VolumeParams)
+    (I : VolumeInput q.n) (sigma2 : ℝ) :
+    Metric.ball (0 : AmbientSpace q.n) (accuracyPhaseInradius q sigma2) ⊆
+      accuracyPhaseTruncatedBody q I sigma2 := by
+  intro x hx
+  have hdist : dist x 0 < accuracyPhaseInradius q sigma2 := by
+    simpa [dist_comm] using hx
+  have hnorm : ‖x‖ < accuracyPhaseInradius q sigma2 := by
+    simpa [dist_zero_right] using hdist
+  refine ⟨unitBall_subset_truncatedBody q I ?_, ?_⟩
+  · rw [unitBall, Metric.mem_closedBall, dist_zero_right]
+    exact hnorm.le.trans (min_le_left _ _)
+  · rw [Metric.mem_closedBall, dist_zero_right]
+    exact hnorm.le.trans (min_le_right _ _)
+
+/-- Figure 1's proposal radius satisfies the Lovász--Vempala average-local-
+conductance scale relative to the actual (possibly sub-unit) phase inball. -/
+theorem figureOneProposalRadius_le_accuracyPhaseLVStep
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    figureOneProposalRadius q sigma2 ≤
+      min (Real.sqrt sigma2) (accuracyPhaseInradius q sigma2) /
+        (4096 * Real.sqrt q.n) := by
+  let sigma : ℝ := Real.sqrt sigma2
+  let L : ℝ := protectedLog ((q.n : ℝ) / q.eps)
+  have hsigma : 0 < sigma := Real.sqrt_pos.2 hsigma2
+  have hnR : (1 : ℝ) ≤ q.n := by
+    exact_mod_cast (le_trans (by norm_num : 1 ≤ 3) q.dim_ok)
+  have hL : 1 ≤ L := by dsimp [L]; exact le_max_left _ _
+  have hnL : 1 ≤ (q.n : ℝ) * L := by nlinarith
+  have hsqrt1 : 1 ≤ Real.sqrt ((q.n : ℝ) * L) := by
+    simpa using Real.sqrt_le_sqrt hnL
+  have hsigmaR : sigma ≤ accuracyPhaseRadius q sigma2 := by
+    unfold accuracyPhaseRadius
+    change sigma ≤ 32 * sigma * Real.sqrt ((q.n : ℝ) * L)
+    nlinarith
+  have hmin : min sigma (accuracyPhaseInradius q sigma2) = min sigma 1 := by
+    apply le_antisymm
+    · exact le_min (min_le_left _ _) ((min_le_right _ _).trans (min_le_left _ _))
+    · apply le_min (min_le_left _ _)
+      exact le_min (min_le_right _ _) ((min_le_left _ _).trans hsigmaR)
+  rw [hmin]
+  unfold figureOneProposalRadius
+  change min sigma 1 / (4096 * Real.sqrt ((q.n : ℝ) * L)) ≤
+    min sigma 1 / (4096 * Real.sqrt q.n)
+  apply div_le_div_of_nonneg_left (le_min hsigma.le zero_le_one)
+  · positivity
+  · have hmul : (q.n : ℝ) ≤ (q.n : ℝ) * L := by nlinarith
+    nlinarith [Real.sqrt_le_sqrt hmul]
+
+/-- The Gaussian-weighted average local conductance on every accuracy phase
+core is at least one half, including phases whose inradius is below one. -/
+theorem half_mul_gaussianWeight_le_accuracyPhaseEllGaussian
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    ENNReal.ofReal (1 / 2) *
+        (∫⁻ x in accuracyPhaseTruncatedBody q I sigma2,
+          Arlib.MarkovChains.gaussianWeight sigma2 x) ≤
+      Arlib.MarkovChains.ellGaussianMeasure
+        (accuracyPhaseTruncatedBody q I sigma2)
+        (figureOneProposalRadius q sigma2) sigma2 Set.univ := by
+  have hn2 : 2 ≤ q.n := le_trans (by norm_num) q.dim_ok
+  have hsigma : 0 < Real.sqrt sigma2 := Real.sqrt_pos.2 hsigma2
+  have hdelta : 0 < figureOneProposalRadius q sigma2 :=
+    figureOneProposalRadius_pos q hsigma2
+  have h :=
+    Arlib.MarkovChains.half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct_radius
+      hn2 (accuracyPhaseTruncatedBody_convex q I sigma2)
+      (accuracyPhaseTruncatedBody_isCompact q I sigma2).isClosed
+      (accuracyPhaseTruncatedBody_volume_ne_top q I sigma2)
+      (accuracyPhaseInradius_pos q hsigma2)
+      (ball_accuracyPhaseInradius_subset q I sigma2)
+      hsigma hdelta (figureOneProposalRadius_le_accuracyPhaseLVStep q hsigma2)
+  simpa [Real.sq_sqrt hsigma2.le] using h
 
 theorem gaussianDensity_tail_radius_pointwise {n : ℕ} {s R : ℝ}
     (hs : 0 < s) (hR : 0 ≤ R) {x : AmbientSpace n}

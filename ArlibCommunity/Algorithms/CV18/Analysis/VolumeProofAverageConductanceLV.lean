@@ -124,6 +124,39 @@ theorem lintegral_gaussianWeight_ball_le_direct {s c m : ℝ}
 
 /-- The Gaussian mass inside the ball of radius `min sigma 1 / 4` is at
 most one quarter of the mass of any body containing the unit ball. -/
+theorem gaussian_quarterBall_mass_le_direct_radius
+    {K : Set (EuclideanSpace ℝ (Fin n))}
+    {inradius : ℝ} (hinradius : 0 < inradius)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) inradius ⊆ K)
+    {sigma : ℝ} (hsigma : 0 < sigma) (hn : 2 ≤ n) :
+    ∫⁻ x in ball (0 : EuclideanSpace ℝ (Fin n)) (min sigma inradius / 4),
+        gaussianWeight (sigma ^ 2) x ≤
+      ENNReal.ofReal (1 / 4) *
+        ∫⁻ x in K, gaussianWeight (sigma ^ 2) x := by
+  have ha0 : 0 < min sigma inradius := lt_min hsigma hinradius
+  have ha1 : min sigma inradius ≤ inradius := min_le_right _ _
+  have has : min sigma inradius ^ 2 ≤ sigma ^ 2 := by
+    have := min_le_left sigma inradius
+    nlinarith
+  have hsub : ball (0 : EuclideanSpace ℝ (Fin n)) (min sigma inradius) ⊆ K :=
+    (Metric.ball_subset_ball ha1).trans hball
+  calc
+    ∫⁻ x in ball (0 : EuclideanSpace ℝ (Fin n)) (min sigma inradius / 4),
+        gaussianWeight (sigma ^ 2) x
+        = ∫⁻ x in ball (0 : EuclideanSpace ℝ (Fin n))
+            ((1 / 4 : ℝ) * min sigma inradius), gaussianWeight (sigma ^ 2) x := by
+          congr 2
+          ring_nf
+    _ ≤ ENNReal.ofReal (1 / 4) *
+          ∫⁻ x in ball (0 : EuclideanSpace ℝ (Fin n)) (min sigma inradius),
+            gaussianWeight (sigma ^ 2) x :=
+      lintegral_gaussianWeight_ball_le_direct (by positivity) (by norm_num)
+        (by norm_num) hn has
+    _ ≤ ENNReal.ofReal (1 / 4) *
+          ∫⁻ x in K, gaussianWeight (sigma ^ 2) x := by
+      gcongr
+
+/-- Unit-inball specialization of the scale-aware quarter-mass estimate. -/
 theorem gaussian_quarterBall_mass_le_direct
     {K : Set (EuclideanSpace ℝ (Fin n))}
     (hball : ball (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
@@ -131,29 +164,8 @@ theorem gaussian_quarterBall_mass_le_direct
     ∫⁻ x in ball (0 : EuclideanSpace ℝ (Fin n)) (min sigma 1 / 4),
         gaussianWeight (sigma ^ 2) x ≤
       ENNReal.ofReal (1 / 4) *
-        ∫⁻ x in K, gaussianWeight (sigma ^ 2) x := by
-  have ha0 : 0 < min sigma 1 := lt_min hsigma one_pos
-  have ha1 : min sigma 1 ≤ 1 := min_le_right _ _
-  have has : min sigma 1 ^ 2 ≤ sigma ^ 2 := by
-    have := min_le_left sigma 1
-    nlinarith
-  have hsub : ball (0 : EuclideanSpace ℝ (Fin n)) (min sigma 1) ⊆ K :=
-    (Metric.ball_subset_ball ha1).trans hball
-  calc
-    ∫⁻ x in ball (0 : EuclideanSpace ℝ (Fin n)) (min sigma 1 / 4),
-        gaussianWeight (sigma ^ 2) x
-        = ∫⁻ x in ball (0 : EuclideanSpace ℝ (Fin n))
-            ((1 / 4 : ℝ) * min sigma 1), gaussianWeight (sigma ^ 2) x := by
-          congr 2
-          ring_nf
-    _ ≤ ENNReal.ofReal (1 / 4) *
-          ∫⁻ x in ball (0 : EuclideanSpace ℝ (Fin n)) (min sigma 1),
-            gaussianWeight (sigma ^ 2) x :=
-      lintegral_gaussianWeight_ball_le_direct (by positivity) (by norm_num)
-        (by norm_num) hn has
-    _ ≤ ENNReal.ofReal (1 / 4) *
-          ∫⁻ x in K, gaussianWeight (sigma ^ 2) x := by
-      gcongr
+        ∫⁻ x in K, gaussianWeight (sigma ^ 2) x :=
+  gaussian_quarterBall_mass_le_direct_radius one_pos hball hsigma hn
 
 theorem levelSet_gaussianWeightReal_direct {s : ℝ} (hs : 0 < s)
     {c : ℝ} (hc : 0 < c) (hc1 : c ≤ 1)
@@ -281,25 +293,26 @@ The source proof of Lemma 6.3 can be applied directly to the rejected-proposal
 probability.  This avoids introducing the smoothing function and therefore
 avoids CV18's separate, problematic pointwise comparison `fhat ≤ ell * f`. -/
 
-theorem gaussian_rejectedMass_le_direct
+theorem gaussian_rejectedMass_le_direct_radius
     (hn : 2 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
     (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
-    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {inradius : ℝ} (hinradius : 0 < inradius)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) inradius ⊆ K)
     {sigma delta : ℝ} (hsigma : 0 < sigma) (hdelta : 0 < delta) :
     ∫⁻ x in K, (1 - ell K delta x) * gaussianWeight (sigma ^ 2) x ≤
       (ENNReal.ofReal (1 / 4) +
-        ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma 1)) *
+        ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma inradius)) *
           ∫⁻ x in K, gaussianWeight (sigma ^ 2) x := by
   let _ : Nontrivial (EuclideanSpace ℝ (Fin n)) :=
     Module.nontrivial_of_finrank_pos (R := ℝ) (by rw [finrank_euclideanSpace_fin]; omega)
   have hn0 : n ≠ 0 := by omega
   have hK : MeasurableSet K := hKcl.measurableSet
-  let a : ℝ := min sigma 1
-  have ha0 : 0 < a := lt_min hsigma one_pos
-  have ha1 : a ≤ 1 := min_le_right _ _
+  let a : ℝ := min sigma inradius
+  have ha0 : 0 < a := lt_min hsigma hinradius
+  have ha1 : a ≤ inradius := min_le_right _ _
   let rho : ℝ := a / 4
   have hrho0 : 0 < rho := div_pos ha0 (by norm_num)
-  have hrho1 : rho < 1 := by dsimp [rho]; linarith
+  have hrho1 : rho < inradius := by dsimp [rho]; linarith
   let tau : ℝ := Real.exp (-(rho ^ 2) / (2 * sigma ^ 2))
   have htau0 : 0 < tau := Real.exp_pos _
   have htau1 : tau ≤ 1 := by
@@ -372,7 +385,8 @@ theorem gaussian_rejectedMass_le_direct
   have hquarter : ∫⁻ x in level tau, gaussianWeight (sigma ^ 2) x ≤
       ENNReal.ofReal (1 / 4) * ∫⁻ x in K, gaussianWeight (sigma ^ 2) x := by
     rw [hlevel_tau, lintegral_closedBall_eq_ball_direct hn0]
-    simpa [a, rho] using gaussian_quarterBall_mass_le_direct hball hsigma hn
+    simpa [a, rho] using
+      gaussian_quarterBall_mass_le_direct_radius hinradius hball hsigma hn
   let C : ℝ≥0∞ := ENNReal.ofReal (20 * delta * Real.sqrt n / a)
   have hC : ENNReal.ofReal (10 * (delta * Real.sqrt n) / (2 * rho)) = C := by
     congr 1
@@ -469,33 +483,47 @@ theorem gaussian_rejectedMass_le_direct
       rw [add_mul]
       ac_rfl
     _ = (ENNReal.ofReal (1 / 4) +
-          ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma 1)) *
+          ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma inradius)) *
           ∫⁻ x in K, gaussianWeight (sigma ^ 2) x := by rfl
+
+/-- Unit-inball specialization of the scale-aware rejected-mass estimate. -/
+theorem gaussian_rejectedMass_le_direct
+    (hn : 2 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {sigma delta : ℝ} (hsigma : 0 < sigma) (hdelta : 0 < delta) :
+    ∫⁻ x in K, (1 - ell K delta x) * gaussianWeight (sigma ^ 2) x ≤
+      (ENNReal.ofReal (1 / 4) +
+        ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma 1)) *
+          ∫⁻ x in K, gaussianWeight (sigma ^ 2) x :=
+  gaussian_rejectedMass_le_direct_radius hn hKc hKcl hKfin one_pos hball
+    hsigma hdelta
 
 /-- At the CV18/Lovász--Vempala step scale, the Gaussian-weighted average
 local conductance is at least one half.  This is the direct consequence of
 the preceding rejection-mass estimate. -/
-theorem half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct
+theorem half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct_radius
     (hn : 2 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
     (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
-    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {inradius : ℝ} (hinradius : 0 < inradius)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) inradius ⊆ K)
     {sigma delta : ℝ} (hsigma : 0 < sigma) (hdelta : 0 < delta)
-    (hstep : delta ≤ min sigma 1 / (4096 * Real.sqrt n)) :
+    (hstep : delta ≤ min sigma inradius / (4096 * Real.sqrt n)) :
     ENNReal.ofReal (1 / 2) *
         (∫⁻ x in K, gaussianWeight (sigma ^ 2) x) ≤
       ellGaussianMeasure K delta (sigma ^ 2) Set.univ := by
   have hnR : (0 : ℝ) < n := by exact_mod_cast (lt_of_lt_of_le (by omega : 0 < 2) hn)
   have hsqrtn : 0 < Real.sqrt n := Real.sqrt_pos.2 hnR
-  have ha0 : 0 < min sigma 1 := lt_min hsigma one_pos
-  have hratio : 20 * delta * Real.sqrt n / min sigma 1 ≤ 1 / 4 := by
+  have ha0 : 0 < min sigma inradius := lt_min hsigma hinradius
+  have hratio : 20 * delta * Real.sqrt n / min sigma inradius ≤ 1 / 4 := by
     calc
-      20 * delta * Real.sqrt n / min sigma 1
-          ≤ 20 * (min sigma 1 / (4096 * Real.sqrt n)) *
-              Real.sqrt n / min sigma 1 := by gcongr
+      20 * delta * Real.sqrt n / min sigma inradius
+          ≤ 20 * (min sigma inradius / (4096 * Real.sqrt n)) *
+              Real.sqrt n / min sigma inradius := by gcongr
       _ = 20 / 4096 := by field_simp
       _ ≤ 1 / 4 := by norm_num
   have hcoeff : ENNReal.ofReal (1 / 4) +
-        ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma 1) ≤
+        ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma inradius) ≤
       ENNReal.ofReal (1 / 2) := by
     rw [← ENNReal.ofReal_add (by norm_num) (by positivity)]
     exact ENNReal.ofReal_le_ofReal (by linarith)
@@ -508,8 +536,9 @@ theorem half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct
   have hB : B ≤ H * T := by
     calc
       B ≤ (ENNReal.ofReal (1 / 4) +
-            ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma 1)) * T :=
-        gaussian_rejectedMass_le_direct hn hKc hKcl hKfin hball hsigma hdelta
+            ENNReal.ofReal (20 * delta * Real.sqrt n / min sigma inradius)) * T :=
+        gaussian_rejectedMass_le_direct_radius hn hKc hKcl hKfin hinradius hball
+          hsigma hdelta
       _ ≤ H * T := by gcongr
   have hTtop : T ≠ ⊤ := by
     apply ne_top_of_le_ne_top hKfin
@@ -544,6 +573,19 @@ theorem half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct
     H * T + H * T = T := hHH
     _ = G + B := hTG
     _ ≤ G + H * T := by simpa only [add_comm] using add_le_add_left hB G
+
+/-- Unit-inball specialization of the scale-aware average-conductance bound. -/
+theorem half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct
+    (hn : 2 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
+    (hKc : Convex ℝ K) (hKcl : IsClosed K) (hKfin : volume K ≠ ⊤)
+    (hball : ball (0 : EuclideanSpace ℝ (Fin n)) 1 ⊆ K)
+    {sigma delta : ℝ} (hsigma : 0 < sigma) (hdelta : 0 < delta)
+    (hstep : delta ≤ min sigma 1 / (4096 * Real.sqrt n)) :
+    ENNReal.ofReal (1 / 2) *
+        (∫⁻ x in K, gaussianWeight (sigma ^ 2) x) ≤
+      ellGaussianMeasure K delta (sigma ^ 2) Set.univ :=
+  half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct_radius
+    hn hKc hKcl hKfin one_pos hball hsigma hdelta hstep
 
 /-- The Lovász--Vempala lower bound also discharges the nonzero normalization
 guard for the speedy stationary law. -/
