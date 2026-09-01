@@ -258,6 +258,16 @@ theorem condOn_smul_cv18 {Omega : Type*} [MeasurableSpace Omega]
   change a * mu (T ∩ S) / (a * mu S) = mu (T ∩ S) / mu S
   exact ENNReal.mul_div_mul_left _ _ ha0 hatop
 
+/-- Conditioning a restriction on the whole space is the same as directly
+conditioning the original measure on the restricting set. -/
+theorem condOn_restrict_univ_cv18 {Omega : Type*} [MeasurableSpace Omega]
+    (mu : Measure Omega) {S : Set Omega} (hS : MeasurableSet S) :
+    Arlib.condOn (mu.restrict S) Set.univ = Arlib.condOn mu S := by
+  ext T hT
+  rw [Arlib.condOn_apply _ MeasurableSet.univ hT,
+    Arlib.condOn_apply _ hS hT, Set.inter_univ,
+    Measure.restrict_apply hT, Measure.restrict_apply_univ]
+
 /-- On a homothetic core on which every proposal ball stays inside `K`, the
 speedy stationary measure is exactly the ordinary restricted Gaussian. -/
 theorem ellGaussianMeasure_restrict_smul_eq_gaussian_cv18
@@ -638,6 +648,30 @@ theorem condOn_gaussian_withDensity_scaleAcceptance_cv18
   rw [Arlib.condOn_def, withDensity_smul_measure,
     gaussianScaleAcceptance_withDensity_cv18 hK variance c]
 
+/-- After normalizing the second rejection, its exact target is the Gaussian
+of variance `variance` conditioned on `K`. -/
+theorem condOn_gaussian_scaleAcceptance_eq_target_cv18
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (variance c : ℝ)
+    (hprop0 :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (variance / c ^ 2))) K ≠ 0)
+    (hproptop :
+      ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+        (gaussianWeight (variance / c ^ 2))) K ≠ ⊤) :
+    Arlib.condOn
+        ((Arlib.condOn
+          ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+            (gaussianWeight (variance / c ^ 2))) K).withDensity
+          (gaussianScaleAcceptance variance c)) Set.univ =
+      Arlib.condOn
+        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight variance)) K := by
+  rw [condOn_gaussian_withDensity_scaleAcceptance_cv18 hK]
+  rw [condOn_smul_cv18 _ MeasurableSet.univ
+    (ENNReal.inv_ne_zero.mpr hproptop) (ENNReal.inv_ne_top.mpr hprop0)]
+  exact condOn_restrict_univ_cv18 _ hK
+
 /-- Hence the normalized scaled proposal accepts with probability at least
 one half on the whole convex body. -/
 theorem half_le_condOn_gaussian_scaleAcceptance_mass_standardCore_cv18
@@ -668,11 +702,7 @@ theorem half_le_condOn_gaussian_scaleAcceptance_mass_standardCore_cv18
 /-- The complete two-rejection distributional transfer used after a speedy
 walk phase.  If the approximate speedy law is within `epsilon` of stationarity
 and `epsilon ≤ 1/32`, core rejection, rescaling, and Gaussian correction
-produce a law within `64 * epsilon` of the exact two-stage target law.
-
-The exact target expression is deliberately left normalized as an accepted
-law; the preceding measure identities identify its unnormalized density with
-the restricted Gaussian. -/
+produce a law within `64 * epsilon` of the Gaussian target restricted to `K`. -/
 theorem TVLe.speedyToGaussian_twoStage_cv18
     (hn : 1 ≤ n) {K : Set (EuclideanSpace ℝ (Fin n))}
     (hK : MeasurableSet K) (hKc : Convex ℝ K)
@@ -696,16 +726,13 @@ theorem TVLe.speedyToGaussian_twoStage_cv18
     (hepsilon : epsilon ≠ ⊤)
     (hepsilon_small : epsilon ≤ ENNReal.ofReal (1 / 32 : ℝ)) :
     let c : ℝ := 1 - 1 / (2 * (n : ℝ))
-    let proposal : Measure (EuclideanSpace ℝ (Fin n)) :=
-      Arlib.condOn
-        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
-          (gaussianWeight (variance / c ^ 2))) K
     Arlib.TVLe
       (Arlib.condOn
         (((Arlib.condOn mu (c • K)).map (fun x => c⁻¹ • x)).withDensity
           (gaussianScaleAcceptance variance c)) Set.univ)
       (Arlib.condOn
-        (proposal.withDensity (gaussianScaleAcceptance variance c)) Set.univ)
+        ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+          (gaussianWeight variance)) K)
       (64 * epsilon) := by
   dsimp only
   let c : ℝ := 1 - 1 / (2 * (n : ℝ))
@@ -795,6 +822,16 @@ theorem TVLe.speedyToGaussian_twoStage_cv18
   have hsecond := TVLe.normalize_withDensity_target_half_cv18
     hmap heightTop heightSmall (measurable_gaussianScaleAcceptance variance c)
     (gaussianScaleAcceptance_le_one hvariance hc0 hc1.le) hhalfAccept
+  have htarget :
+      Arlib.condOn
+          (proposal.withDensity (gaussianScaleAcceptance variance c)) Set.univ =
+        Arlib.condOn
+          ((volume : Measure (EuclideanSpace ℝ (Fin n))).withDensity
+            (gaussianWeight variance)) K := by
+    dsimp [proposal, c]
+    exact condOn_gaussian_scaleAcceptance_eq_target_cv18 hK variance _
+      hprop0 hproptop
+  rw [htarget] at hsecond
   convert hsecond using 1
   ring
 

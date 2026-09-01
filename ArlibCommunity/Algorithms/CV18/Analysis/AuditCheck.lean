@@ -39,6 +39,8 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms Arlib.MarkovChains.TVLe.condOn_cv18
 #print axioms Arlib.MarkovChains.TVLe.condOn_target_half_cv18
 #print axioms Arlib.MarkovChains.TVLe.normalize_withDensity_target_half_cv18
+#print axioms Arlib.MarkovChains.condOn_restrict_univ_cv18
+#print axioms Arlib.MarkovChains.condOn_gaussian_scaleAcceptance_eq_target_cv18
 #print axioms Arlib.MarkovChains.TVLe.speedyToGaussian_twoStage_cv18
 #print axioms Arlib.MarkovChains.acceptance_floor_of_cv_four_cv18
 #print axioms Arlib.MarkovChains.conductance_speedyMetropolisGaussian_ge_phaseRadius_cv18
