@@ -10,6 +10,243 @@ open scoped ENNReal Pointwise
 
 variable {n : ℕ}
 
+/-- Weighting two nearby laws by the same measurable acceptance function
+bounded by one cannot increase their setwise total-variation error.  The
+resulting measures need not yet be normalized; this is the exact statement
+needed before conditioning on a rejection sampler's success event. -/
+theorem TVLe.withDensity_le_one_cv18
+    {Omega : Type*} [MeasurableSpace Omega]
+    {mu nu : Measure Omega} {epsilon : ENNReal} (h : Arlib.TVLe mu nu epsilon)
+    {accept : Omega → ENNReal} (haccept : Measurable accept)
+    (haccept_one : ∀ x, accept x ≤ 1) :
+    Arlib.TVLe (mu.withDensity accept) (nu.withDensity accept) epsilon := by
+  intro S hS
+  rw [withDensity_apply _ hS, withDensity_apply _ hS,
+    ← lintegral_indicator hS, ← lintegral_indicator hS]
+  have hm : Measurable (S.indicator accept) := haccept.indicator hS
+  have hle : ∀ x, S.indicator accept x ≤ 1 := by
+    intro x
+    by_cases hx : x ∈ S
+    · simpa [Set.indicator_of_mem hx] using haccept_one x
+    · simp [Set.indicator_of_notMem hx]
+  exact ⟨lintegral_le_of_tvLe h hm hle,
+    lintegral_le_of_tvLe h.symm hm hle⟩
+
+/-- Conditioning two probability laws on the same event amplifies a TV error
+by at most twice the reciprocal of a common lower bound on the event mass.
+This intentionally exposes the amplification factor: the CV18 acceptance
+lemmas provide `p = 1/2`, so a rejection stage costs at most `4 * epsilon`.
+-/
+theorem TVLe.condOn_cv18
+    {Omega : Type*} [MeasurableSpace Omega]
+    {mu nu : Measure Omega} [IsFiniteMeasure mu] [IsFiniteMeasure nu]
+    {epsilon p : ENNReal} (h : Arlib.TVLe mu nu epsilon)
+    (hepsilon : epsilon ≠ ⊤) {S : Set Omega} (hS : MeasurableSet S)
+    (hp0 : p ≠ 0) (hpmu : p ≤ mu S) (hpnu : p ≤ nu S) :
+    Arlib.TVLe (Arlib.condOn mu S) (Arlib.condOn nu S)
+      (2 * epsilon / p) := by
+  have hmutop : mu S ≠ ⊤ := measure_ne_top mu S
+  have hnutop : nu S ≠ ⊤ := measure_ne_top nu S
+  have hptop : p ≠ ⊤ := ne_top_of_le_ne_top hmutop hpmu
+  have hp_pos : 0 < p := bot_lt_iff_ne_bot.2 hp0
+  have hmu0 : mu S ≠ 0 := ne_of_gt (hp_pos.trans_le hpmu)
+  have hnu0 : nu S ≠ 0 := ne_of_gt (hp_pos.trans_le hpnu)
+  let _ : IsProbabilityMeasure (Arlib.condOn mu S) :=
+    Arlib.isProbabilityMeasure_condOn mu hmu0 hmutop
+  let _ : IsProbabilityMeasure (Arlib.condOn nu S) :=
+    Arlib.isProbabilityMeasure_condOn nu hnu0 hnutop
+  refine Arlib.tvLe_of_forall_le fun T hT => ?_
+  rw [Arlib.condOn_apply mu hS hT, Arlib.condOn_apply nu hS hT]
+  have herrorTop : 2 * epsilon / p ≠ ⊤ :=
+    ENNReal.div_ne_top (ENNReal.mul_ne_top (by norm_num) hepsilon) hp0
+  have hleftTop : mu (T ∩ S) / mu S ≠ ⊤ :=
+    ENNReal.div_ne_top (measure_ne_top mu _) hmu0
+  have hrightTop : nu (T ∩ S) / nu S + 2 * epsilon / p ≠ ⊤ :=
+    ENNReal.add_ne_top.2 ⟨ENNReal.div_ne_top (measure_ne_top nu _) hnu0, herrorTop⟩
+  apply (ENNReal.toReal_le_toReal hleftTop hrightTop).mp
+  rw [ENNReal.toReal_add
+    (ENNReal.div_ne_top (measure_ne_top nu _) hnu0) herrorTop,
+    ENNReal.toReal_div, ENNReal.toReal_div]
+  let a : ℝ := (mu (T ∩ S)).toReal
+  let b : ℝ := (nu (T ∩ S)).toReal
+  let A : ℝ := (mu S).toReal
+  let B : ℝ := (nu S).toReal
+  let e : ℝ := epsilon.toReal
+  let P : ℝ := p.toReal
+  have hPpos : 0 < P := ENNReal.toReal_pos hp0 hptop
+  have hPA : P ≤ A := ENNReal.toReal_mono hmutop hpmu
+  have hPB : P ≤ B := ENNReal.toReal_mono hnutop hpnu
+  have hApos : 0 < A := lt_of_lt_of_le hPpos hPA
+  have hBpos : 0 < B := lt_of_lt_of_le hPpos hPB
+  have ha0 : 0 ≤ a := ENNReal.toReal_nonneg
+  have hb0 : 0 ≤ b := ENNReal.toReal_nonneg
+  have he0 : 0 ≤ e := ENNReal.toReal_nonneg
+  have hbB : b ≤ B := by
+    exact measureReal_mono (Set.inter_subset_right)
+  have habs := h.abs_measureReal_sub_le hepsilon (hT.inter hS)
+  have hABs := h.abs_measureReal_sub_le hepsilon hS
+  change |a - b| ≤ e at habs
+  change |A - B| ≤ e at hABs
+  have hab : a ≤ b + e := by
+    rw [abs_sub_le_iff] at habs
+    linarith
+  have hAB : B - A ≤ e := by
+    rw [abs_sub_le_iff] at hABs
+    linarith
+  have herrorReal : (2 * epsilon / p).toReal = 2 * e / P := by
+    simp [e, P, ENNReal.toReal_div, ENNReal.toReal_mul]
+  rw [herrorReal]
+  change a / A ≤ b / B + 2 * e / P
+  calc
+    a / A ≤ (b + e) / A := div_le_div_of_nonneg_right hab hApos.le
+    _ = b / A + e / A := by ring
+    _ ≤ b / B + e / P + e / P := by
+      by_cases hBA : B ≤ A
+      · have hbdiv : b / A ≤ b / B :=
+          div_le_div_of_nonneg_left hb0 hBpos hBA
+        have hediv : e / A ≤ e / P :=
+          div_le_div_of_nonneg_left he0 hPpos hPA
+        calc
+          b / A + e / A ≤ b / B + e / P := add_le_add hbdiv hediv
+          _ ≤ b / B + e / P + e / P :=
+            le_add_of_nonneg_right (div_nonneg he0 hPpos.le)
+      · have hABlt : A < B := lt_of_not_ge hBA
+        have hdiff0 : 0 ≤ B - A := sub_nonneg.2 hABlt.le
+        have hnum : b * (B - A) ≤ B * e :=
+          mul_le_mul hbB hAB hdiff0 hBpos.le
+        have hdenpos : 0 < A * B := mul_pos hApos hBpos
+        have hfrac : b * (B - A) / (A * B) ≤ B * e / (A * B) :=
+          div_le_div_of_nonneg_right hnum hdenpos.le
+        have hid : b / A - b / B = b * (B - A) / (A * B) := by
+          field_simp
+        have hcancel : B * e / (A * B) = e / A := by
+          field_simp
+        have hediv : e / A ≤ e / P :=
+          div_le_div_of_nonneg_left he0 hPpos hPA
+        rw [hcancel] at hfrac
+        have hdiff : b / A - b / B ≤ e / P := by
+          rw [hid]
+          exact hfrac.trans hediv
+        linarith [hediv]
+    _ = b / B + 2 * e / P := by ring
+
+/-- TV stability of a complete accept/reject stage.  Weight by the common
+acceptance probability and then normalize by conditioning on `univ`.  A
+common acceptance-mass floor `p` is the only source of amplification. -/
+theorem TVLe.normalize_withDensity_cv18
+    {Omega : Type*} [MeasurableSpace Omega]
+    {mu nu : Measure Omega} [IsProbabilityMeasure mu] [IsProbabilityMeasure nu]
+    {epsilon p : ENNReal} (h : Arlib.TVLe mu nu epsilon)
+    (hepsilon : epsilon ≠ ⊤) {accept : Omega → ENNReal}
+    (haccept : Measurable accept) (haccept_one : ∀ x, accept x ≤ 1)
+    (hp0 : p ≠ 0)
+    (hpmu : p ≤ (mu.withDensity accept) Set.univ)
+    (hpnu : p ≤ (nu.withDensity accept) Set.univ) :
+    Arlib.TVLe
+      (Arlib.condOn (mu.withDensity accept) Set.univ)
+      (Arlib.condOn (nu.withDensity accept) Set.univ)
+      (2 * epsilon / p) := by
+  have hmuInt : ∫⁻ x, accept x ∂mu ≠ ⊤ := by
+    apply ne_top_of_le_ne_top ENNReal.one_ne_top
+    exact lintegral_le_const (Filter.Eventually.of_forall haccept_one)
+  have hnuInt : ∫⁻ x, accept x ∂nu ≠ ⊤ := by
+    apply ne_top_of_le_ne_top ENNReal.one_ne_top
+    exact lintegral_le_const (Filter.Eventually.of_forall haccept_one)
+  let _ : IsFiniteMeasure (mu.withDensity accept) :=
+    isFiniteMeasure_withDensity hmuInt
+  let _ : IsFiniteMeasure (nu.withDensity accept) :=
+    isFiniteMeasure_withDensity hnuInt
+  exact TVLe.condOn_cv18
+    (TVLe.withDensity_le_one_cv18 h haccept haccept_one)
+    hepsilon MeasurableSet.univ hp0 hpmu hpnu
+
+/-- The CV18 form of rejection stability: when both ideal and approximate
+laws accept with probability at least one half, normalization costs at most a
+factor four in TV. -/
+theorem TVLe.normalize_withDensity_half_cv18
+    {Omega : Type*} [MeasurableSpace Omega]
+    {mu nu : Measure Omega} [IsProbabilityMeasure mu] [IsProbabilityMeasure nu]
+    {epsilon : ENNReal} (h : Arlib.TVLe mu nu epsilon)
+    (hepsilon : epsilon ≠ ⊤) {accept : Omega → ENNReal}
+    (haccept : Measurable accept) (haccept_one : ∀ x, accept x ≤ 1)
+    (hmu : ENNReal.ofReal (1 / 2 : ℝ) ≤
+      (mu.withDensity accept) Set.univ)
+    (hnu : ENNReal.ofReal (1 / 2 : ℝ) ≤
+      (nu.withDensity accept) Set.univ) :
+    Arlib.TVLe
+      (Arlib.condOn (mu.withDensity accept) Set.univ)
+      (Arlib.condOn (nu.withDensity accept) Set.univ)
+      (4 * epsilon) := by
+  have hbase := TVLe.normalize_withDensity_cv18 h hepsilon haccept haccept_one
+    (p := ENNReal.ofReal (1 / 2 : ℝ)) (by norm_num) hmu hnu
+  convert hbase using 1
+  simp [ENNReal.div_eq_inv_mul]
+  ring
+
+/-- Conditioning on a target event of mass at least one half is stable even
+when no separate acceptance bound for the approximate law is assumed.  An
+incoming error at most `1/4` forces its acceptance mass to be at least `1/4`,
+and the normalized laws are within `8 * epsilon`. -/
+theorem TVLe.condOn_target_half_cv18
+    {Omega : Type*} [MeasurableSpace Omega]
+    {mu nu : Measure Omega} [IsFiniteMeasure mu] [IsFiniteMeasure nu]
+    {epsilon : ENNReal} (h : Arlib.TVLe mu nu epsilon)
+    (hepsilon : epsilon ≠ ⊤) (hepsilon_quarter : epsilon ≤ ENNReal.ofReal (1 / 4 : ℝ))
+    {S : Set Omega} (hS : MeasurableSet S)
+    (hnu : ENNReal.ofReal (1 / 2 : ℝ) ≤ nu S) :
+    Arlib.TVLe (Arlib.condOn mu S) (Arlib.condOn nu S) (8 * epsilon) := by
+  have hquarter_add : ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
+      ENNReal.ofReal (1 / 2 : ℝ) := by
+    calc
+      ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤
+          ENNReal.ofReal (1 / 4 : ℝ) + ENNReal.ofReal (1 / 4 : ℝ) := by gcongr
+      _ = ENNReal.ofReal (1 / 2 : ℝ) := by
+        rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 1 / 4)
+          (by norm_num : (0 : ℝ) ≤ 1 / 4)]
+        norm_num
+  have hmu_add : ENNReal.ofReal (1 / 4 : ℝ) + epsilon ≤ mu S + epsilon :=
+    hquarter_add.trans (hnu.trans (h.right hS))
+  have hmu : ENNReal.ofReal (1 / 4 : ℝ) ≤ mu S :=
+    ENNReal.le_of_add_le_add_right hepsilon hmu_add
+  have hnu_quarter : ENNReal.ofReal (1 / 4 : ℝ) ≤ nu S :=
+    le_trans (by norm_num) hnu
+  have hbase := TVLe.condOn_cv18 h hepsilon hS
+    (p := ENNReal.ofReal (1 / 4 : ℝ)) (by norm_num) hmu hnu_quarter
+  convert hbase using 1
+  simp [ENNReal.div_eq_inv_mul]
+  ring
+
+/-- Complete CV18 rejection stability with only the exact target's acceptance
+bound as input.  This is the form consumed after a mixing theorem: weighting
+is a contraction, and the one-half exact acceptance plus `epsilon ≤ 1/4`
+controls normalization. -/
+theorem TVLe.normalize_withDensity_target_half_cv18
+    {Omega : Type*} [MeasurableSpace Omega]
+    {mu nu : Measure Omega} [IsProbabilityMeasure mu] [IsProbabilityMeasure nu]
+    {epsilon : ENNReal} (h : Arlib.TVLe mu nu epsilon)
+    (hepsilon : epsilon ≠ ⊤) (hepsilon_quarter : epsilon ≤ ENNReal.ofReal (1 / 4 : ℝ))
+    {accept : Omega → ENNReal} (haccept : Measurable accept)
+    (haccept_one : ∀ x, accept x ≤ 1)
+    (hnu : ENNReal.ofReal (1 / 2 : ℝ) ≤
+      (nu.withDensity accept) Set.univ) :
+    Arlib.TVLe
+      (Arlib.condOn (mu.withDensity accept) Set.univ)
+      (Arlib.condOn (nu.withDensity accept) Set.univ)
+      (8 * epsilon) := by
+  have hmuInt : ∫⁻ x, accept x ∂mu ≠ ⊤ := by
+    apply ne_top_of_le_ne_top ENNReal.one_ne_top
+    exact lintegral_le_const (Filter.Eventually.of_forall haccept_one)
+  have hnuInt : ∫⁻ x, accept x ∂nu ≠ ⊤ := by
+    apply ne_top_of_le_ne_top ENNReal.one_ne_top
+    exact lintegral_le_const (Filter.Eventually.of_forall haccept_one)
+  let _ : IsFiniteMeasure (mu.withDensity accept) :=
+    isFiniteMeasure_withDensity hmuInt
+  let _ : IsFiniteMeasure (nu.withDensity accept) :=
+    isFiniteMeasure_withDensity hnuInt
+  exact TVLe.condOn_target_half_cv18
+    (TVLe.withDensity_le_one_cv18 h haccept haccept_one)
+    hepsilon hepsilon_quarter MeasurableSet.univ hnu
+
 /-- Conditioning is unchanged by multiplication by a finite positive scalar. -/
 theorem condOn_smul_cv18 {Omega : Type*} [MeasurableSpace Omega]
     (mu : Measure Omega) {S : Set Omega} (hS : MeasurableSet S)

@@ -34,6 +34,10 @@ namespace ArlibCommunity.Algorithms.CV18
 #print axioms cappedProperMetropolisBallWalk_semantics
 #print axioms Arlib.MarkovChains.mul_natCast_mul_bind_cappedLazyProperMarkedLaw_none_le
 #print axioms half_mul_natCast_mul_cappedProperMetropolisBallWalk_none_le
+#print axioms Arlib.MarkovChains.TVLe.withDensity_le_one_cv18
+#print axioms Arlib.MarkovChains.TVLe.condOn_cv18
+#print axioms Arlib.MarkovChains.TVLe.condOn_target_half_cv18
+#print axioms Arlib.MarkovChains.TVLe.normalize_withDensity_target_half_cv18
 #print axioms Arlib.MarkovChains.half_le_ellGaussianProb_standardCore_cv18
 #print axioms Arlib.MarkovChains.condOn_ellGaussianProb_smul_eq_gaussian_cv18
 #print axioms Arlib.MarkovChains.map_condOn_gaussian_smul_cv18
