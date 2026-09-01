@@ -179,17 +179,26 @@ half-acceptance is the same laziness represented abstractly by `lazy`.
 into the exact kernel identity
 `truncatedMetropolisKernel = lazy (metropolisGaussian truncatedBody delta sigma2)`.
 The remaining mismatch is therefore no longer geometric, pointwise, or
-one-step semantic; it is the trajectory-level proper-step clock, cutoff, and
-dependent phase composition.
+one-step semantic.
+
+`VolumeProofLazyProperClock.lean` now closes the lazy trajectory-level clock.
+It exposes a Boolean proper-proposal mark while proving that forgetting the
+mark recovers the ordinary lazy Metropolis law at every deterministic raw
+time. Stopping at the first proper mark gives exactly one lazy-speedy step;
+restarting this stopped experiment gives exactly the iterated lazy-speedy
+output law. The realized wait has mean `1 / ell`, and the advertised LV
+average-conductance theorem yields both the warm-start total-cost estimate and
+its Markov cutoff bound. The module also specializes the deterministic-time
+projection to `truncatedMetropolisKernel`, so this is now an exact bridge to
+the executable Figure-1 transition rather than a parallel abstract chain.
 
 These results still do not by themselves prove CV18 Theorem 1.1 with its
 advertised `O*(n^3)` complexity. The average-local-conductance and
 raw-proposal cutoff obligation at the advertised phase radius is now closed.
 The remaining work is:
 
-1. lift the existing non-lazy proper-step clock to the lazy executable law,
-   use its cutoff event to compare a fixed number of raw transitions with the
-   proved lazy speedy-chain iterate, and transfer the speedy stationary law
+1. connect the stopped proper-step execution and its cutoff event to the
+   sampler returned by the program, and transfer the speedy stationary law
    proportional to `ell * gaussianWeight` to the phase's restricted-Gaussian
    target (the paper's rejection map must be connected to the executable
    sampler, not merely imported as a standalone theorem); and
