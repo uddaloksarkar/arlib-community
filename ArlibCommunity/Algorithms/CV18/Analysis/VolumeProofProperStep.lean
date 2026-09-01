@@ -4,6 +4,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.MarkovChains.Continuous.HoldingTime
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.MarkovChains.Continuous.SpeedyGaussian
+import Mathlib.Probability.Kernel.Composition.CompProd
+import Mathlib.Probability.Kernel.Composition.CompMap
 import Mathlib.Probability.Kernel.Composition.MapComap
 import Mathlib.Probability.Kernel.WithDensity
 
@@ -224,6 +226,156 @@ theorem geometricCostKernel_lintegral_fst
   rw [geometricCostKernel_lintegral_fst_eq_tsum hp Q x]
   exact ennreal_geometric_trials_tsum hx (hp1 x)
 
+/-! ## Totalization and accumulated cost -/
+
+/-- A zero-cost copy of `Q`.  This is the fallback used to totalize geometric
+waiting at states where success has probability zero. -/
+noncomputable def zeroCostKernel (Q : Kernel Omega Omega) :
+    Kernel Omega (ℕ × Omega) :=
+  Q.map (fun y => (0, y))
+
+/-- A globally total version of `geometricCostKernel`.  At a zero-success
+state it takes one `Q`-step at cost zero; everywhere else it is the genuine
+geometric waiting law.  The fallback is semantic totalization on the ambient
+space and is never used on states where a proper proposal is possible. -/
+noncomputable def totalGeometricCostKernel
+    (p : Omega → ℝ≥0∞) (hp : Measurable p) (Q : Kernel Omega Omega)
+    [IsMarkovKernel Q] : Kernel Omega (ℕ × Omega) := by
+  classical
+  exact Kernel.piecewise (hp (MeasurableSet.singleton 0))
+    (zeroCostKernel Q) (geometricCostKernel p Q)
+
+theorem totalGeometricCostKernel_apply
+    (p : Omega → ℝ≥0∞) (hp : Measurable p) (Q : Kernel Omega Omega)
+    [IsMarkovKernel Q] (x : Omega) :
+    totalGeometricCostKernel p hp Q x =
+      if p x = 0 then zeroCostKernel Q x else geometricCostKernel p Q x := by
+  classical
+  rw [totalGeometricCostKernel, Kernel.piecewise_apply]
+  simp only [Set.mem_preimage, Set.mem_singleton_iff]
+
+theorem totalGeometricCostKernel_eq_geometricCostKernel
+    (p : Omega → ℝ≥0∞) (hp : Measurable p) (Q : Kernel Omega Omega)
+    [IsMarkovKernel Q] (x : Omega) (hx : p x ≠ 0) :
+    totalGeometricCostKernel p hp Q x = geometricCostKernel p Q x := by
+  rw [totalGeometricCostKernel_apply, if_neg hx]
+
+/-- Totalization preserves the requested state marginal even at zero-success
+ambient states. -/
+theorem totalGeometricCostKernel_apply_preimage_snd
+    {p : Omega → ℝ≥0∞} (hp : Measurable p) (hp1 : ∀ x, p x ≤ 1)
+    (Q : Kernel Omega Omega) [IsMarkovKernel Q] (x : Omega)
+    {S : Set Omega} (hS : MeasurableSet S) :
+    totalGeometricCostKernel p hp Q x (Prod.snd ⁻¹' S) = Q x S := by
+  rw [totalGeometricCostKernel_apply]
+  split_ifs with hx
+  · rw [zeroCostKernel, Kernel.map_apply _ (by fun_prop),
+      Measure.map_apply (by fun_prop) (hS.preimage measurable_snd)]
+    rfl
+  · exact geometricCostKernel_apply_preimage_snd hp hp1 Q x hx hS
+
+/-- Unlike the partial geometric kernel, the totalized kernel is Markov on the
+whole ambient measurable space. -/
+theorem isMarkovKernel_totalGeometricCostKernel
+    {p : Omega → ℝ≥0∞} (hp : Measurable p) (hp1 : ∀ x, p x ≤ 1)
+    (Q : Kernel Omega Omega) [IsMarkovKernel Q] :
+    IsMarkovKernel (totalGeometricCostKernel p hp Q) := by
+  refine ⟨fun x => ⟨?_⟩⟩
+  rw [← Set.preimage_univ (f := @Prod.snd ℕ Omega)]
+  rw [totalGeometricCostKernel_apply_preimage_snd hp hp1 Q x
+    MeasurableSet.univ]
+  exact measure_univ
+
+/-- Kernel-level state-marginal identity for the totalized cost kernel. -/
+theorem totalGeometricCostKernel_snd
+    {p : Omega → ℝ≥0∞} (hp : Measurable p) (hp1 : ∀ x, p x ≤ 1)
+    (Q : Kernel Omega Omega) [IsMarkovKernel Q] :
+    Kernel.snd (totalGeometricCostKernel p hp Q) = Q := by
+  letI : IsMarkovKernel (totalGeometricCostKernel p hp Q) :=
+    isMarkovKernel_totalGeometricCostKernel hp hp1 Q
+  ext x S hS
+  rw [Kernel.snd_apply' _ _ hS]
+  exact totalGeometricCostKernel_apply_preimage_snd hp hp1 Q x hS
+
+/-- Lift a costed state transition to `(accumulated cost, state)`, adding the
+new one-step cost to the old cost. -/
+noncomputable def accumulatedCostStep
+    (C : Kernel Omega (ℕ × Omega)) [IsMarkovKernel C] :
+    Kernel (ℕ × Omega) (ℕ × Omega) :=
+  ((Kernel.id : Kernel (ℕ × Omega) (ℕ × Omega)) ⊗ₖ
+      C.comap (fun z : (ℕ × Omega) × (ℕ × Omega) => z.2.2) (by fun_prop)).map
+    (fun z => (z.1.1 + z.2.1, z.2.2))
+
+theorem isMarkovKernel_accumulatedCostStep
+    (C : Kernel Omega (ℕ × Omega)) [IsMarkovKernel C] :
+    IsMarkovKernel (accumulatedCostStep C) := by
+  unfold accumulatedCostStep
+  letI : IsMarkovKernel
+      ((Kernel.id : Kernel (ℕ × Omega) (ℕ × Omega)) ⊗ₖ
+        C.comap (fun z : (ℕ × Omega) × (ℕ × Omega) => z.2.2) (by fun_prop)) :=
+    inferInstance
+  exact Kernel.IsMarkovKernel.map _ (by fun_prop)
+
+/-- One accumulated step forgets to exactly one step of `Q`, provided the
+one-step cost kernel forgets to `Q`. -/
+theorem accumulatedCostStep_apply_preimage_snd
+    (C : Kernel Omega (ℕ × Omega)) [IsMarkovKernel C]
+    (Q : Kernel Omega Omega)
+    (hC : ∀ (x : Omega) {S : Set Omega}, MeasurableSet S →
+      C x (Prod.snd ⁻¹' S) = Q x S)
+    (z : ℕ × Omega) {S : Set Omega} (hS : MeasurableSet S) :
+    accumulatedCostStep C z (Prod.snd ⁻¹' S) = Q z.2 S := by
+  rw [accumulatedCostStep, Kernel.map_apply _ (by fun_prop),
+    Measure.map_apply (by fun_prop) (hS.preimage measurable_snd)]
+  rw [Kernel.compProd_apply ((hS.preimage measurable_snd).preimage (by fun_prop))]
+  simp only [Set.preimage, Set.mem_ofPred_eq]
+  rw [Kernel.id_apply, lintegral_dirac']
+  · rw [Kernel.comap_apply]
+    exact hC z.2 hS
+  · exact (Kernel.measurable_coe _ (hS.preimage measurable_snd)).comp (by fun_prop)
+
+theorem accumulatedCostStep_snd
+    (C : Kernel Omega (ℕ × Omega)) [IsMarkovKernel C]
+    (Q : Kernel Omega Omega)
+    (hC : ∀ (x : Omega) {S : Set Omega}, MeasurableSet S →
+      C x (Prod.snd ⁻¹' S) = Q x S) :
+    Kernel.snd (accumulatedCostStep C) =
+      Q.comap Prod.snd measurable_snd := by
+  ext z S hS
+  rw [Kernel.snd_apply' _ _ hS, Kernel.comap_apply]
+  exact accumulatedCostStep_apply_preimage_snd C Q hC z hS
+
+/-- The central iterated bridge: after any number of accumulated costed steps,
+forgetting all costs gives exactly the same iterate of the state kernel. -/
+theorem accumulatedCostStep_pow_snd
+    (C : Kernel Omega (ℕ × Omega)) [IsMarkovKernel C]
+    (Q : Kernel Omega Omega)
+    (hC : ∀ (x : Omega) {S : Set Omega}, MeasurableSet S →
+      C x (Prod.snd ⁻¹' S) = Q x S) : ∀ t : ℕ,
+    Kernel.snd ((accumulatedCostStep C) ^ t) =
+      (Q ^ t).comap Prod.snd measurable_snd := by
+  intro t
+  induction t with
+  | zero =>
+      change Kernel.snd (Kernel.id : Kernel (ℕ × Omega) (ℕ × Omega)) =
+        (Kernel.id : Kernel Omega Omega).comap Prod.snd measurable_snd
+      ext z S hS
+      rw [Kernel.snd_apply' _ _ hS, Kernel.id_apply,
+        Kernel.comap_apply, Kernel.id_apply,
+        Measure.dirac_apply' _ (hS.preimage measurable_snd),
+        Measure.dirac_apply' _ hS]
+      rfl
+  | succ t ih =>
+      rw [pow_succ]
+      change Kernel.snd ((accumulatedCostStep C ^ t) ∘ₖ accumulatedCostStep C) = _
+      rw [Kernel.snd_comp, ih]
+      rw [← Kernel.comp_map (accumulatedCostStep C) (Q ^ t) measurable_snd]
+      rw [← Kernel.snd_eq, accumulatedCostStep_snd C Q hC]
+      rw [← Kernel.comp_deterministic_eq_comap Q measurable_snd]
+      rw [← Kernel.comp_assoc]
+      rw [show (Q ^ t) ∘ₖ Q = Q ^ (t + 1) from (pow_succ Q t).symm]
+      rw [Kernel.comp_deterministic_eq_comap]
+
 section BallWalk
 
 variable {n : ℕ}
@@ -306,6 +458,85 @@ theorem gaussianProperStepWithCost_expectedCost
   exact geometricCostKernel_lintegral_fst (measurable_ell hK delta)
     (fun y => ell_le_one K delta y)
     (speedyMetropolisGaussian K delta variance) x hx
+
+/-- Globally Markov totalization of the Gaussian proper-step cost kernel.  On
+every state with positive local conductance this is definitionally the genuine
+geometric waiting construction above. -/
+noncomputable def totalGaussianProperStepWithCost
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) :
+    Kernel (EuclideanSpace ℝ (Fin n))
+      (ℕ × EuclideanSpace ℝ (Fin n)) :=
+  totalGeometricCostKernel (ell K delta) (measurable_ell hK delta)
+    (speedyMetropolisGaussian K delta variance)
+
+theorem isMarkovKernel_totalGaussianProperStepWithCost
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) :
+    IsMarkovKernel (totalGaussianProperStepWithCost hK delta variance) := by
+  exact isMarkovKernel_totalGeometricCostKernel (measurable_ell hK delta)
+    (fun y => ell_le_one K delta y)
+    (speedyMetropolisGaussian K delta variance)
+
+/-- Totalization does not alter the Gaussian speedy state marginal. -/
+theorem totalGaussianProperStepWithCost_stateMarginal
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) (x : EuclideanSpace ℝ (Fin n))
+    {S : Set (EuclideanSpace ℝ (Fin n))} (hS : MeasurableSet S) :
+    totalGaussianProperStepWithCost hK delta variance x (Prod.snd ⁻¹' S) =
+      speedyMetropolisGaussian K delta variance x S := by
+  exact totalGeometricCostKernel_apply_preimage_snd (measurable_ell hK delta)
+    (fun y => ell_le_one K delta y)
+    (speedyMetropolisGaussian K delta variance) x hS
+
+/-- One Gaussian proper-step transition on `(total cost, state)`. -/
+noncomputable def accumulatedGaussianProperCostStep
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) :
+    Kernel (ℕ × EuclideanSpace ℝ (Fin n))
+      (ℕ × EuclideanSpace ℝ (Fin n)) := by
+  letI : IsMarkovKernel (totalGaussianProperStepWithCost hK delta variance) :=
+    isMarkovKernel_totalGaussianProperStepWithCost hK delta variance
+  exact accumulatedCostStep (totalGaussianProperStepWithCost hK delta variance)
+
+theorem isMarkovKernel_accumulatedGaussianProperCostStep
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) :
+    IsMarkovKernel (accumulatedGaussianProperCostStep hK delta variance) := by
+  letI : IsMarkovKernel (totalGaussianProperStepWithCost hK delta variance) :=
+    isMarkovKernel_totalGaussianProperStepWithCost hK delta variance
+  rw [accumulatedGaussianProperCostStep]
+  exact isMarkovKernel_accumulatedCostStep _
+
+/-- After `t` cost-accumulating Gaussian proper steps, forgetting the cost is
+exactly the `t`-fold speedy Gaussian Metropolis kernel. -/
+theorem accumulatedGaussianProperCostStep_pow_snd
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) (t : ℕ) :
+    Kernel.snd ((accumulatedGaussianProperCostStep hK delta variance) ^ t) =
+      (speedyMetropolisGaussian K delta variance ^ t).comap
+        Prod.snd measurable_snd := by
+  letI : IsMarkovKernel (totalGaussianProperStepWithCost hK delta variance) :=
+    isMarkovKernel_totalGaussianProperStepWithCost hK delta variance
+  rw [accumulatedGaussianProperCostStep]
+  exact accumulatedCostStep_pow_snd
+    (totalGaussianProperStepWithCost hK delta variance)
+    (speedyMetropolisGaussian K delta variance)
+    (fun x _ hS => totalGaussianProperStepWithCost_stateMarginal
+      hK delta variance x hS) t
+
+/-- Pointwise/event form of the iterated Gaussian bridge, started with zero
+accumulated cost. -/
+theorem accumulatedGaussianProperCostStep_pow_stateMarginal
+    {K : Set (EuclideanSpace ℝ (Fin n))} (hK : MeasurableSet K)
+    (delta variance : ℝ) (t : ℕ) (x : EuclideanSpace ℝ (Fin n))
+    {S : Set (EuclideanSpace ℝ (Fin n))} (hS : MeasurableSet S) :
+    (accumulatedGaussianProperCostStep hK delta variance ^ t) (0, x)
+        (Prod.snd ⁻¹' S) =
+      (speedyMetropolisGaussian K delta variance ^ t) x S := by
+  rw [← Kernel.snd_apply' _ _ hS,
+    accumulatedGaussianProperCostStep_pow_snd hK delta variance t,
+    Kernel.comap_apply]
 
 /-- The ordinary Gaussian Metropolis move probability factors into the chance
 of making a proper proposal and the conditional Metropolis acceptance

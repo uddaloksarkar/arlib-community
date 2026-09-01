@@ -107,8 +107,15 @@ The file proves that its state marginal is exactly
 `1 / ell K delta x`, and the exact mixture identity expressing one ordinary
 Gaussian Metropolis step as a proper speedy step or an improper self-loop.
 
-The next missing result is the iterated bridge: accumulate these costs over
-`t` state-dependent proper steps, identify the state marginal with the
-`t`-fold Gaussian speedy walk, and identify that costed execution with the
-concrete raw proposal loop.  The average-local-conductance expectation and
-cutoff/restart bounds can then be applied to that accumulated cost.
+The iterated bridge is now also formalized.  A totalized cost kernel handles
+zero-local-conductance ambient states without the false assumption that
+`ell > 0` everywhere, and agrees with the genuine geometric waiting law at
+every non-stuck state.  `accumulatedCostStep_pow_snd` proves generically that,
+after any `t` cost-accumulating steps, forgetting the cost gives exactly the
+`t`-fold state-kernel iterate.  Its Gaussian specialization identifies the
+state marginal with the `t`-fold `speedyMetropolisGaussian` kernel.
+
+The next missing results are to identify this costed kernel with the concrete
+recursive raw-proposal program and to lift the paper's average-local-
+conductance estimate to an accumulated-cost/cutoff bound.  The cutoff/restart
+failure probability can then be composed with the speedy-chain mixing error.
