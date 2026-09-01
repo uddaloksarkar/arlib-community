@@ -183,9 +183,9 @@ theorem protectedLog_dimension_div_eps_le (q : VolumeParams) :
     linarith
   exact hprotected.trans hsum
 
-theorem terminalVariance_le_four_roundness_scale (q : VolumeParams) :
+theorem terminalVariance_le_roundness_scale (q : VolumeParams) :
     terminalVariance q ≤
-      4 * max 1 q.roundness * (q.n : ℝ) *
+      16384 * max 1 q.roundness * (q.n : ℝ) *
         protectedLog (1 / q.eps) ^ 2 := by
   let n : ℝ := q.n
   let M : ℝ := max 1 q.roundness
@@ -196,6 +196,8 @@ theorem terminalVariance_le_four_roundness_scale (q : VolumeParams) :
   have hM : 1 ≤ M := le_max_left _ _
   have hLe : 1 ≤ Le := le_max_left _ _
   have hr : q.roundness ≤ M := le_max_right _ _
+  have hL8 : protectedLog (8 / q.eps) ≤ 4 * Le := by
+    simpa [Le] using protectedLog_eight_div_eps_le_four q
   have hmul : ∀ {a b : ℝ}, 1 ≤ a → 1 ≤ b → 1 ≤ a * b := by
     intro a b ha hb
     nlinarith [mul_nonneg (sub_nonneg.mpr ha) (sub_nonneg.mpr hb)]
@@ -207,22 +209,32 @@ theorem terminalVariance_le_four_roundness_scale (q : VolumeParams) :
     dsimp [n, M, Le] at this ⊢
     nlinarith
   · apply max_le
-    · have hfactor : 1 ≤ 4 * M * Le ^ 2 := by
+    · have hfactor : 1 ≤ 16384 * M * Le ^ 2 := by
         exact hmul (hmul (by norm_num) hM) (one_le_pow₀ hLe)
       dsimp [n, M, Le] at hfactor ⊢
       nlinarith [mul_nonneg (le_trans (by norm_num) hn)
         (sub_nonneg.mpr hfactor)]
     · have hn0 : 0 ≤ n := le_trans (by norm_num) hn
       have hLe0 : 0 ≤ Le ^ 2 := sq_nonneg _
-      have h := mul_le_mul_of_nonneg_right
+      have hround := mul_le_mul_of_nonneg_right
         (mul_le_mul_of_nonneg_right hr hn0) hLe0
-      dsimp [n, M, Le] at h ⊢
+      have hL8sq : protectedLog (8 / q.eps) ^ 2 ≤ 16 * Le ^ 2 := by
+        have hL80 : 0 ≤ protectedLog (8 / q.eps) :=
+          le_trans zero_le_one (le_max_left _ _)
+        have hsum0 : 0 ≤ 4 * Le + protectedLog (8 / q.eps) := by positivity
+        nlinarith [mul_nonneg (sub_nonneg.mpr hL8) hsum0]
+      have hcoef : 0 ≤ 1024 * q.roundness * n :=
+        mul_nonneg (mul_nonneg (by norm_num) q.roundness_pos.le) hn0
+      have hscale := mul_le_mul_of_nonneg_left hL8sq hcoef
+      have hroundScaled := mul_le_mul_of_nonneg_left hround
+        (by norm_num : (0 : ℝ) ≤ 16384)
+      dsimp [n, M, Le] at hscale hroundScaled ⊢
       nlinarith
 
 theorem terminalPhaseSteps_cast_le (q : VolumeParams) :
     (terminalPhaseSteps q : ℝ) ≤
       15 * (q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps) +
-      13 * max 1 q.roundness * (q.n : ℝ) *
+      49153 * max 1 q.roundness * (q.n : ℝ) *
         protectedLog (1 / q.eps) ^ 2 := by
   let n : ℝ := q.n
   let M : ℝ := max 1 q.roundness
@@ -253,12 +265,12 @@ theorem terminalPhaseSteps_cast_le (q : VolumeParams) :
       exact mul_nonneg (by norm_num) (le_trans zero_le_one (by
         simpa [T] using terminalVariance_ge_one' q))
     simpa [N₂, fastPhaseSteps, T] using Nat.ceil_lt_add_one hnonneg
-  have hT : T ≤ 4 * M * n * Le ^ 2 := by
-    simpa [T, M, n, Le] using terminalVariance_le_four_roundness_scale q
+  have hT : T ≤ 16384 * M * n * Le ^ 2 := by
+    simpa [T, M, n, Le] using terminalVariance_le_roundness_scale q
   have hbase : 1 ≤ M * n * Le ^ 2 := by
     have hn1 : 1 ≤ n := le_trans (by norm_num) hn
     exact hmul (hmul hM hn1) (one_le_pow₀ hLe)
-  have hN₂ : (N₂ : ℝ) ≤ 13 * M * n * Le ^ 2 := by
+  have hN₂ : (N₂ : ℝ) ≤ 49153 * M * n * Le ^ 2 := by
     nlinarith
   have hstop := terminalPhaseSteps_le_total q
   have hcast : (terminalPhaseSteps q : ℝ) ≤ (N₁ : ℝ) + (N₂ : ℝ) := by
@@ -275,7 +287,7 @@ theorem total_figureOneWalkSteps_cast_le (q : VolumeParams) :
       10 ^ 16 * (q.n : ℝ) ^ 2 *
           protectedLog ((q.n : ℝ) / q.eps) ^ 2 *
         (31 * (q.n : ℝ) * protectedLog ((q.n : ℝ) / q.eps) +
-          51 * max 1 q.roundness * (q.n : ℝ) *
+          196611 * max 1 q.roundness * (q.n : ℝ) *
             protectedLog (1 / q.eps) ^ 2 *
             protectedLog (terminalVariance q)) := by
   let n : ℝ := q.n
@@ -293,25 +305,25 @@ theorem total_figureOneWalkSteps_cast_le (q : VolumeParams) :
   have hL : 1 ≤ L := le_max_left _ _
   have hLe : 1 ≤ Le := le_max_left _ _
   have hH : 1 ≤ H := le_max_left _ _
-  have hN : N ≤ 15 * n * L + 13 * M * n * Le ^ 2 := by
+  have hN : N ≤ 15 * n * L + 49153 * M * n * Le ^ 2 := by
     simpa [N, n, M, L, Le] using terminalPhaseSteps_cast_le q
-  have hT : T ≤ 4 * M * n * Le ^ 2 := by
-    simpa [T, n, M, Le] using terminalVariance_le_four_roundness_scale q
+  have hT : T ≤ 16384 * M * n * Le ^ 2 := by
+    simpa [T, n, M, Le] using terminalVariance_le_roundness_scale q
   have hnL : 1 ≤ n * L := by
     have hmul : ∀ {a b : ℝ}, 1 ≤ a → 1 ≤ b → 1 ≤ a * b := by
       intro a b ha hb
       nlinarith [mul_nonneg (sub_nonneg.mpr ha) (sub_nonneg.mpr hb)]
     exact hmul (le_trans (by norm_num) hn) hL
   have hbase0 : 0 ≤ M * n * Le ^ 2 := by positivity
-  have hTH : T * H ≤ 4 * M * n * Le ^ 2 * H :=
+  have hTH : T * H ≤ 16384 * M * n * Le ^ 2 * H :=
     mul_le_mul_of_nonneg_right hT (le_trans zero_le_one hH)
   have haggregate : N + 4 * T * H + 2 * T ≤
-      15 * n * L + 37 * M * n * Le ^ 2 * H := by
+      15 * n * L + 147457 * M * n * Le ^ 2 * H := by
     have hbaseH : M * n * Le ^ 2 ≤ M * n * Le ^ 2 * H := by
       nlinarith [mul_nonneg hbase0 (sub_nonneg.mpr hH)]
     nlinarith
   have hremainder : N + 1 ≤
-      16 * n * L + 13 * M * n * Le ^ 2 * H := by
+      16 * n * L + 49153 * M * n * Le ^ 2 * H := by
     have hbaseH : M * n * Le ^ 2 ≤ M * n * Le ^ 2 * H := by
       nlinarith [mul_nonneg hbase0 (sub_nonneg.mpr hH)]
     linarith
@@ -343,22 +355,22 @@ theorem total_figureOneWalkSteps_cast_le (q : VolumeParams) :
           (figureOneWalkSteps q (terminalVariance q) : ℝ) ≤
         A * (N + 4 * T * H + 2 * T) + (N + 1) := by
       linarith
-    _ ≤ A * (15 * n * L + 37 * M * n * Le ^ 2 * H) +
-          (16 * n * L + 13 * M * n * Le ^ 2 * H) := by
+    _ ≤ A * (15 * n * L + 147457 * M * n * Le ^ 2 * H) +
+          (16 * n * L + 49153 * M * n * Le ^ 2 * H) := by
       exact add_le_add
         (mul_le_mul_of_nonneg_left haggregate (le_trans zero_le_one hA))
         hremainder
-    _ ≤ A * (31 * n * L + 51 * M * n * Le ^ 2 * H) := by
-      have hrem_nonneg : 0 ≤ 16 * n * L + 13 * M * n * Le ^ 2 * H := by
+    _ ≤ A * (31 * n * L + 196611 * M * n * Le ^ 2 * H) := by
+      have hrem_nonneg : 0 ≤ 16 * n * L + 49153 * M * n * Le ^ 2 * H := by
         positivity
-      have hremA : 16 * n * L + 13 * M * n * Le ^ 2 * H ≤
-          A * (16 * n * L + 13 * M * n * Le ^ 2 * H) := by
+      have hremA : 16 * n * L + 49153 * M * n * Le ^ 2 * H ≤
+          A * (16 * n * L + 49153 * M * n * Le ^ 2 * H) := by
         nlinarith [mul_nonneg (sub_nonneg.mpr hA) hrem_nonneg]
       calc
-        _ ≤ A * (15 * n * L + 37 * M * n * Le ^ 2 * H) +
-            A * (16 * n * L + 13 * M * n * Le ^ 2 * H) :=
+        _ ≤ A * (15 * n * L + 147457 * M * n * Le ^ 2 * H) +
+            A * (16 * n * L + 49153 * M * n * Le ^ 2 * H) :=
           by gcongr
-        _ ≤ A * (31 * n * L + 51 * M * n * Le ^ 2 * H) := by
+        _ ≤ A * (31 * n * L + 196611 * M * n * Le ^ 2 * H) := by
           have hnonneg : 0 ≤ A * (M * n * Le ^ 2 * H) := by positivity
           nlinarith
     _ = _ := by
@@ -373,7 +385,7 @@ theorem figureOne_base_query_cost :
             figureOneSampleCount q *
               figureOneWalkSteps q (terminalVariance q)) ≤
         Nat.ceil (C * volumeBaseComplexityRate q) := by
-  refine ⟨10 ^ 22, by positivity, ?_⟩
+  refine ⟨10 ^ 25, by positivity, ?_⟩
   intro q
   let n : ℝ := q.n
   let M : ℝ := max 1 q.roundness
@@ -421,7 +433,7 @@ theorem figureOne_base_query_cost :
     linarith
   have hwalk : (W : ℝ) ≤
       10 ^ 16 * n ^ 2 * L ^ 2 *
-        (31 * n * L + 51 * M * n * Le ^ 2 * H) := by
+        (31 * n * L + 196611 * M * n * Le ^ 2 * H) := by
     simpa [W, n, M, L, Le, H] using total_figureOneWalkSteps_cast_le q
   have hLbound : L ≤ 2 * Le * H := by
     simpa [L, Le, H, n] using protectedLog_dimension_div_eps_le q
@@ -451,22 +463,22 @@ theorem figureOne_base_query_cost :
         linarith
   have hproduct :
       (figureOneSampleCount q : ℝ) * (W : ℝ) ≤
-        (57969 * 10 ^ 16) * R := by
+        (100893249 * 10 ^ 16) * R := by
     have hsample0 : 0 ≤ (figureOneSampleCount q : ℝ) := by positivity
     have hW0 : 0 ≤ (W : ℝ) := by positivity
     calc
       (figureOneSampleCount q : ℝ) * (W : ℝ) ≤
           (513 * H / q.eps ^ 2) *
             (10 ^ 16 * n ^ 2 * L ^ 2 *
-              (31 * n * L + 51 * M * n * Le ^ 2 * H)) :=
+              (31 * n * L + 196611 * M * n * Le ^ 2 * H)) :=
         mul_le_mul hsample hwalk hW0 (by positivity)
       _ = 513 * 10 ^ 16 *
-          (31 * (n ^ 3 / q.eps ^ 2 * L ^ 3 * H) + 51 * R) := by
+          (31 * (n ^ 3 / q.eps ^ 2 * L ^ 3 * H) + 196611 * R) := by
         dsimp [R]
         ring
-      _ ≤ 513 * 10 ^ 16 * (31 * (2 * R) + 51 * R) := by
+      _ ≤ 513 * 10 ^ 16 * (31 * (2 * R) + 196611 * R) := by
         gcongr
-      _ = (57969 * 10 ^ 16) * R := by ring
+      _ = (100893249 * 10 ^ 16) * R := by ring
   have hfixedSample : (figureOneFixedSampleCount q : ℝ) ≤
       4097 * L / q.eps ^ 2 := by
     have hraw_nonneg : 0 ≤ 4096 * L / q.eps ^ 2 := by positivity
@@ -584,7 +596,7 @@ theorem figureOne_base_query_cost :
               (explicitVolumeCoolingSchedule q).variances +
             figureOneSampleCount q *
               figureOneWalkSteps q (terminalVariance q)) : ℕ) : ℝ) ≤
-        10 ^ 22 * volumeBaseComplexityRate q := by
+        10 ^ 25 * volumeBaseComplexityRate q := by
     have hbudgetCast :
         (((figureOneCoolingQueryBudget q
             (explicitVolumeCoolingSchedule q).variances +
@@ -595,13 +607,13 @@ theorem figureOne_base_query_cost :
               ((slowPhaseSteps q : ℝ) * (figureOneWalkSteps q 1 : ℝ)) := by
       exact_mod_cast hbudgetUpper
     rw [Nat.cast_add, Nat.cast_one]
-    have hconstant : (549609 : ℝ) * 10 ^ 16 + 1 ≤ 10 ^ 22 := by norm_num
+    have hconstant : (101384889 : ℝ) * 10 ^ 16 + 1 ≤ 10 ^ 25 := by norm_num
     have hleft : 1 +
         ((figureOneCoolingQueryBudget q
             (explicitVolumeCoolingSchedule q).variances +
           figureOneSampleCount q *
             figureOneWalkSteps q (terminalVariance q) : ℕ) : ℝ) ≤
-        ((549609 : ℝ) * 10 ^ 16 + 1) * R := by
+        ((101384889 : ℝ) * 10 ^ 16 + 1) * R := by
       have hfixedProduct' :
           (figureOneFixedSampleCount q : ℝ) *
               ((slowPhaseSteps q : ℝ) * (figureOneWalkSteps q 1 : ℝ)) ≤
@@ -612,15 +624,15 @@ theorem figureOne_base_query_cost :
             (figureOneFixedSampleCount q : ℝ) *
               ((slowPhaseSteps q : ℝ) * (figureOneWalkSteps q 1 : ℝ))) := by
           gcongr
-        _ ≤ 1 + ((57969 * 10 ^ 16) * R + (491640 * 10 ^ 16) * R) := by
+        _ ≤ 1 + ((100893249 * 10 ^ 16) * R + (491640 * 10 ^ 16) * R) := by
           simpa [add_comm] using add_le_add_left
             (add_le_add hproduct hfixedProduct') 1
-        _ = ((549609 : ℝ) * 10 ^ 16 + 1) * R - (R - 1) := by ring
-        _ ≤ ((549609 : ℝ) * 10 ^ 16 + 1) * R := by linarith
+        _ = ((101384889 : ℝ) * 10 ^ 16 + 1) * R - (R - 1) := by ring
+        _ ≤ ((101384889 : ℝ) * 10 ^ 16 + 1) * R := by linarith
     have hrate : volumeBaseComplexityRate q = R := by
       dsimp [volumeBaseComplexityRate, R, M, n, Le, L, H, terminalVariance]
     rw [hrate]
     exact hleft.trans <| mul_le_mul_of_nonneg_right hconstant (le_trans zero_le_one hR)
-  exact_mod_cast le_trans hreal (Nat.le_ceil (10 ^ 22 * volumeBaseComplexityRate q))
+  exact_mod_cast le_trans hreal (Nat.le_ceil (10 ^ 25 * volumeBaseComplexityRate q))
 
 end ArlibCommunity.Algorithms.CV18

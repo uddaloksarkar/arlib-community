@@ -8,14 +8,16 @@ schedule, query accounting, restricted-Gaussian stationarity, warm starts,
 fixed-rate and terminal moment bounds, ideal-product calculation, initial
 coupling, and median amplification are formalized.
 
-The strongest public accuracy theorem is
-`figureOne_base_accuracy_of_truncation_and_mixing`. It is conditional on
-exactly two propositions:
+The strongest assembled result is `volumeTheorem_of_postInitialMixing`.  It
+contains both the advertised accuracy conclusion and the explicit
+membership-query bound, and is conditional on exactly one proposition:
 
-- `FigureOneRadialTruncationBound` — preservation of ordinary volume after
-  radial truncation;
 - `FigureOnePostInitialMixingBound` — the dependent lazy ball-walk sampling
   error bound.
+
+`FigureOneRadialTruncationBound` is now proved from `WellRounded` by
+`figureOneRadialTruncationBound`.  Thus radial truncation is no longer an
+assumption of the assembled theorem.
 
 `FigureOneSharpAcceleratedMoments`, the phase-sensitive accelerated
 localization estimate, is now proved unconditionally in
@@ -23,23 +25,21 @@ localization estimate, is now proved unconditionally in
 vendored under `ArlibCommunity/External/Kr25`; the adapter covers the exact
 first-hit schedule, including the terminally clipped accelerated step.
 
-The source snapshot in the original CV18 workspace asserted their conjunction
-with a `sorry`. That declaration and the unconditional capstone are omitted
-here so that arlib-community's no-`sorry` axiom invariant remains intact.
+The source snapshot in the original CV18 workspace asserted the former bundle
+with a `sorry`.  The unconditional capstone remains omitted so that
+arlib-community's no-`sorry` axiom invariant remains intact.
 
 ## Vempala optimization-book cross-check
 
-The local optimization-book source is useful background but did not by itself
-discharge the original three obligations. `annealing_volume.tex`, Lemma
+The local optimization-book source is useful background but does not discharge
+the remaining walk obligation. `annealing_volume.tex`, Lemma
 `lem:chebychev_ratio`, proves the classical fixed-rate logconcave-power ratio
 bound. The accelerated `O*(n^3)` CV theorem is then only stated and cited.
 `ball_walk.tex` develops warm-start conductance-to-mixing and states Gaussian
 restricted isoperimetry, but does not specialize the whole chain to CV18's
 truncated Gaussian Metropolis program or its dependent product failure event.
-No matching radial truncation-volume theorem with CV18's present radius was
-found. The later dyadic proof has a larger logarithmic-radius constant and
-therefore cannot discharge the current predicate without changing the
-algorithm and its cost constants.
+The radial truncation proof now uses an explicit dyadic localization tail with
+the correspondingly enlarged terminal-radius constant.
 
 ## Existing formal overlap in arlib-community
 
@@ -56,3 +56,27 @@ existing conductance module also documents a weaker overlap estimate and only
 an exponentially small unconditional local-conductance witness. These modules
 are reusable infrastructure, not a drop-in discharge of the remaining
 dependent-program obligation.
+
+## Exact sampling mismatch to resolve
+
+The paper's Figure 1 requests a fixed number of **proper** steps and, at phase
+variance `sigma2`, targets `K ∩ 4 * sqrt(sigma2 * n) Bₙ`.  Its proof then
+converts the expected number of raw ball-walk proposals into an executable
+cutoff/restart procedure.  The current executable Lean program instead runs a
+fixed number of raw proposals against the single terminal truncation
+`truncatedBody q I`.
+
+Consequently neither the optimization-book warm-start theorem nor the paper's
+speedy-walk conductance theorem has the conclusion required by the current
+kernel.  An unconditional proof must do one of the following, together with
+the sequential TV composition already formalized here:
+
+1. formalize phase truncation, proper-step execution, and the global
+   cutoff/restart argument from CV18; or
+2. prove a new exceptional-set/s-conductance theorem directly for the current
+   fixed-terminal-truncation, fixed-raw-step kernel.
+
+Importing a speedy-walk mixing theorem alone is insufficient: its stationary
+law is proportional to local conductance times the Gaussian density, not the
+target truncated Gaussian, and it does not identify a fixed raw-step law with
+the required sample law.

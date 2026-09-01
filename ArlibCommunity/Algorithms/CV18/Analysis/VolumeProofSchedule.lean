@@ -10,6 +10,24 @@ open Function
 
 namespace ArlibCommunity.Algorithms.CV18
 
+theorem protectedLog_eight_div_eps_le_four (q : VolumeParams) :
+    protectedLog (8 / q.eps) ≤ 4 * protectedLog (1 / q.eps) := by
+  let Le := protectedLog (1 / q.eps)
+  have hLe : 1 ≤ Le := le_max_left _ _
+  have hlogLe : Real.log (1 / q.eps) ≤ Le := le_max_right _ _
+  have hlog8 : Real.log 8 < 3 := by
+    rw [show (8 : ℝ) = 2 * 4 by norm_num,
+      Real.log_mul (by norm_num) (by norm_num), Real.log_four_eq]
+    nlinarith [Real.log_two_lt_d9]
+  have hlog : Real.log (8 / q.eps) ≤ 4 * Le := by
+    rw [show 8 / q.eps = 8 * (1 / q.eps) by ring,
+      Real.log_mul (by norm_num) (one_div_ne_zero q.heps.1.ne')]
+    linarith
+  change max 1 (Real.log (8 / q.eps)) ≤ 4 * Le
+  apply max_le
+  · linarith
+  · exact hlog
+
 
 theorem initialVariance_pos' (q : VolumeParams) : 0 < initialVariance q := by
   unfold initialVariance
@@ -664,7 +682,7 @@ noncomputable def explicitVolumeCoolingSchedule (q : VolumeParams) :
 theorem explicitSchedule_length_bound (q : VolumeParams) :
     (explicitVolumeCoolingSchedule q).variances.length ≤
       Nat.ceil
-        (128 * max 1 q.roundness * (q.n : ℝ) *
+        (65536 * max 1 q.roundness * (q.n : ℝ) *
           protectedLog ((q.n : ℝ) / q.eps) *
           protectedLog (1 / q.eps) ^ 2) := by
   let n : ℝ := q.n
@@ -689,10 +707,12 @@ theorem explicitSchedule_length_bound (q : VolumeParams) :
       nlinarith [mul_nonneg (sub_nonneg.mpr ha) (sub_nonneg.mpr hb)]
     have hrest : 1 ≤ M * Lₙ * Lₑ ^ 2 := hmul (hmul hM hLₙ) hLₑsq
     nlinarith [mul_nonneg (sub_nonneg.mpr hn) (sub_nonneg.mpr hrest)]
-  have hT : T ≤ 4 * M * n * Lₑ ^ 2 := by
+  have hL8 : protectedLog (8 / q.eps) ≤ 4 * Lₑ := by
+    simpa [Lₑ] using protectedLog_eight_div_eps_le_four q
+  have hT : T ≤ 16384 * M * n * Lₑ ^ 2 := by
     dsimp [T, terminalVariance]
     apply max_le
-    · have : 1 ≤ 4 * M * n * Lₑ ^ 2 := by
+    · have : 1 ≤ 16384 * M * n * Lₑ ^ 2 := by
         have hmul : ∀ {a b : ℝ}, 1 ≤ a → 1 ≤ b → 1 ≤ a * b := by
           intro a b ha hb
           nlinarith [mul_nonneg (sub_nonneg.mpr ha) (sub_nonneg.mpr hb)]
@@ -700,7 +720,7 @@ theorem explicitSchedule_length_bound (q : VolumeParams) :
         nlinarith
       exact this
     · apply max_le
-      · have hfactor : 1 ≤ 4 * M * Lₑ ^ 2 := by
+      · have hfactor : 1 ≤ 16384 * M * Lₑ ^ 2 := by
           have hmul : ∀ {a b : ℝ}, 1 ≤ a → 1 ≤ b → 1 ≤ a * b := by
             intro a b ha hb
             nlinarith [mul_nonneg (sub_nonneg.mpr ha) (sub_nonneg.mpr hb)]
@@ -711,9 +731,20 @@ theorem explicitSchedule_length_bound (q : VolumeParams) :
       · have hr : q.roundness ≤ M := le_max_right _ _
         have hn0 : 0 ≤ n := le_trans (by norm_num) hn
         have hLe0 : 0 ≤ Lₑ ^ 2 := sq_nonneg _
-        have h := mul_le_mul_of_nonneg_right
+        have hround := mul_le_mul_of_nonneg_right
           (mul_le_mul_of_nonneg_right hr hn0) hLe0
-        nlinarith
+        have hL8sq : protectedLog (8 / q.eps) ^ 2 ≤ 16 * Lₑ ^ 2 := by
+          have hL80 : 0 ≤ protectedLog (8 / q.eps) :=
+            le_trans zero_le_one (le_max_left _ _)
+          have hsum0 : 0 ≤ 4 * Lₑ + protectedLog (8 / q.eps) := by positivity
+          nlinarith [mul_nonneg (sub_nonneg.mpr hL8) hsum0]
+        have hcoef : 0 ≤ 1024 * q.roundness * n :=
+          mul_nonneg (mul_nonneg (by norm_num) q.roundness_pos.le) hn0
+        have hscale := mul_le_mul_of_nonneg_left hL8sq
+          hcoef
+        have hroundScaled := mul_le_mul_of_nonneg_left hround
+          (by norm_num : (0 : ℝ) ≤ 16384)
+        nlinarith [hscale, hroundScaled]
   have hslow_nonneg : 0 ≤ 2 * n * (6 + Lₙ) := by positivity
   have hN₁ : (N₁ : ℝ) < 2 * n * (6 + Lₙ) + 1 := by
     simpa [N₁, slowPhaseSteps, n, Lₙ] using Nat.ceil_lt_add_one hslow_nonneg
@@ -733,18 +764,18 @@ theorem explicitSchedule_length_bound (q : VolumeParams) :
         nlinarith [mul_nonneg (sub_nonneg.mpr hM) (sub_nonneg.mpr hLₑsq)]
       nlinarith [mul_nonneg hnl (sub_nonneg.mpr hfac)]
     linarith
-  have hfastD : 3 * T ≤ 12 * D := by
+  have hfastD : 3 * T ≤ 49152 * D := by
     have hLn0 : 0 ≤ Lₙ := le_trans zero_le_one hLₙ
     have hbase0 : 0 ≤ M * n * Lₑ ^ 2 := by positivity
     have : M * n * Lₑ ^ 2 ≤ D := by
       dsimp [D]
       nlinarith [mul_nonneg hbase0 (sub_nonneg.mpr hLₙ)]
     nlinarith
-  have hcast : ((N₁ + N₂ + 1 : ℕ) : ℝ) ≤ 128 * D := by
+  have hcast : ((N₁ + N₂ + 1 : ℕ) : ℝ) ≤ 65536 * D := by
     push_cast
     linarith
-  have hnat : N₁ + N₂ + 1 ≤ Nat.ceil (128 * D) := by
-    exact_mod_cast le_trans hcast (Nat.le_ceil (128 * D))
+  have hnat : N₁ + N₂ + 1 ≤ Nat.ceil (65536 * D) := by
+    exact_mod_cast le_trans hcast (Nat.le_ceil (65536 * D))
   have hstop : terminalPhaseSteps q + 1 ≤ N₁ + N₂ + 1 := by
     have := Nat.add_le_add_right (terminalPhaseSteps_le_total q) 1
     simpa [totalPhaseSteps, N₁, N₂, Nat.add_assoc] using this
@@ -757,7 +788,7 @@ theorem volume_proof_schedule :
       ∀ q : VolumeParams,
         (S q).variances.length ≤
           Nat.ceil
-            (128 * max 1 q.roundness * (q.n : ℝ) *
+            (65536 * max 1 q.roundness * (q.n : ℝ) *
               protectedLog ((q.n : ℝ) / q.eps) *
               protectedLog (1 / q.eps) ^ 2) := by
   exact ⟨explicitVolumeCoolingSchedule, explicitSchedule_length_bound⟩

@@ -214,7 +214,7 @@ noncomputable def protectedLog (x : ℝ) : ℝ := max 1 (Real.log x)
 made.  Naming it here lets the exact query rate expose its logarithm. -/
 noncomputable def volumeTerminalScale (q : VolumeParams) : ℝ :=
   max 1 (max (q.n : ℝ)
-    (4 * q.roundness * (q.n : ℝ) * protectedLog (1 / q.eps) ^ 2))
+    (1024 * q.roundness * (q.n : ℝ) * protectedLog (8 / q.eps) ^ 2))
 
 /-- Query rate of one constant-success run. Figure 1 uses `log(C² n)` both in
 its sample count and in summing the accelerated phases. The paper replaces it

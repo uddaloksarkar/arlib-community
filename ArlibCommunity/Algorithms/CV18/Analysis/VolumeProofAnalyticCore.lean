@@ -10,6 +10,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofInitialCoupling
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofIdealProduct
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofSharpMoments
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofMeasureApproximation
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofRadialTruncation
 
 open MeasureTheory
 
@@ -19,10 +20,10 @@ namespace ArlibCommunity.Algorithms.CV18
 # Analytic core of the CV18 base run
 
 All operational, measure-theoretic, warm-start, terminal-moment, and structural
-query-count obligations have been discharged before this point. The public
-theorem in this module makes the remaining quantitative content explicit as
-hypotheses: the log-concave truncation tail, sharp phase-amortized ratio
-moments, ball-walk mixing, and dependent product accuracy.
+query-count obligations have been discharged before this point.  The radial
+tail and sharp phase-amortized ratio moments are also discharged.  The public
+theorem in this module makes the remaining dependent ball-walk estimate
+explicit as one hypothesis.
 -/
 
 /-- A strong, reusable sufficient condition for the post-initial sampling
@@ -119,8 +120,8 @@ theorem figureOne_base_accuracy_of_analytic_inputs
       apply ENNReal.ofReal_le_ofReal
       norm_num
 
-/-- The accelerated localization/moment input is now discharged
-unconditionally; only radial truncation and post-initial walk mixing remain. -/
+/-- The accelerated localization/moment input is discharged unconditionally;
+this intermediate form keeps radial truncation explicit for reuse. -/
 theorem figureOne_base_accuracy_of_truncation_and_mixing
     (q : VolumeParams) (I : VolumeInput q.n)
     (oracle : MembershipOracle I)
@@ -135,12 +136,28 @@ theorem figureOne_base_accuracy_of_truncation_and_mixing
   figureOne_base_accuracy_of_analytic_inputs q I oracle
     (figureOneSharpAcceleratedMoments q I) htrunc hmixing
 
+/-- The complete Figure-1 base-run accuracy theorem, conditional only on the
+post-initial walk bound.  Radial truncation follows from the input's
+well-roundedness promise. -/
+theorem figureOne_base_accuracy_of_mixing
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I)
+    (hrounded : WellRounded q I)
+    (hmixing : FigureOnePostInitialMixingBound q I oracle) :
+    3 / 4 ≤
+      outcomeProbability
+        (volumeAlgorithmLaw
+          (fun q => baseVolumeCooling figureOnePrimitives
+            explicitVolumeCoolingSchedule q) q I oracle)
+        (accurateOutcome q I) :=
+  figureOne_base_accuracy_of_truncation_and_mixing q I oracle
+    (figureOneRadialTruncationBound q I hrounded) hmixing
+
 /-!
-The unconditional CV18 capstone is intentionally not asserted here. Closing it
-requires proofs of `FigureOneRadialTruncationBound` and
-`FigureOnePostInitialMixingBound` from the paper's radial-tail and lazy
-ball-walk arguments. The accelerated localization input is discharged in
-`VolumeProofSharpMoments`.
+The unconditional CV18 capstone is intentionally not asserted here.  The
+radial-tail and accelerated-localization inputs are discharged.  Closing the
+capstone now requires only `FigureOnePostInitialMixingBound` for the executable
+walk.
 -/
 
 end ArlibCommunity.Algorithms.CV18
