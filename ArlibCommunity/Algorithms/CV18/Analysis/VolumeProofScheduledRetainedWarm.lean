@@ -275,10 +275,134 @@ theorem map_scheduledBalancedAcceptedTarget_scale_isWarm_eight
         norm_num
       rw [← mul_assoc, hcoef]
 
+/-- Concrete final-parameter transition domination before the KLS target is
+replaced by the restricted Gaussian.  Keeping this accepted target is what
+allows the chronological good path to remain warm phase after phase. -/
+theorem bind_figureOneFinalScheduledBalancedTransition_leUpTo_acceptedTarget
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (rho : Measure (AmbientSpace q.n)) [IsProbabilityMeasure rho]
+    (hbaseWarm : Arlib.IsWarm
+      (ENNReal.ofReal (8 * speedyAdjacentWarmConstant q)) rho
+      (ellGaussianProb
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)) :
+    ∀ mu : Measure (AmbientSpace q.n),
+      IsProbabilityMeasure mu → Arlib.IsWarm 2 mu rho →
+      MeasureLeUpTo
+        (mu.bind
+          (scheduledBalancedAccuracyTransitionLawAux q I sigma2
+            (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+            (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+            (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)))
+        ((scheduledBalancedAccuracyGaussianAcceptedTargetLaw q I sigma2
+          (ellGaussianProb
+            (figureOneScheduledPhaseBody q I sigma2)
+            (figureOneScheduledProposalRadius q sigma2) sigma2)).map some)
+        (figureOneCorrectedTransitionBudget q) := by
+  intro mu hmu hwarm
+  let _ : IsProbabilityMeasure mu := hmu
+  let attempts := figureOneSafeRetryCount q - 1
+  let proposalCap :=
+    figureOneFinalScheduledBalancedParameters.proposalCap q sigma2
+  let properStride :=
+    figureOneFinalScheduledBalancedParameters.properStride q sigma2
+  let K := figureOneScheduledPhaseBody q I sigma2
+  let delta := figureOneScheduledProposalRadius q sigma2
+  let pi := ellGaussianProb K delta sigma2
+  have hproposalCap : 0 < proposalCap := by
+    simpa [proposalCap] using
+      figureOneFinalScheduledBalancedParameters_proposalCap_pos q sigma2
+  have hfirst : MeasureLeUpTo
+      ((mu.bind
+        (scheduledBalancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+          properStride)).map optionSnd)
+      (pi.map some) (2 * figureOneCorrectedBlockBudget q attempts) := by
+    exact scheduledBalancedFirstBlock_leUpTo_stationary
+      q I hsigma2 proposalCap properStride attempts hproposalCap rho
+        hbaseWarm
+        (by
+          simpa [properStride, attempts,
+            figureOneFinalScheduledBalancedParameters_properStride] using
+            figureOneScheduledCorrectedFirstWalkRequirement_le_stride
+              q sigma2 attempts)
+        (by
+          simpa [properStride, proposalCap, attempts] using
+            figureOneFinalScheduled_firstCapBudget q sigma2)
+        mu hmu hwarm
+  have hretry :
+      let rejected := scheduledBalancedRejectedStateMeasure q I sigma2 pi
+      let rejectedProb := Arlib.condOn rejected Set.univ
+      MeasureLeUpTo
+        ((rejectedProb.bind
+          (scheduledBalancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+            properStride)).map optionSnd)
+        (pi.map some) (2 * figureOneCorrectedBlockBudget q attempts) := by
+    simpa [K, delta, pi] using
+      scheduledBalancedRejectedRetryBlock_leUpTo_stationary
+        q I hsigma2 proposalCap properStride attempts hproposalCap
+          (by
+            simpa [properStride, attempts,
+              figureOneFinalScheduledBalancedParameters_properStride] using
+              figureOneScheduledCorrectedRetryWalkRequirement_le_stride
+                q sigma2 attempts)
+          (by
+            simpa [properStride, proposalCap, attempts] using
+              figureOneFinalScheduled_retryCapBudget q sigma2)
+  have hdelta : 0 < delta := figureOneScheduledProposalRadius_pos q hsigma2
+  have hmass0 : ellGaussianMeasure K delta sigma2 Set.univ ≠ 0 := by
+    dsimp [K]
+    exact ellGaussianMeasure_univ_ne_zero
+      (figureOneScheduledPhaseBody_measurable q I sigma2)
+      (figureOneScheduledPhaseBody_convex q I sigma2)
+      (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+      (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+      hdelta sigma2
+  have hmasstop : ellGaussianMeasure K delta sigma2 Set.univ ≠ ⊤ := by
+    dsimp [K]
+    exact ellGaussianMeasure_ne_top_cv18
+      (figureOneScheduledPhaseBody_volume_ne_top q I sigma2) delta hsigma2
+  let _ : IsProbabilityMeasure pi :=
+    isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
+  have haccepted : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      scheduledBalancedAcceptedStateMeasure q I sigma2 pi Set.univ := by
+    simpa [K, delta, pi] using
+      scheduledBalancedAcceptedStateMeasure_mass_ge q I hsigma2
+  have hreject :
+      scheduledBalancedRejectedStateMeasure q I sigma2 pi Set.univ ≤
+        ENNReal.ofReal (121 / 128 : ℝ) :=
+    scheduledBalancedRejectedStateMeasure_mass_le
+      q I hsigma2 pi haccepted
+  have hrejectOne :
+      scheduledBalancedRejectedStateMeasure q I sigma2 pi Set.univ ≤ 1 :=
+    hreject.trans (by norm_num)
+  have htail :
+      (scheduledBalancedRejectedStateMeasure q I sigma2 pi Set.univ) ^
+          (attempts + 1) ≤ figureOneCorrectedRetryTailBudget q := by
+    simpa [attempts] using figureOneSafeRetryTail_le q hreject
+  have hdom := bind_scheduledBalancedTransition_leUpTo_acceptedTarget
+    q I hsigma2 proposalCap properStride attempts mu pi haccepted
+      (scheduledBalancedRejectedStateMeasure_mass_ge_half q I hsigma2 pi)
+      hfirst hretry
+  have hbudget := scheduledBalancedTransitionError_with_cap_le_budget
+    q hrejectOne htail
+  have hpre :
+      (2 * figureOneCorrectedBlockBudget q attempts) +
+          scheduledBalancedRejectedStateMeasure q I sigma2 pi Set.univ *
+            balancedRetryError (2 * figureOneCorrectedBlockBudget q attempts)
+              (scheduledBalancedRejectedStateMeasure q I sigma2 pi Set.univ)
+              attempts ≤ figureOneCorrectedTransitionBudget q := by
+    exact (self_le_add_right _
+      (scheduledBalancedStationaryTargetError q)).trans hbudget
+  have hresult := hdom.mono_error hpre
+  simpa [proposalCap, properStride, attempts,
+    Nat.sub_add_cancel (figureOneSafeRetryCount_pos q), K, delta, pi] using hresult
+
 #print axioms TVLe.withDensity_mass_ge_two_sevenths_cv18
 #print axioms scheduledAccuracyPhase_stationary_acceptance_ge_one_eighth
 #print axioms scheduledBalancedAcceptedStateMeasure_mass_ge_one_sixteenth
 #print axioms map_scheduledBalancedAcceptedTarget_scale_eq
 #print axioms map_scheduledBalancedAcceptedTarget_scale_isWarm_eight
+#print axioms bind_figureOneFinalScheduledBalancedTransition_leUpTo_acceptedTarget
 
 end ArlibCommunity.Algorithms.CV18
