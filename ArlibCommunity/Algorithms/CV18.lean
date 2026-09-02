@@ -25,6 +25,8 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofCappedDominance
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyImportanceConcentration
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPairedProgram
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPairedRatio
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPairedPhases
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPairedCost
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFreshPhaseStart
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofStrongInitialWarmStart
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofGlobalQueryCap
