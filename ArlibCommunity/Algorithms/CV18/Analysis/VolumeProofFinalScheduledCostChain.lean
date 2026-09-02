@@ -168,6 +168,70 @@ theorem figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
       · simp only [MembershipOracleProgram.runEstimate]
         exact Measure.measurable_dirac.comp measurable_optionSnd
 
+/-- A Gaussian ratio observation and the retained phase kernel give the same
+expectation to every measurable function that depends only on the endpoint.
+This is the measure-level form of erasing the ratio coordinate. -/
+theorem lintegral_optionSnd_scheduledRatioTransition_eq_retainedKernel
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (point : AmbientSpace q.n) (f : Option (AmbientSpace q.n) → ENNReal)
+    (hf : Measurable f) :
+    (∫⁻ result, f (optionSnd result)
+      ∂(scheduledBalancedCoolingRatioTransitionLaw
+        figureOneFinalScheduledBalancedParameters q I
+          (scheduleValue q phase) (scheduleValue q (phase + 1)) point)) =
+      ∫⁻ state, f state
+        ∂(figureOneFinalScheduledCompleteRetainedKernel q I
+          (scheduleValue q phase)
+          (gaussianRatioWeight (scheduleValue q phase)
+            (scheduleValue q (phase + 1)))
+          (figureOnePhaseSampleCount q (scheduleValue q phase) - 1)
+          (some point)) := by
+  have hcount : 0 < figureOnePhaseSampleCount q (scheduleValue q phase) := by
+    unfold figureOnePhaseSampleCount
+    split_ifs
+    · exact figureOneFixedSampleCount_pos q
+    · exact figureOneSampleCount_pos q
+  let collect := scheduledBalancedTransitionCollectLaw q I
+    (scheduleValue q phase)
+    (gaussianRatioWeight (scheduleValue q phase) (scheduleValue q (phase + 1)))
+    (figureOneFinalScheduledBalancedParameters.proposalCap q
+      (scheduleValue q phase))
+    (figureOneFinalScheduledBalancedParameters.properStride q
+      (scheduleValue q phase))
+    (figureOneFinalScheduledBalancedParameters.retryLimit q
+      (scheduleValue q phase))
+    (figureOnePhaseSampleCount q (scheduleValue q phase)) 0
+    (accuracyScaleFactor q • point)
+  let average := balancedCoolingAverage
+    (n := q.n) (figureOnePhaseSampleCount q (scheduleValue q phase))
+  have havg : Measurable average := measurable_balancedCoolingAverage _
+  have hcollect : IsProbabilityMeasure collect :=
+    (scheduledBalancedTransitionCollectLaw_measurable_and_probability
+      q I (scheduleValue_pos q phase)
+        (measurable_gaussianRatioWeight (scheduleValue q phase)
+          (scheduleValue q (phase + 1)))
+        (figureOneFinalScheduledBalancedParameters.proposalCap q
+          (scheduleValue q phase))
+        (figureOneFinalScheduledBalancedParameters.properStride q
+          (scheduleValue q phase))
+        (figureOneFinalScheduledBalancedParameters.retryLimit q
+          (scheduleValue q phase))
+        (figureOnePhaseSampleCount q (scheduleValue q phase))).2 _ _
+  unfold scheduledBalancedCoolingRatioTransitionLaw
+    figureOneFinalScheduledCompleteRetainedKernel
+  rw [Nat.sub_add_cancel hcount]
+  change (∫⁻ result, f (optionSnd result) ∂collect.map average) =
+    ∫⁻ state, f state ∂collect.map optionSnd
+  change (∫⁻ result, (f ∘ optionSnd) result ∂collect.map average) =
+    ∫⁻ state, f state ∂collect.map optionSnd
+  rw [lintegral_map (hf.comp measurable_optionSnd) havg]
+  rw [lintegral_map hf measurable_optionSnd]
+  apply lintegral_congr
+  intro result
+  change f (optionSnd (balancedCoolingAverage
+    (figureOnePhaseSampleCount q (scheduleValue q phase)) result)) = _
+  rw [optionSnd_balancedCoolingAverage]
+
 /-- Execute a consecutive block of Gaussian phases while retaining only the
 optional endpoint. -/
 noncomputable def figureOneFinalScheduledRetainedGaussianChain
