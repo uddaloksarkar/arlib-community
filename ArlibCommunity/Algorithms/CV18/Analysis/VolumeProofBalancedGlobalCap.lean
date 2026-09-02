@@ -88,15 +88,25 @@ theorem figureOneGlobalProperStride_pos
     exact Nat.le_ceil _
   exact_mod_cast h
 
-/-- A constant-factor global cutoff.  The factor `64` assigns at most
+/-- Absolute base-run cost constant already used by the explicit Figure-One
+complexity arithmetic in `VolumeProofCost`. -/
+noncomputable def figureOneGlobalExpectedCostConstant : ℝ := 10 ^ 25
+
+theorem figureOneGlobalExpectedCostConstant_pos :
+    0 < figureOneGlobalExpectedCostConstant := by
+  norm_num [figureOneGlobalExpectedCostConstant]
+
+/-- A constant-factor global cutoff.  The outer factor `64` assigns at most
 `1/64` failure probability to exhausting the complete-run budget. -/
 noncomputable def figureOneGlobalQueryBudget (q : VolumeParams) : ℕ :=
-  Nat.ceil (64 * volumeBaseComplexityRate q)
+  Nat.ceil (64 * figureOneGlobalExpectedCostConstant *
+    volumeBaseComplexityRate q)
 
 theorem figureOneGlobalQueryBudget_pos (q : VolumeParams) :
     0 < figureOneGlobalQueryBudget q := by
   apply Nat.ceil_pos.mpr
-  positivity [volumeBaseComplexityRate_pos_balanced q]
+  positivity [figureOneGlobalExpectedCostConstant_pos,
+    volumeBaseComplexityRate_pos_balanced q]
 
 /-- Finite local syntax parameters.  Each one-block collector internally
 uses `proposalCap + 1` raw proposals.  This places its intended exhaustion
@@ -171,7 +181,8 @@ def FigureOneBalancedExpectedQueryCost
     Prop :=
   ∫⁻ outcome, (outcome.2 : ENNReal)
       ∂((figureOneGlobalBalancedBaseProgram q).run oracle.query) ≤
-    ENNReal.ofReal (volumeBaseComplexityRate q)
+    ENNReal.ofReal (figureOneGlobalExpectedCostConstant *
+      volumeBaseComplexityRate q)
 
 /-- The global cutoff failure satisfies the raw multiplicative Markov bound.
 No phase count or sample count is paid in its probability budget. -/
@@ -189,9 +200,11 @@ theorem figureOneGloballyCappedBalancedBaseProgram_mul_failure_le_cost
       (figureOneGlobalQueryBudget q) hmeas.executionMeasurable
 
 theorem figureOneGlobalQueryBudget_rate_lower (q : VolumeParams) :
-    ENNReal.ofReal (64 * volumeBaseComplexityRate q) ≤
+    ENNReal.ofReal (64 * figureOneGlobalExpectedCostConstant *
+      volumeBaseComplexityRate q) ≤
       (figureOneGlobalQueryBudget q + 1 : ENNReal) := by
-  have hceil : 64 * volumeBaseComplexityRate q ≤
+  have hceil : 64 * figureOneGlobalExpectedCostConstant *
+      volumeBaseComplexityRate q ≤
       (figureOneGlobalQueryBudget q : ℝ) := Nat.le_ceil _
   have h := ENNReal.ofReal_le_ofReal hceil
   rw [ENNReal.ofReal_natCast] at h
@@ -210,17 +223,19 @@ theorem figureOneGloballyCappedBalancedBaseProgram_failure_le
     (hcost : FigureOneBalancedExpectedQueryCost q I oracle) :
     (figureOneGloballyCappedBalancedBaseProgram q).runEstimate
         oracle.query {none} ≤ ENNReal.ofReal (1 / 64 : ℝ) := by
-  let R := ENNReal.ofReal (volumeBaseComplexityRate q)
+  let R := ENNReal.ofReal (figureOneGlobalExpectedCostConstant *
+    volumeBaseComplexityRate q)
   let failure := (figureOneGloballyCappedBalancedBaseProgram q).runEstimate
     oracle.query {none}
   have hR0 : R ≠ 0 := by
     exact ENNReal.ofReal_ne_zero_iff.mpr
-      (volumeBaseComplexityRate_pos_balanced q)
+      (mul_pos figureOneGlobalExpectedCostConstant_pos
+        (volumeBaseComplexityRate_pos_balanced q))
   have hRtop : R ≠ ⊤ := ENNReal.ofReal_ne_top
   have hbudget : ENNReal.ofReal (64 : ℝ) * R ≤
       (figureOneGlobalQueryBudget q + 1 : ENNReal) := by
     rw [← ENNReal.ofReal_mul (by norm_num : (0 : ℝ) ≤ 64)]
-    exact figureOneGlobalQueryBudget_rate_lower q
+    simpa [mul_assoc] using figureOneGlobalQueryBudget_rate_lower q
   have hmarkov := figureOneGloballyCappedBalancedBaseProgram_mul_failure_le_cost
     q I oracle hmeas
   have hcost' : (∫⁻ outcome, (outcome.2 : ENNReal)
