@@ -5,6 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofChronologicalBalancedPrefixes
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledRetryKernel
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCoolingPrimitives
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledParameters
 
 /-!
 # Chronological complete-phase law at the schedule-targeted geometry
@@ -953,6 +954,74 @@ theorem figureOneScheduledActualChronologicalIteration_map_output
         (scheduledBalancedForwardPhaseKernel parameters q I) by rfl]
   rw [scheduledChronologicalActualIteration_map_snd]
 
+noncomputable def finiteHorizonKernel
+    {S : Type*} [MeasurableSpace S]
+    (horizon : ℕ) (inside outside : ℕ → S → Measure S) :
+    ℕ → S → Measure S := fun phase =>
+  if phase < horizon then inside phase else outside phase
+
+theorem iteratedKernelLaw_congr_finiteHorizon
+    {S : Type*} [MeasurableSpace S]
+    (K L : ℕ → S → Measure S) (initial : Measure S)
+    (hKL : ∀ phase, phase < horizon → K phase = L phase) :
+    ∀ phases, phases ≤ horizon →
+      iteratedKernelLaw K initial phases =
+        iteratedKernelLaw L initial phases := by
+  intro phases hphases
+  induction phases with
+  | zero => rfl
+  | succ phases ih =>
+      rw [iteratedKernelLaw_succ, iteratedKernelLaw_succ,
+        ih (Nat.le_of_succ_le hphases), hKL phases (by omega)]
+
+/-- Cap the actual kernel outside the consumed phase horizon by the ideal
+kernel.  This makes the exact-chance premise honestly finite. -/
+noncomputable def figureOneFiniteScheduledActualChronologicalPhaseKernel
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :=
+  finiteHorizonKernel (figureOneDependentPhaseCount q)
+    (figureOneScheduledActualChronologicalPhaseKernel parameters q I)
+    (figureOneIdealChronologicalPhaseKernel q)
+
+theorem figureOneFiniteScheduledActualChronologicalPhaseKernel_measurable_and_probability
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase : ℕ) :
+    Measurable
+      (figureOneFiniteScheduledActualChronologicalPhaseKernel
+        parameters q I phase) ∧
+    ∀ state, IsProbabilityMeasure
+      (figureOneFiniteScheduledActualChronologicalPhaseKernel
+        parameters q I phase state) := by
+  unfold figureOneFiniteScheduledActualChronologicalPhaseKernel
+    finiteHorizonKernel
+  split_ifs
+  · exact figureOneScheduledActualChronologicalPhaseKernel_measurable_and_probability
+      parameters q I phase
+  · exact figureOneIdealChronologicalPhaseKernel_measurable_and_probability
+      q phase
+
+theorem figureOneFiniteScheduledActualChronologicalIteration_map_output
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    (iteratedKernelLaw
+        (figureOneFiniteScheduledActualChronologicalPhaseKernel parameters q I)
+        (scheduledChronologicalCommonInitial q I)
+        (figureOneDependentPhaseCount q)).map
+          (scheduledChronologicalCommonOutput q) =
+      (scheduledBalancedForwardHistoryLaw parameters q I
+        (figureOneDependentPhaseCount q)).map
+          (balancedFigureOneHistoryEstimate q) := by
+  rw [iteratedKernelLaw_congr_finiteHorizon
+    (figureOneFiniteScheduledActualChronologicalPhaseKernel parameters q I)
+    (figureOneScheduledActualChronologicalPhaseKernel parameters q I)
+    (scheduledChronologicalCommonInitial q I)
+    (fun phase hphase => by
+      simp [figureOneFiniteScheduledActualChronologicalPhaseKernel,
+        finiteHorizonKernel, hphase])
+    (figureOneDependentPhaseCount q) le_rfl]
+  exact figureOneScheduledActualChronologicalIteration_map_output
+    parameters q I _
+
 /-- Scheduled mapped-law capstone before the executable interpreter
 identifications.  The only probabilistic premise is one complete-phase
 replacement on the fully ideal chronological prefix. -/
@@ -967,7 +1036,7 @@ theorem scheduledPostInitialDirectFailureBound_of_phaseIteration
         (scheduledBalancedForwardHistoryLaw parameters q I
           (figureOneDependentPhaseCount q)).map
             (balancedFigureOneHistoryEstimate q))
-    (hphase : ∀ phase,
+    (hphase : ∀ phase, phase < figureOneDependentPhaseCount q →
       MeasureLeUpTo
         ((iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
           (scheduledChronologicalCommonInitial q I) phase).bind
@@ -978,26 +1047,41 @@ theorem scheduledPostInitialDirectFailureBound_of_phaseIteration
         (figureOnePhaseReplacementBudget q)) :
     FigureOnePostInitialDirectFailureBoundFor q I continuation := by
   let actualK :=
-    figureOneScheduledActualChronologicalPhaseKernel parameters q I
+    figureOneFiniteScheduledActualChronologicalPhaseKernel parameters q I
   let idealK := figureOneIdealChronologicalPhaseKernel q
   let initial := scheduledChronologicalCommonInitial q I
   let output := scheduledChronologicalCommonOutput q
+  have hphaseAll : ∀ phase, MeasureLeUpTo
+      ((iteratedKernelLaw idealK initial phase).bind (actualK phase))
+      (iteratedKernelLaw idealK initial (phase + 1))
+      (figureOnePhaseReplacementBudget q) := by
+    intro phase
+    by_cases hp : phase < figureOneDependentPhaseCount q
+    · simpa [actualK, figureOneFiniteScheduledActualChronologicalPhaseKernel,
+        finiteHorizonKernel, hp, idealK, initial] using hphase phase hp
+    · have hrefl : MeasureLeUpTo
+          ((iteratedKernelLaw idealK initial phase).bind (idealK phase))
+          ((iteratedKernelLaw idealK initial phase).bind (idealK phase))
+          (figureOnePhaseReplacementBudget q) :=
+        (MeasureLeUpTo.refl _).mono_error bot_le
+      simpa [actualK, figureOneFiniteScheduledActualChronologicalPhaseKernel,
+        finiteHorizonKernel, hp, iteratedKernelLaw_succ] using hrefl
   have htransfer := MeasureLeUpTo.map_figureOnePhaseIteration q
     actualK idealK initial
     (fun phase =>
-      (figureOneScheduledActualChronologicalPhaseKernel_measurable_and_probability
+      (figureOneFiniteScheduledActualChronologicalPhaseKernel_measurable_and_probability
         parameters q I phase).1)
     (fun phase state =>
-      (figureOneScheduledActualChronologicalPhaseKernel_measurable_and_probability
+      (figureOneFiniteScheduledActualChronologicalPhaseKernel_measurable_and_probability
         parameters q I phase).2 state)
-    hphase output (measurable_scheduledChronologicalCommonOutput q)
+    hphaseAll output (measurable_scheduledChronologicalCommonOutput q)
   rw [show (iteratedKernelLaw actualK initial
           (figureOneDependentPhaseCount q)).map output =
         (scheduledBalancedForwardHistoryLaw parameters q I
           (figureOneDependentPhaseCount q)).map
             (balancedFigureOneHistoryEstimate q) by
-      exact figureOneScheduledActualChronologicalIteration_map_output
-        parameters q I _,
+      exact figureOneFiniteScheduledActualChronologicalIteration_map_output
+        parameters q I,
     show (iteratedKernelLaw idealK initial
           (figureOneDependentPhaseCount q)).map output =
         (figureOneIdealExperimentLaw q I).map
@@ -1065,7 +1149,7 @@ theorem scheduledPostInitialDirectFailureBound_of_phaseIteration
 
 /-- Base-run form of the scheduled mapped-law capstone.  The initial fallback
 uses `eps/64`, so the post-initial `3/16` guarantee becomes `13/64`. -/
-theorem figureOneScheduledBalancedBase_failure_le_of_phaseIteration
+theorem figureOneFinalScheduledBalancedBase_failure_le_of_phaseIteration
     (q : VolumeParams) (I : VolumeInput q.n)
     (oracle : MembershipOracle I) (hrounded : WellRounded q I)
     (continuation : AmbientSpace q.n → Measure ℝ)
@@ -1076,26 +1160,27 @@ theorem figureOneScheduledBalancedBase_failure_le_of_phaseIteration
           (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
           continuation =
         (scheduledBalancedForwardHistoryLaw
-          figureOneScheduledBalancedParameters q I
+          figureOneFinalScheduledBalancedParameters q I
           (figureOneDependentPhaseCount q)).map
             (balancedFigureOneHistoryEstimate q))
     (hbaseLaw :
-      (figureOneScheduledBalancedBaseProgram q).runEstimate oracle.query =
+      (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query =
         ((initialGaussianSamplingMeasure q).map
           (initialTruncatedFallback q I)).bind continuation)
-    (hphase : ∀ phase,
+    (hphase : ∀ phase, phase < figureOneDependentPhaseCount q →
       MeasureLeUpTo
         ((iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
           (scheduledChronologicalCommonInitial q I) phase).bind
             (figureOneScheduledActualChronologicalPhaseKernel
-              figureOneScheduledBalancedParameters q I phase))
+              figureOneFinalScheduledBalancedParameters q I phase))
         (iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
           (scheduledChronologicalCommonInitial q I) (phase + 1))
         (figureOnePhaseReplacementBudget q)) :
-    (figureOneScheduledBalancedBaseProgram q).runEstimate oracle.query
+    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
         (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
   have hpost := scheduledPostInitialDirectFailureBound_of_phaseIteration
-    figureOneScheduledBalancedParameters q I hrounded continuation hpostLaw hphase
+    figureOneFinalScheduledBalancedParameters q I hrounded continuation
+      hpostLaw hphase
   have hinitial := initialTruncatedFallback_bind_apply_le q I continuation
     hcontinuationMeas hcontinuationProb (accurateOutcome q I)ᶜ
     (accurateOutcome_measurable q I).compl
@@ -1305,7 +1390,7 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms scheduledChronologicalActualIteration_map_snd
 #print axioms figureOneIdealChronologicalIteration_map_output
 #print axioms scheduledPostInitialDirectFailureBound_of_phaseIteration
-#print axioms figureOneScheduledBalancedBase_failure_le_of_phaseIteration
+#print axioms figureOneFinalScheduledBalancedBase_failure_le_of_phaseIteration
 
 end
 
