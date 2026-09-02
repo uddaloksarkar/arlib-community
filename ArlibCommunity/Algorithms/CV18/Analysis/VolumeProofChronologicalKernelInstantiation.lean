@@ -349,6 +349,192 @@ theorem iteratedKernelLaw_figureOneChronologicalIdealKernel
 
 /-! ## Concrete balanced post-initial history law -/
 
+theorem measurableSet_balancedCoolingHistoryHasProduct (m : ℕ) :
+    MeasurableSet {history : Option (BalancedCoolingHistory n) |
+      BalancedCoolingHistoryHasProduct m history} := by
+  let A : Set (BalancedCoolingHistory n) := {history |
+    history.2.1 = m ∧
+      history.2.2.1 = ∏ j ∈ Finset.range m, history.1 j}
+  have hcount : Measurable fun history : BalancedCoolingHistory n =>
+      history.2.1 := by fun_prop
+  have hproduct : Measurable fun history : BalancedCoolingHistory n =>
+      history.2.2.1 := by fun_prop
+  have hsequence : Measurable fun history : BalancedCoolingHistory n =>
+      ∏ j ∈ Finset.range m, history.1 j := by fun_prop
+  have hA : MeasurableSet A :=
+    (measurableSet_eq_fun hcount measurable_const).inter
+      (measurableSet_eq_fun hproduct hsequence)
+  rw [show {history : Option (BalancedCoolingHistory n) |
+      BalancedCoolingHistoryHasProduct m history} =
+      {none} ∪ optionSomeEvent A by
+    ext history
+    cases history <;> simp [BalancedCoolingHistoryHasProduct,
+      optionSomeEvent, A]]
+  exact measurableSet_option_none.union (measurableSet_optionSomeEvent hA)
+
+/-- Every history produced by the recursive Gaussian cooling law stores the
+exact product of precisely the phases it contains. -/
+theorem balancedCoolingHistoryLaw_ae_hasProduct
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    ∀ variances : List ℝ,
+      (∀ sigma2 ∈ variances, 0 < sigma2) →
+      ∀ point, ∀ᵐ history ∂balancedCoolingHistoryLaw parameters q I variances point,
+        BalancedCoolingHistoryHasProduct (variances.length - 1) history := by
+  intro variances
+  induction variances with
+  | nil =>
+      intro _ point
+      rw [balancedCoolingHistoryLaw]
+      apply (ae_dirac_iff
+        (measurableSet_balancedCoolingHistoryHasProduct 0)).2
+      simp [BalancedCoolingHistoryHasProduct]
+  | cons sigma2 rest ih =>
+      cases rest with
+      | nil =>
+          intro _ point
+          rw [balancedCoolingHistoryLaw]
+          apply (ae_dirac_iff
+            (measurableSet_balancedCoolingHistoryHasProduct 0)).2
+          simp [BalancedCoolingHistoryHasProduct]
+      | cons tau2 tail =>
+          intro hpositive point
+          have htailPositive : ∀ s ∈ tau2 :: tail, 0 < s := by
+            intro s hs
+            exact hpositive s (by simp [hs])
+          let continuation : Option (ℝ × AmbientSpace q.n) →
+              Measure (Option (BalancedCoolingHistory q.n)) := fun phase =>
+            match phase with
+            | none => Measure.dirac none
+            | some (ratio, nextPoint) =>
+                (balancedCoolingHistoryLaw parameters q I
+                  (tau2 :: tail) nextPoint).map
+                    (balancedCoolingHistoryCons ratio)
+          have hcontinuation : Measurable continuation := by
+            have htailLaw := balancedCoolingHistoryLaw_measurable_and_probability
+              parameters q I (tau2 :: tail) htailPositive
+            have hsome : Measurable fun value : ℝ × AmbientSpace q.n =>
+                (balancedCoolingHistoryLaw parameters q I
+                  (tau2 :: tail) value.2).map
+                    (balancedCoolingHistoryCons value.1) := by
+              apply measurable_measure_map_param_variable
+              · exact htailLaw.1.comp measurable_snd
+              · intro value
+                exact htailLaw.2 value.2
+              · exact measurable_balancedCoolingHistoryCons.comp
+                  ((measurable_fst.comp measurable_fst).prodMk measurable_snd)
+            convert Measurable.optionElim
+              (Measure.dirac (none : Option (BalancedCoolingHistory q.n)))
+                hsome using 1
+            funext phase
+            cases phase <;> rfl
+          let source := balancedCoolingRatioLaw parameters q I sigma2 tau2 point
+          let good : Set (Option (BalancedCoolingHistory q.n)) :=
+            {history | BalancedCoolingHistoryHasProduct
+              ((sigma2 :: tau2 :: tail).length - 1) history}
+          have hgood : MeasurableSet good :=
+            measurableSet_balancedCoolingHistoryHasProduct _
+          rw [balancedCoolingHistoryLaw]
+          apply MeasureTheory.mem_ae_iff.mpr
+          change (source.bind continuation) goodᶜ = 0
+          rw [Measure.bind_apply hgood.compl hcontinuation.aemeasurable]
+          apply lintegral_eq_zero_of_ae_eq_zero
+          filter_upwards with phase
+          cases phase with
+          | none =>
+              rw [Measure.dirac_apply' _ hgood.compl]
+              simp [good, BalancedCoolingHistoryHasProduct]
+          | some value =>
+              have htail := ih htailPositive value.2
+              have htarget : ∀ᵐ history ∂
+                  (balancedCoolingHistoryLaw parameters q I
+                    (tau2 :: tail) value.2).map
+                      (balancedCoolingHistoryCons value.1),
+                  BalancedCoolingHistoryHasProduct
+                    ((sigma2 :: tau2 :: tail).length - 1) history := by
+                apply (ae_map_iff
+                  (measurable_balancedCoolingHistoryCons.comp
+                    (measurable_const.prodMk measurable_id)).aemeasurable
+                  (measurableSet_balancedCoolingHistoryHasProduct
+                    ((sigma2 :: tau2 :: tail).length - 1))).2
+                filter_upwards [htail] with history hhistory
+                simpa using hhistory.cons value.1
+              exact MeasureTheory.mem_ae_iff.mp htarget
+
+theorem balancedFigureOneFullHistoryLaw_ae_hasProduct
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (point : AmbientSpace q.n) :
+    ∀ᵐ history ∂balancedFigureOneFullHistoryLaw parameters q I point,
+      BalancedCoolingHistoryHasProduct
+        (figureOneDependentPhaseCount q) history := by
+  let m := terminalPhaseSteps q
+  have hcooling0 := balancedCoolingHistoryLaw_ae_hasProduct
+    parameters q I (explicitVolumeCoolingSchedule q).variances
+      (explicitVolumeCoolingSchedule q).positive point
+  have hcooling : ∀ᵐ history ∂
+      balancedFigureOneCoolingHistoryLaw parameters q I point,
+      BalancedCoolingHistoryHasProduct m history := by
+    simpa [balancedFigureOneCoolingHistoryLaw, explicitVolumeCoolingSchedule,
+      explicitScheduleVariances, m] using hcooling0
+  let continuation : Option (BalancedCoolingHistory q.n) →
+      Measure (Option (BalancedCoolingHistory q.n)) := fun history =>
+    match history with
+    | none => Measure.dirac none
+    | some value =>
+        (balancedCoolingUniformLawWithState parameters q I
+          (terminalVariance q) value.2.2.2).map
+            (balancedCoolingHistorySnocTerminal value)
+  have hcontinuation : Measurable continuation := by
+    have hterminal := balancedCoolingUniformLawWithState_measurable_and_probability
+      parameters q I (terminalVariance_pos' q)
+    have hsome : Measurable fun value : BalancedCoolingHistory q.n =>
+        (balancedCoolingUniformLawWithState parameters q I
+          (terminalVariance q) value.2.2.2).map
+            (balancedCoolingHistorySnocTerminal value) := by
+      apply measurable_measure_map_param_variable
+      · exact hterminal.1.comp <|
+          measurable_snd.comp (measurable_snd.comp
+            (measurable_snd.comp measurable_id))
+      · intro value
+        exact hterminal.2 value.2.2.2
+      · exact measurable_balancedCoolingHistorySnocTerminal.comp
+          (measurable_fst.prodMk measurable_snd)
+    convert Measurable.optionElim
+      (Measure.dirac (none : Option (BalancedCoolingHistory q.n))) hsome using 1
+    funext history
+    cases history <;> rfl
+  let source := balancedFigureOneCoolingHistoryLaw parameters q I point
+  let good : Set (Option (BalancedCoolingHistory q.n)) :=
+    {history | BalancedCoolingHistoryHasProduct
+      (figureOneDependentPhaseCount q) history}
+  have hgood : MeasurableSet good :=
+    measurableSet_balancedCoolingHistoryHasProduct _
+  unfold balancedFigureOneFullHistoryLaw
+  apply MeasureTheory.mem_ae_iff.mpr
+  change (source.bind continuation) goodᶜ = 0
+  rw [Measure.bind_apply hgood.compl hcontinuation.aemeasurable]
+  apply lintegral_eq_zero_of_ae_eq_zero
+  filter_upwards [hcooling] with history hhistory
+  cases history with
+  | none =>
+      rw [Measure.dirac_apply' _ hgood.compl]
+      simp [good, BalancedCoolingHistoryHasProduct]
+  | some value =>
+      have htarget : ∀ᵐ result ∂
+          (balancedCoolingUniformLawWithState parameters q I
+            (terminalVariance q) value.2.2.2).map
+              (balancedCoolingHistorySnocTerminal value),
+          BalancedCoolingHistoryHasProduct
+            (figureOneDependentPhaseCount q) result := by
+        apply (ae_map_iff
+          (measurable_balancedCoolingHistorySnocTerminal.comp
+            (measurable_const.prodMk measurable_id)).aemeasurable
+          (measurableSet_balancedCoolingHistoryHasProduct _)).2
+        filter_upwards with terminal
+        simpa [figureOneDependentPhaseCount, m] using
+          hhistory.snocTerminal terminal
+      exact MeasureTheory.mem_ae_iff.mp htarget
+
 /-- Complete balanced history after a genuinely restricted-Gaussian initial
 point.  This is the actual post-initial probability space used by the direct
 failure argument. -/
@@ -370,6 +556,32 @@ theorem balancedFigureOnePostInitialHistoryLaw_isProbabilityMeasure
       parameters q I).1.aemeasurable
     (ae_of_all _ (balancedFigureOneFullHistoryLaw_measurable_and_probability
       parameters q I).2)
+
+theorem balancedFigureOnePostInitialHistoryLaw_ae_hasProduct
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    ∀ᵐ history ∂balancedFigureOnePostInitialHistoryLaw parameters q I,
+      BalancedCoolingHistoryHasProduct
+        (figureOneDependentPhaseCount q) history := by
+  let source := (truncatedGaussianProbability q I (initialVariance q)
+    (initialVariance_pos q) : Measure (AmbientSpace q.n))
+  let kernel := balancedFigureOneFullHistoryLaw parameters q I
+  let good : Set (Option (BalancedCoolingHistory q.n)) :=
+    {history | BalancedCoolingHistoryHasProduct
+      (figureOneDependentPhaseCount q) history}
+  have hgood : MeasurableSet good :=
+    measurableSet_balancedCoolingHistoryHasProduct _
+  have hkernel : Measurable kernel :=
+    (balancedFigureOneFullHistoryLaw_measurable_and_probability
+      parameters q I).1
+  unfold balancedFigureOnePostInitialHistoryLaw
+  apply MeasureTheory.mem_ae_iff.mpr
+  change (source.bind kernel) goodᶜ = 0
+  rw [Measure.bind_apply hgood.compl hkernel.aemeasurable]
+  apply lintegral_eq_zero_of_ae_eq_zero
+  filter_upwards with point
+  exact MeasureTheory.mem_ae_iff.mp
+    (balancedFigureOneFullHistoryLaw_ae_hasProduct parameters q I point)
 
 /-- The interpreter law of the balanced continuation is exactly the scalar
 map of the complete chronological history law. -/
@@ -548,9 +760,6 @@ theorem balancedFigureOnePostInitialDirectFailureBound_of_mappedLaw
     (parameters : BalancedCoolingParameters) (q : VolumeParams)
     (I : VolumeInput q.n) (oracle : MembershipOracle I)
     (hrounded : WellRounded q I)
-    (hproduct : ∀ᵐ history ∂balancedFigureOnePostInitialHistoryLaw parameters q I,
-      BalancedCoolingHistoryHasProduct
-        (figureOneDependentPhaseCount q) history)
     (htransfer : MeasureLeUpTo
       ((balancedFigureOnePostInitialHistoryLaw parameters q I).map
         (fun history => initialGaussianIntegral q *
@@ -569,15 +778,133 @@ theorem balancedFigureOnePostInitialDirectFailureBound_of_mappedLaw
           oracle.query) :=
   balancedFigureOnePostInitialDirectFailureBound_of_idealMappedProductLe
     parameters q I oracle (figureOneRadialTruncationBound q I hrounded)
-      (figureOneSharpAcceleratedMoments q I) hproduct htransfer
+      (figureOneSharpAcceleratedMoments q I)
+      (balancedFigureOnePostInitialHistoryLaw_ae_hasProduct parameters q I)
+      htransfer
+
+/-- The initial fallback costs at most `eps / 64`; hence the balanced base
+run fails with probability at most `13/64` once the direct post-initial
+contract has been established. -/
+theorem balancedFigureOneBase_failure_le_of_directPostInitial
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (hpost : FigureOnePostInitialDirectFailureBoundFor q I
+      (fun point =>
+        (balancedFigureOnePointContinuation parameters q point).runEstimate
+          oracle.query)) :
+    (baseVolumeCooling (balancedCoolingPrimitives parameters)
+        explicitVolumeCoolingSchedule q).runEstimate oracle.query
+          (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  let K : AmbientSpace q.n → Measure ℝ := fun point =>
+    (balancedFigureOnePointContinuation parameters q point).runEstimate
+      oracle.query
+  have hfull := balancedFigureOneFullHistoryLaw_measurable_and_probability
+    parameters q I
+  have hestimate := measurable_balancedFigureOneHistoryEstimate q
+  have hK : Measurable K := by
+    rw [show K = fun point =>
+        (balancedFigureOneFullHistoryLaw parameters q I point).map
+          (balancedFigureOneHistoryEstimate q) by
+      funext point
+      exact balancedFigureOnePointContinuation_runEstimate_eq_history_map
+        parameters q I oracle point]
+    exact (Measure.measurable_map _ hestimate).comp hfull.1
+  have hKprob : ∀ point, IsProbabilityMeasure (K point) := by
+    intro point
+    rw [show K point =
+        (balancedFigureOneFullHistoryLaw parameters q I point).map
+          (balancedFigureOneHistoryEstimate q) by
+      exact balancedFigureOnePointContinuation_runEstimate_eq_history_map
+        parameters q I oracle point]
+    let _ : IsProbabilityMeasure
+        (balancedFigureOneFullHistoryLaw parameters q I point) := hfull.2 point
+    exact Measure.isProbabilityMeasure_map hestimate.aemeasurable
+  have hbaseLaw :
+      (baseVolumeCooling (balancedCoolingPrimitives parameters)
+          explicitVolumeCoolingSchedule q).runEstimate oracle.query =
+        ((initialGaussianSamplingMeasure q).map
+          (initialTruncatedFallback q I)).bind K := by
+    rw [balancedFigureOneBaseVolumeCooling_runEstimate_eq_history_map]
+    unfold balancedFigureOneBaseHistoryLaw
+    calc
+      Measure.map (balancedFigureOneHistoryEstimate q)
+          ((initialGaussianSamplingMeasure q).bind (fun proposal =>
+            balancedFigureOneFullHistoryLaw parameters q I
+              (initialTruncatedFallback q I proposal))) =
+          (initialGaussianSamplingMeasure q).bind (fun proposal =>
+            (balancedFigureOneFullHistoryLaw parameters q I
+              (initialTruncatedFallback q I proposal)).map
+                (balancedFigureOneHistoryEstimate q)) :=
+        map_bind_eq_bind_map_of_measurable _
+          (hfull.1.comp (measurable_initialTruncatedFallback q I)) hestimate
+      _ = (initialGaussianSamplingMeasure q).bind
+          (K ∘ initialTruncatedFallback q I) := by
+        congr 1
+        funext proposal
+        exact (balancedFigureOnePointContinuation_runEstimate_eq_history_map
+          parameters q I oracle (initialTruncatedFallback q I proposal)).symm
+      _ = ((initialGaussianSamplingMeasure q).map
+          (initialTruncatedFallback q I)).bind K :=
+        (map_bind_eq_bind_comp _ (initialTruncatedFallback q I)
+          (measurable_initialTruncatedFallback q I) K hK).symm
+  have hinitial := initialTruncatedFallback_bind_apply_le q I K hK hKprob
+    (accurateOutcome q I)ᶜ (accurateOutcome_measurable q I).compl
+  unfold FigureOnePostInitialDirectFailureBoundFor at hpost
+  rw [hbaseLaw]
+  calc
+    ((initialGaussianSamplingMeasure q).map
+        (initialTruncatedFallback q I)).bind K (accurateOutcome q I)ᶜ ≤
+      ((truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind K)
+          (accurateOutcome q I)ᶜ + ENNReal.ofReal (q.eps / 64) := hinitial
+    _ ≤ ENNReal.ofReal (3 / 16 : ℝ) + ENNReal.ofReal (1 / 64 : ℝ) := by
+      exact add_le_add hpost (ENNReal.ofReal_le_ofReal (by
+        have := q.heps.2
+        linarith))
+    _ = ENNReal.ofReal (13 / 64 : ℝ) := by
+      rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 3 / 16)
+        (by norm_num : (0 : ℝ) ≤ 1 / 64)]
+      congr 1
+      norm_num
+
+/-- Concrete base-run failure theorem: after the analytic and history
+assembly, the only remaining probabilistic premise is the finite mapped-law
+replacement bound. -/
+theorem balancedFigureOneBase_failure_le_of_mappedLaw
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (hrounded : WellRounded q I)
+    (htransfer : MeasureLeUpTo
+      ((balancedFigureOnePostInitialHistoryLaw parameters q I).map
+        (fun history => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (balancedCoolingChronologicalPhaseVariable q)
+            (figureOneDependentPhaseCount q) history))
+      ((figureOneIdealExperimentLaw q I).map
+        (fun samples => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (figureOneChronologicalIdealCoordinate q)
+            (figureOneDependentPhaseCount q) samples))
+      (ENNReal.ofReal (1 / 64 : ℝ))) :
+    (baseVolumeCooling (balancedCoolingPrimitives parameters)
+        explicitVolumeCoolingSchedule q).runEstimate oracle.query
+          (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) :=
+  balancedFigureOneBase_failure_le_of_directPostInitial parameters q I oracle
+    (balancedFigureOnePostInitialDirectFailureBound_of_mappedLaw
+      parameters q I oracle hrounded htransfer)
 
 #print axioms figureOneChronologicalIdealTruncatedFinCoordinates_iIndepFun
 #print axioms figureOneChronologicalIdeal_exactIndependence
 #print axioms iteratedKernelLaw_figureOneChronologicalIdealKernel
+#print axioms balancedCoolingHistoryLaw_ae_hasProduct
+#print axioms balancedFigureOneFullHistoryLaw_ae_hasProduct
+#print axioms balancedFigureOnePostInitialHistoryLaw_ae_hasProduct
 #print axioms bind_balancedFigureOnePointContinuation_eq_sampleProduct_map
 #print axioms balancedFigureOnePostInitialDirectFailureBound_of_mappedProductLe
 #print axioms balancedFigureOnePostInitialDirectFailureBound_of_idealMappedProductLe
 #print axioms balancedFigureOnePostInitialDirectFailureBound_of_mappedLaw
+#print axioms balancedFigureOneBase_failure_le_of_directPostInitial
+#print axioms balancedFigureOneBase_failure_le_of_mappedLaw
 
 #print axioms figureOneChronologicalIdealCoordinate_mean
 #print axioms figureOneChronologicalIdealCoordinate_secondMoment_le
