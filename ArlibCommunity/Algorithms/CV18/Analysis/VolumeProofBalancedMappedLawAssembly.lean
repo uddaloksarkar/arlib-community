@@ -557,6 +557,95 @@ theorem approxIndepFun_balancedCompletePhase_of_warm_first
     q I hsigma2 hweight proposalCap properStride retryLimit samples mu target
       (hfirst mu hmu hwarm)
 
+/-- Complete-phase counterpart of
+`approxIndepFun_balancedTransition_history_of_warm_blocks`.  The same KLS
+first/retry block premises are paid only for the first retained transition;
+the remaining `samples` transitions form common postprocessing. -/
+theorem approxIndepFun_balancedCompletePhase_history_of_warm_blocks
+    {H : Type*} [MeasurableSpace H]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (proposalCap properStride attempts samples : ℕ)
+    (history : Measure H) [IsProbabilityMeasure history]
+    (state : H → AmbientSpace q.n) (hstate : Measurable state)
+    (pi : Measure (AmbientSpace q.n)) [IsProbabilityMeasure pi]
+    {firstError retryError : ENNReal}
+    (hfirstError : firstError ≠ ⊤) (hretryError : retryError ≠ ⊤)
+    (hacceptedLower : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      balancedAcceptedStateMeasure q I sigma2 pi Set.univ)
+    (hrejectedLower : (2 : ENNReal)⁻¹ ≤
+      balancedRejectedStateMeasure q I sigma2 pi Set.univ)
+    (hfirstBlock : ∀ mu : Measure (AmbientSpace q.n),
+      IsProbabilityMeasure mu →
+      Arlib.IsWarm 2 mu (history.map state) →
+      MeasureLeUpTo
+        ((mu.bind
+          (balancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+            properStride)).map optionSnd)
+        (pi.map some) firstError)
+    (hretryBlock :
+      let rejected := balancedRejectedStateMeasure q I sigma2 pi
+      let rejectedProb := Arlib.condOn rejected Set.univ
+      MeasureLeUpTo
+        ((rejectedProb.bind
+          (balancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+            properStride)).map optionSnd)
+        (pi.map some) retryError)
+    (pastProduct : H → ℝ)
+    (nextEstimator : Option (ℝ × AmbientSpace q.n) → ℝ)
+    (hpastProduct : Measurable pastProduct)
+    (hnextEstimator : Measurable nextEstimator)
+    (k m : ℕ) (nu : ℝ)
+    (hbudget :
+      let rejectMass :=
+        balancedRejectedStateMeasure q I sigma2 pi Set.univ
+      let error := firstError + rejectMass *
+        balancedRetryError retryError rejectMass attempts
+      (error + error).toReal ≤ 3 * (k : ℝ) * (m : ℝ) * nu) :
+    ApproxIndepFun (3 * (k : ℝ) * (m : ℝ) * nu)
+      (pastProduct ∘ Prod.fst) (nextEstimator ∘ Prod.snd)
+      (sequentialPairLaw history
+        ((fun current =>
+          balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+            properStride (attempts + 1) (samples + 1) 0 current) ∘ state)) := by
+  let rejectMass :=
+    balancedRejectedStateMeasure q I sigma2 pi Set.univ
+  let error := firstError + rejectMass *
+    balancedRetryError retryError rejectMass attempts
+  let target :=
+    (balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 pi).map some
+  have hrejectedTop : rejectMass ≠ ⊤ := by
+    dsimp only [rejectMass]
+    have hle := balancedRejectedStateMeasure_le q I sigma2 pi
+    exact ne_top_of_le_ne_top (measure_ne_top pi Set.univ) <|
+      Measure.le_iff'.mp hle Set.univ
+  have hretryFinite :
+      balancedRetryError retryError rejectMass attempts ≠ ⊤ :=
+    balancedRetryError_ne_top hretryError hrejectedTop attempts
+  have herror : error ≠ ⊤ := by
+    exact ENNReal.add_ne_top.mpr
+      ⟨hfirstError, ENNReal.mul_ne_top hrejectedTop hretryFinite⟩
+  let _ : IsProbabilityMeasure
+      (balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 pi) :=
+    balancedAccuracyGaussianAcceptedTargetLaw_isProbabilityMeasure_of_lower
+      q I hsigma2 pi hacceptedLower
+  let _ : IsProbabilityMeasure target :=
+    Measure.isProbabilityMeasure_map measurable_some.aemeasurable
+  apply approxIndepFun_balancedCompletePhase_of_warm_first
+    q I hsigma2 hweight proposalCap properStride (attempts + 1) samples
+      history state hstate target herror ?_
+      (pastProduct := pastProduct) (nextEstimator := nextEstimator)
+      hpastProduct hnextEstimator k m nu
+  · simpa [error, rejectMass] using hbudget
+  · intro mu hmu hwarm
+    let _ : IsProbabilityMeasure mu := hmu
+    simpa [target, error, rejectMass] using
+      (bind_balancedTransition_leUpTo_acceptedTarget
+        q I hsigma2 proposalCap properStride attempts mu pi
+          hacceptedLower hrejectedLower
+          (hfirstBlock mu hmu hwarm) hretryBlock)
+
 #print axioms MeasureLeUpTo.map_iteratedKernelLaw_of_figureOne_phase_max
 #print axioms figureOnePhaseReplacementBudget_sum_le
 #print axioms MeasureLeUpTo.map_figureOnePhaseIteration
@@ -565,6 +654,7 @@ theorem approxIndepFun_balancedCompletePhase_of_warm_first
 #print axioms balancedFigureOneBase_failure_le_of_lemma717bc
 #print axioms MeasureLeUpTo.bind_balancedAccuracyTransitionCollectLaw_of_first
 #print axioms approxIndepFun_balancedCompletePhase_of_warm_first
+#print axioms approxIndepFun_balancedCompletePhase_history_of_warm_blocks
 
 end
 
