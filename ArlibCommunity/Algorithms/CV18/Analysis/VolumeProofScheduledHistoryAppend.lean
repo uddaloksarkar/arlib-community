@@ -264,6 +264,15 @@ noncomputable def scheduledExecutableFrontHistoryLaw
                     (some ((fun k => if k = head.2.1 then ratio else head.1 k),
                       head.2.1 + 1, head.2.2.1 * ratio, nextPoint))
 
+@[simp] theorem scheduledExecutableFrontHistoryLaw_none
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (offset : ℕ) :
+    ∀ steps,
+      scheduledExecutableFrontHistoryLaw parameters q I offset steps none =
+        Measure.dirac none := by
+  intro steps
+  cases steps <;> rfl
+
 theorem scheduledExecutableCoolingHistoryFrom_segment_eq_front
     (parameters : BalancedCoolingParameters) (q : VolumeParams)
     (I : VolumeInput q.n) (offset : ℕ) :
@@ -311,10 +320,380 @@ theorem scheduledExecutableCoolingHistoryFrom_segment_eq_front
         obtain ⟨i, rfl⟩ := hs
         exact scheduleValue_pos q _
 
+theorem measurable_iteratedKernelLaw_from_firstKernel
+    {S : Type*} [MeasurableSpace S]
+    (K : ℕ → S → Measure S) (hK : ∀ phase, Measurable (K phase)) :
+    ∀ steps,
+      Measurable fun state =>
+        iteratedKernelLaw (fun phase => K (phase + 1)) (K 0 state) steps := by
+  intro steps
+  induction steps with
+  | zero => exact hK 0
+  | succ steps ih =>
+      exact (Measure.measurable_bind' (hK (steps + 1))).comp ih
+
+/-- A nonhomogeneous kernel iteration may be exposed from its first step. -/
+theorem iteratedKernelLaw_succ_eq_bind_front
+    {S : Type*} [MeasurableSpace S]
+    (K : ℕ → S → Measure S) (hK : ∀ phase, Measurable (K phase))
+    (mu : Measure S) :
+    ∀ steps,
+      iteratedKernelLaw K mu (steps + 1) =
+        mu.bind fun state =>
+          iteratedKernelLaw (fun phase => K (phase + 1)) (K 0 state) steps := by
+  intro steps
+  induction steps with
+  | zero => rfl
+  | succ steps ih =>
+      rw [iteratedKernelLaw_succ, ih]
+      rw [Measure.bind_bind
+        (measurable_iteratedKernelLaw_from_firstKernel K hK steps).aemeasurable
+        (hK (steps + 1)).aemeasurable]
+      rfl
+
+theorem scheduledExecutableFrontHistoryLaw_eq_iterated
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    ∀ steps offset (history : Option (BalancedCoolingHistory q.n)),
+      offset + steps ≤ terminalPhaseSteps q →
+      scheduledExecutableFrontHistoryLaw parameters q I offset steps history =
+        iteratedKernelLaw
+          (fun phase => scheduledBalancedForwardPhaseKernel parameters q I
+            (offset + phase)) (Measure.dirac history) steps := by
+  intro steps
+  induction steps with
+  | zero =>
+      intro offset history _
+      rfl
+  | succ steps ih =>
+      intro offset history hbound
+      let K := fun phase => scheduledBalancedForwardPhaseKernel parameters q I
+        (offset + phase)
+      have hK : ∀ phase, Measurable (K phase) := fun phase =>
+        (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+          parameters q I (offset + phase)).1
+      rw [iteratedKernelLaw_succ_eq_bind_front K hK (Measure.dirac history) steps]
+      rw [Measure.dirac_bind
+        (measurable_iteratedKernelLaw_from_firstKernel K hK steps) history]
+      let KS := fun phase => scheduledBalancedForwardPhaseKernel parameters q I
+        (offset + 1 + phase)
+      rw [show (fun phase => K (phase + 1)) = KS by
+        funext phase
+        unfold K KS
+        rw [show offset + (phase + 1) = offset + 1 + phase by omega]]
+      have hKS : ∀ phase, Measurable (KS phase) := fun phase =>
+        (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+          parameters q I (offset + 1 + phase)).1
+      have hKSprob : ∀ phase state, IsProbabilityMeasure (KS phase state) :=
+        fun phase state =>
+          (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+            parameters q I (offset + 1 + phase)).2 state
+      have hlift := bind_iteratedKernelLaw_dirac_eq_iteratedKernelLaw_map
+        KS hKS hKSprob (K 0 history) id measurable_id steps
+      rw [Measure.map_id] at hlift
+      rw [← hlift]
+      simp only [id_eq]
+      cases history with
+        | none =>
+            simp only [scheduledExecutableFrontHistoryLaw, K,
+              scheduledBalancedForwardPhaseKernel]
+            rw [Measure.dirac_bind]
+            · rw [← ih (offset + 1) none (by omega)]
+              exact (scheduledExecutableFrontHistoryLaw_none
+                parameters q I (offset + 1) steps).symm
+            · exact (iteratedKernelLaw_dirac_measurable_and_probability
+                KS hKS hKSprob steps).1
+        | some head =>
+            have hoffset : offset < terminalPhaseSteps q := by omega
+            simp only [scheduledExecutableFrontHistoryLaw]
+            have hsnoc : Measurable (balancedCoolingHistorySnocTerminal head) :=
+              measurable_balancedCoolingHistorySnocTerminal.comp
+                (measurable_const.prodMk measurable_id)
+            have hcontinuation : Measurable fun state =>
+                iteratedKernelLaw KS (Measure.dirac state) steps :=
+              (iteratedKernelLaw_dirac_measurable_and_probability
+                KS hKS hKSprob steps).1
+            simp only [K, scheduledBalancedForwardPhaseKernel, Nat.add_zero,
+              hoffset, if_true]
+            rw [← scheduledBalancedCoolingRatioLaw_eq_transitionLaw parameters q I
+              (scheduleValue_pos q offset) (scheduleValue q (offset + 1))
+              head.2.2.2]
+            rw [Measure.map_bind_eq_bind_comp _ hsnoc hcontinuation]
+            apply Measure.bind_congr_right
+            filter_upwards with phase
+            cases phase with
+            | none =>
+                simp only [balancedCoolingHistorySnocTerminal,
+                  Function.comp_apply]
+                calc
+                  Measure.dirac none =
+                      scheduledExecutableFrontHistoryLaw parameters q I
+                        (offset + 1) steps none :=
+                    (scheduledExecutableFrontHistoryLaw_none
+                      parameters q I (offset + 1) steps).symm
+                  _ = _ := by
+                    simpa only [KS, K, Nat.add_assoc] using
+                      ih (offset + 1) none (by omega)
+            | some value =>
+                rcases value with ⟨ratio, nextPoint⟩
+                simpa only [balancedCoolingHistorySnocTerminal, Function.comp_apply,
+                  KS, K, Nat.add_assoc] using
+                    ih (offset + 1)
+                      (some ((fun k => if k = head.2.1 then ratio else head.1 k),
+                        head.2.1 + 1, head.2.2.1 * ratio, nextPoint)) (by omega)
+
+theorem explicitScheduleVariances_eq_scheduledVarianceSegment
+    (q : VolumeParams) :
+    (explicitVolumeCoolingSchedule q).variances =
+      scheduledVarianceSegment q 0 (terminalPhaseSteps q) := by
+  unfold explicitVolumeCoolingSchedule explicitScheduleVariances
+    scheduledVarianceSegment
+  congr 1
+  apply List.ofFn_inj.mpr
+  funext i
+  congr 1
+  omega
+
+theorem balancedCoolingHistoryOutput_concat_initial
+    (point : AmbientSpace n)
+    (tail : Option (BalancedCoolingHistory n)) :
+    balancedCoolingHistoryOutput
+        (balancedCoolingHistoryConcatOption
+          ((fun _ => 0), 0, 1, point) tail) =
+      balancedCoolingHistoryOutput tail := by
+  cases tail with
+  | none => rfl
+  | some tail =>
+      simp [balancedCoolingHistoryConcatOption,
+        balancedCoolingHistoryConcat, balancedCoolingHistoryOutput]
+
+/-- The Gaussian part of the executable program and the chronological
+forward interpreter have exactly the same accumulated-product/retained-point
+law.  No equality of irrelevant out-of-range sequence coordinates is needed. -/
+theorem map_scheduledExecutableFigureOneCoolingHistory_output_eq_forward
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (point : AmbientSpace q.n) :
+    (scheduledExecutableFigureOneCoolingHistoryLaw parameters q I point).map
+        balancedCoolingHistoryOutput =
+      (scheduledBalancedForwardHistoryLawFromPoint parameters q I
+        (terminalPhaseSteps q) point).map balancedCoolingHistoryOutput := by
+  let head : BalancedCoolingHistory q.n := ((fun _ => 0), 0, 1, point)
+  have hfront := scheduledExecutableCoolingHistoryFrom_segment_eq_front
+    parameters q I 0 (terminalPhaseSteps q) head
+  have hiter := scheduledExecutableFrontHistoryLaw_eq_iterated
+    parameters q I (terminalPhaseSteps q) 0 (some head) (by omega)
+  have hfrom :
+      scheduledExecutableCoolingHistoryFrom parameters q I
+          (scheduledVarianceSegment q 0 (terminalPhaseSteps q)) head =
+        scheduledBalancedForwardHistoryLawFromPoint parameters q I
+          (terminalPhaseSteps q) point := by
+    rw [hfront, hiter]
+    unfold scheduledBalancedForwardHistoryLawFromPoint head
+    congr 3
+    funext phase
+    congr 2
+    omega
+  rw [← hfrom]
+  unfold scheduledExecutableCoolingHistoryFrom
+  rw [← explicitScheduleVariances_eq_scheduledVarianceSegment q]
+  unfold scheduledExecutableFigureOneCoolingHistoryLaw
+  rw [Measure.map_map measurable_balancedCoolingHistoryOutput
+    (measurable_balancedCoolingHistoryConcatOption head)]
+  apply Measure.map_congr
+  filter_upwards with tail
+  exact (balancedCoolingHistoryOutput_concat_initial point tail).symm
+
+noncomputable def scheduledExecutableTerminalHistoryKernel
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    Option (BalancedCoolingHistory q.n) →
+      Measure (Option (BalancedCoolingHistory q.n))
+  | none => Measure.dirac none
+  | some history =>
+      (scheduledBalancedCoolingUniformCollectorLawWithState parameters q I
+        (terminalVariance q) history.2.2.2).map
+          (balancedCoolingHistorySnocTerminal history)
+
+noncomputable def scheduledExecutableTerminalScalarKernel
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    Option (ℝ × AmbientSpace q.n) → Measure ℝ
+  | none => Measure.dirac 0
+  | some (product, point) =>
+      (scheduledBalancedCoolingUniformCollectorLawWithState parameters q I
+        (terminalVariance q) point).map
+          (balancedFigureOneTerminalScalar q product)
+
+theorem scheduledExecutableTerminalHistoryKernel_measurable
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    Measurable (scheduledExecutableTerminalHistoryKernel parameters q I) := by
+  have hterminal :=
+    scheduledBalancedCoolingUniformCollectorLawWithState_measurable_and_probability
+      parameters q I (terminalVariance_pos' q)
+  have hsome : Measurable fun history : BalancedCoolingHistory q.n =>
+      (scheduledBalancedCoolingUniformCollectorLawWithState parameters q I
+        (terminalVariance q) history.2.2.2).map
+          (balancedCoolingHistorySnocTerminal history) := by
+    apply measurable_measure_map_param_variable
+    · exact hterminal.1.comp <|
+        measurable_snd.comp (measurable_snd.comp (measurable_snd.comp measurable_id))
+    · intro history
+      exact hterminal.2 history.2.2.2
+    · exact measurable_balancedCoolingHistorySnocTerminal.comp <|
+        measurable_fst.prodMk measurable_snd
+  convert Measurable.optionElim
+    (Measure.dirac (none : Option (BalancedCoolingHistory q.n))) hsome using 1
+  funext history
+  cases history <;> rfl
+
+theorem scheduledExecutableTerminalScalarKernel_measurable
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    Measurable (scheduledExecutableTerminalScalarKernel parameters q I) := by
+  have hterminal :=
+    scheduledBalancedCoolingUniformCollectorLawWithState_measurable_and_probability
+      parameters q I (terminalVariance_pos' q)
+  have hsome : Measurable fun value : ℝ × AmbientSpace q.n =>
+      (scheduledBalancedCoolingUniformCollectorLawWithState parameters q I
+        (terminalVariance q) value.2).map
+          (balancedFigureOneTerminalScalar q value.1) := by
+    apply measurable_measure_map_param_variable
+      (hterminal.1.comp measurable_snd) (fun value => hterminal.2 value.2)
+    exact (measurable_balancedFigureOneTerminalScalar q).comp <|
+      (measurable_fst.comp measurable_fst).prodMk measurable_snd
+  convert Measurable.optionElim (Measure.dirac (0 : ℝ)) hsome using 1
+  funext value
+  cases value <;> rfl
+
+theorem map_bind_scheduledExecutableTerminalHistoryKernel
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n)
+    (mu : Measure (Option (BalancedCoolingHistory q.n))) :
+    (mu.bind (scheduledExecutableTerminalHistoryKernel parameters q I)).map
+        (balancedFigureOneHistoryEstimate q) =
+      (mu.map balancedCoolingHistoryOutput).bind
+        (scheduledExecutableTerminalScalarKernel parameters q I) := by
+  have hhistory := scheduledExecutableTerminalHistoryKernel_measurable
+    parameters q I
+  have hscalar := scheduledExecutableTerminalScalarKernel_measurable
+    parameters q I
+  rw [map_bind_eq_bind_map_of_measurable _ hhistory
+    (measurable_balancedFigureOneHistoryEstimate q)]
+  rw [Measure.map_bind_eq_bind_comp _ measurable_balancedCoolingHistoryOutput hscalar]
+  apply Measure.bind_congr_right
+  filter_upwards with history
+  cases history with
+  | none =>
+      simp [scheduledExecutableTerminalHistoryKernel,
+        scheduledExecutableTerminalScalarKernel,
+        balancedCoolingHistoryOutput, balancedFigureOneHistoryEstimate,
+        Measure.map_dirac' (measurable_balancedFigureOneHistoryEstimate q)]
+  | some history =>
+      change
+        ((scheduledBalancedCoolingUniformCollectorLawWithState parameters q I
+          (terminalVariance q) history.2.2.2).map
+            (balancedCoolingHistorySnocTerminal history)).map
+              (balancedFigureOneHistoryEstimate q) =
+          (scheduledBalancedCoolingUniformCollectorLawWithState parameters q I
+            (terminalVariance q) history.2.2.2).map
+              (balancedFigureOneTerminalScalar q history.2.2.1)
+      have hsnoc : Measurable (balancedCoolingHistorySnocTerminal history) :=
+        measurable_balancedCoolingHistorySnocTerminal.comp
+          (measurable_const.prodMk measurable_id)
+      rw [Measure.map_map (measurable_balancedFigureOneHistoryEstimate q) hsnoc]
+      apply Measure.map_congr
+      filter_upwards with terminal
+      exact balancedFigureOneHistoryEstimate_snocTerminal q history terminal
+
+theorem scheduledExecutableFigureOneFullHistory_map_estimate_factor
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (point : AmbientSpace q.n) :
+    (scheduledExecutableFigureOneFullHistoryLaw parameters q I point).map
+        (balancedFigureOneHistoryEstimate q) =
+      ((scheduledExecutableFigureOneCoolingHistoryLaw parameters q I point).map
+        balancedCoolingHistoryOutput).bind
+          (scheduledExecutableTerminalScalarKernel parameters q I) := by
+  change
+    ((scheduledExecutableFigureOneCoolingHistoryLaw parameters q I point).bind
+      (scheduledExecutableTerminalHistoryKernel parameters q I)).map
+        (balancedFigureOneHistoryEstimate q) = _
+  exact map_bind_scheduledExecutableTerminalHistoryKernel parameters q I _
+
+theorem scheduledBalancedForwardHistoryLawFromPoint_succ_terminal
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (point : AmbientSpace q.n) :
+    scheduledBalancedForwardHistoryLawFromPoint parameters q I
+        (terminalPhaseSteps q + 1) point =
+      (scheduledBalancedForwardHistoryLawFromPoint parameters q I
+        (terminalPhaseSteps q) point).bind
+          (scheduledExecutableTerminalHistoryKernel parameters q I) := by
+  unfold scheduledBalancedForwardHistoryLawFromPoint
+  rw [iteratedKernelLaw_succ]
+  apply Measure.bind_congr_right
+  filter_upwards with history
+  cases history with
+  | none => rfl
+  | some history =>
+      unfold scheduledBalancedForwardPhaseKernel
+        scheduledExecutableTerminalHistoryKernel
+      simp only [lt_self_iff_false, if_false]
+      rw [scheduledBalancedCoolingUniformLaw_eq_transitionLaw parameters q I
+        (terminalVariance_pos' q) history.2.2.2]
+
+theorem scheduledBalancedForwardHistoryLawFromPoint_map_estimate_factor
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (point : AmbientSpace q.n) :
+    (scheduledBalancedForwardHistoryLawFromPoint parameters q I
+        (terminalPhaseSteps q + 1) point).map
+          (balancedFigureOneHistoryEstimate q) =
+      ((scheduledBalancedForwardHistoryLawFromPoint parameters q I
+        (terminalPhaseSteps q) point).map balancedCoolingHistoryOutput).bind
+          (scheduledExecutableTerminalScalarKernel parameters q I) := by
+  rw [scheduledBalancedForwardHistoryLawFromPoint_succ_terminal]
+  exact map_bind_scheduledExecutableTerminalHistoryKernel parameters q I _
+
+/-- Exact `hpoint` required by the scheduled Lemma 7.17(c) accuracy wrapper:
+the executable post-initial continuation is the chronological finite history
+law, including its terminal coordinate. -/
+theorem scheduledBalancedFigureOnePointContinuation_runEstimate_eq_forwardHistory_map
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (point : AmbientSpace q.n) :
+    (scheduledBalancedFigureOnePointContinuation parameters q point).runEstimate
+        oracle.query =
+      (scheduledBalancedForwardHistoryLawFromPoint parameters q I
+        (figureOneDependentPhaseCount q) point).map
+          (balancedFigureOneHistoryEstimate q) := by
+  rw [figureOneDependentPhaseCount]
+  calc
+    _ = (scheduledExecutableFigureOneFullHistoryLaw parameters q I point).map
+          (balancedFigureOneHistoryEstimate q) :=
+      scheduledBalancedFigureOnePointContinuation_runEstimate_eq_history_map
+        parameters q I oracle point
+    _ = ((scheduledExecutableFigureOneCoolingHistoryLaw parameters q I point).map
+          balancedCoolingHistoryOutput).bind
+            (scheduledExecutableTerminalScalarKernel parameters q I) :=
+      scheduledExecutableFigureOneFullHistory_map_estimate_factor
+        parameters q I point
+    _ = ((scheduledBalancedForwardHistoryLawFromPoint parameters q I
+          (terminalPhaseSteps q) point).map balancedCoolingHistoryOutput).bind
+            (scheduledExecutableTerminalScalarKernel parameters q I) := by
+      rw [map_scheduledExecutableFigureOneCoolingHistory_output_eq_forward]
+    _ = (scheduledBalancedForwardHistoryLawFromPoint parameters q I
+          (terminalPhaseSteps q + 1) point).map
+            (balancedFigureOneHistoryEstimate q) :=
+      (scheduledBalancedForwardHistoryLawFromPoint_map_estimate_factor
+        parameters q I point).symm
+
 #print axioms balancedCoolingHistoryConcat_initial
 #print axioms measurable_balancedCoolingHistoryConcatOption
 #print axioms balancedCoolingHistoryConcat_snoc_cons
 #print axioms scheduledExecutableCoolingHistoryFrom_cons_cons
 #print axioms scheduledExecutableCoolingHistoryFrom_segment_eq_front
+#print axioms iteratedKernelLaw_succ_eq_bind_front
+#print axioms scheduledExecutableFrontHistoryLaw_eq_iterated
+#print axioms map_scheduledExecutableFigureOneCoolingHistory_output_eq_forward
+#print axioms scheduledBalancedFigureOnePointContinuation_runEstimate_eq_forwardHistory_map
 
 end ArlibCommunity.Algorithms.CV18
