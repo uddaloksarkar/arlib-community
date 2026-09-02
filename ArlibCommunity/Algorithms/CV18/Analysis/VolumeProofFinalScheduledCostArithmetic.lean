@@ -392,9 +392,69 @@ theorem figureOneScheduledProperWork_cast_le_old
       add_le_add hphase hterminal'
     _ = _ := by ring
 
+/-- Even charging the complete fixed retry horizon, the scheduled proper-step
+work is bounded by a small absolute multiple of the scheduled soft-O rate.
+This deliberately does not use a local proposal cap. -/
+theorem figureOneSafeRetryCount_mul_scheduledProperWork_cast_le
+    (q : VolumeParams) :
+    ((figureOneSafeRetryCount q * figureOneScheduledProperWork q : ℕ) : ℝ) ≤
+      (3 * 10 ^ 27) * volumeScheduledBaseComplexityRate q := by
+  let N := figureOneSafeRetryCount q
+  let work := figureOneScheduledProperWork q
+  let oldWork := figureOneCoolingQueryBudget q
+      (explicitVolumeCoolingSchedule q).variances +
+    figureOneSampleCount q * figureOneWalkSteps q (terminalVariance q)
+  let A := figureOneScheduledAccuracyLog q
+  let B := protectedLog
+    (1 / figureOneCorrectedBlockMixingError q (N - 1))
+  let base := volumeBaseComplexityRate q
+  have hN : (N : ℝ) ≤ 129 * B := by
+    simpa only [N, B] using
+      figureOneSafeRetryCount_cast_le_correctedMixingLog q
+  have hwork : (work : ℝ) ≤ 9 * A * B * (oldWork : ℝ) := by
+    simpa only [work, oldWork, A, B, N] using
+      figureOneScheduledProperWork_cast_le_old q
+  have hbase : (oldWork : ℝ) ≤ (2 * 10 ^ 24) * base := by
+    have hnat := figureOne_base_query_cost_sharp q
+    have hcast : ((1 + oldWork : ℕ) : ℝ) ≤
+        (Nat.ceil ((2 * 10 ^ 24) * base) : ℝ) := by
+      exact_mod_cast hnat
+    have hx : 0 ≤ (2 * 10 ^ 24) * base := by
+      dsimp only [base]
+      unfold volumeBaseComplexityRate
+      positivity
+    have hceil := Nat.ceil_lt_add_one hx
+    push_cast at hcast
+    linarith
+  have hN0 : 0 ≤ (N : ℝ) := Nat.cast_nonneg _
+  have hwork0 : 0 ≤ (work : ℝ) := Nat.cast_nonneg _
+  have hA0 : 0 ≤ A :=
+    zero_le_one.trans (figureOneScheduledAccuracyLog_one_le q)
+  have hB0 : 0 ≤ B := by
+    dsimp only [B, protectedLog]
+    exact zero_le_one.trans (le_max_left _ _)
+  have hbase0 : 0 ≤ base := by
+    dsimp only [base]
+    unfold volumeBaseComplexityRate
+    positivity
+  calc
+    ((N * work : ℕ) : ℝ) = (N : ℝ) * (work : ℝ) := by push_cast; rfl
+    _ ≤ (129 * B) * (9 * A * B * (oldWork : ℝ)) := by
+      exact mul_le_mul hN hwork hwork0 (by positivity)
+    _ ≤ (129 * B) * (9 * A * B * ((2 * 10 ^ 24) * base)) := by
+      gcongr
+    _ = (2322 * 10 ^ 24) * volumeScheduledBaseComplexityRate q := by
+      dsimp only [volumeScheduledBaseComplexityRate, base, A, B, N]
+      ring
+    _ ≤ (3 * 10 ^ 27) * volumeScheduledBaseComplexityRate q := by
+      apply mul_le_mul_of_nonneg_right _
+        (volumeScheduledBaseComplexityRate_pos q).le
+      norm_num
+
 #print axioms figureOneSafeRetryCount_cast_le_correctedMixingLog
 #print axioms figureOneScheduledMixingDenominator_inv_sq_le
 #print axioms figureOneScheduledCorrectedProperStride_cast_le
 #print axioms figureOneScheduledProperWork_cast_le_old
+#print axioms figureOneSafeRetryCount_mul_scheduledProperWork_cast_le
 
 end ArlibCommunity.Algorithms.CV18
