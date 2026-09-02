@@ -279,8 +279,122 @@ theorem figureOneScheduledCorrectedProperStride_cast_le
   dsimp only [X, A, B, e, L] at hmax ⊢
   nlinarith [mul_nonneg (sub_nonneg.mpr hX) (sub_nonneg.mpr hB)]
 
+/-- Relative to the legacy walk count, the final scheduled stride costs at
+most nine times the two explicit logarithmic overheads. -/
+theorem figureOneFinalScheduledStride_cast_le_walk
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let A := figureOneScheduledAccuracyLog q
+    let B := protectedLog
+      (1 / figureOneCorrectedBlockMixingError q
+        (figureOneSafeRetryCount q - 1))
+    (figureOneFinalScheduledBalancedParameters.properStride q sigma2 : ℝ) ≤
+      9 * A * B * (figureOneWalkSteps q sigma2 : ℝ) := by
+  dsimp only [figureOneFinalScheduledBalancedParameters_properStride]
+  let A := figureOneScheduledAccuracyLog q
+  let B := protectedLog
+    (1 / figureOneCorrectedBlockMixingError q
+      (figureOneSafeRetryCount q - 1))
+  let raw := 10 ^ 16 * max 1 sigma2 * (q.n : ℝ) ^ 2 *
+    protectedLog ((q.n : ℝ) / q.eps) ^ 2
+  have hstride := figureOneScheduledCorrectedProperStride_cast_le q hsigma2
+  have hraw : raw ≤ (figureOneWalkSteps q sigma2 : ℝ) := by
+    unfold figureOneWalkSteps
+    exact Nat.le_ceil raw
+  have hAB0 : 0 ≤ 9 * A * B := by
+    have hA0 : 0 ≤ A := (figureOneScheduledAccuracyLog_one_le q).trans' zero_le_one
+    have hB0 : 0 ≤ B := by
+      dsimp only [B, protectedLog]
+      exact zero_le_one.trans (le_max_left _ _)
+    positivity
+  calc
+    (figureOneScheduledCorrectedProperStride q sigma2
+        (figureOneSafeRetryCount q - 1) : ℝ) ≤
+        (9 * A * B) * raw := by
+      dsimp only [A, B, raw] at hstride ⊢
+      nlinarith
+    _ ≤ (9 * A * B) * (figureOneWalkSteps q sigma2 : ℝ) :=
+      mul_le_mul_of_nonneg_left hraw hAB0
+    _ = 9 * A * B * (figureOneWalkSteps q sigma2 : ℝ) := rfl
+
+/-- The complete scheduled proper-stride work sum is the legacy Figure-One
+work sum times only the two explicit logarithmic overheads. -/
+theorem figureOneScheduledProperWork_cast_le_old
+    (q : VolumeParams) :
+    let A := figureOneScheduledAccuracyLog q
+    let B := protectedLog
+      (1 / figureOneCorrectedBlockMixingError q
+        (figureOneSafeRetryCount q - 1))
+    (figureOneScheduledProperWork q : ℝ) ≤
+      9 * A * B *
+        (figureOneCoolingQueryBudget q
+            (explicitVolumeCoolingSchedule q).variances +
+          figureOneSampleCount q *
+            figureOneWalkSteps q (terminalVariance q) : ℕ) := by
+  dsimp only
+  let A := figureOneScheduledAccuracyLog q
+  let B := protectedLog
+    (1 / figureOneCorrectedBlockMixingError q
+      (figureOneSafeRetryCount q - 1))
+  rw [figureOneCoolingQueryBudget_explicit]
+  unfold figureOneScheduledProperWork
+  push_cast
+  have hphase :
+      (∑ k ∈ Finset.range (terminalPhaseSteps q),
+        (figureOnePhaseSampleCount q (scheduleValue q k) : ℝ) *
+          (figureOneScheduledBalancedParameters.properStride q
+            (scheduleValue q k) : ℝ)) ≤
+      9 * A * B *
+        ∑ k ∈ Finset.range (terminalPhaseSteps q),
+          (figureOnePhaseSampleCount q (scheduleValue q k) : ℝ) *
+            (figureOneWalkSteps q (scheduleValue q k) : ℝ) := by
+    rw [Finset.mul_sum]
+    apply Finset.sum_le_sum
+    intro k hk
+    have hs := figureOneFinalScheduledStride_cast_le_walk q
+      (scheduleValue_pos q k)
+    dsimp only [A, B] at hs ⊢
+    simp only [figureOneScheduledBalancedParameters_properStride,
+      figureOneFinalScheduledBalancedParameters_properStride] at hs ⊢
+    convert mul_le_mul_of_nonneg_left hs
+      (Nat.cast_nonneg (figureOnePhaseSampleCount q (scheduleValue q k))) using 1 <;>
+        ring
+  have hterminal := figureOneFinalScheduledStride_cast_le_walk q
+    (terminalVariance_pos' q)
+  have hterminal' :
+      (figureOneSampleCount q : ℝ) *
+          (figureOneScheduledBalancedParameters.properStride q
+            (terminalVariance q) : ℝ) ≤
+        9 * A * B *
+          ((figureOneSampleCount q : ℝ) *
+            (figureOneWalkSteps q (terminalVariance q) : ℝ)) := by
+    dsimp only [A, B] at hterminal ⊢
+    simp only [figureOneScheduledBalancedParameters_properStride,
+      figureOneFinalScheduledBalancedParameters_properStride] at hterminal ⊢
+    calc
+      (figureOneSampleCount q : ℝ) *
+          (figureOneScheduledCorrectedProperStride q (terminalVariance q)
+            (figureOneSafeRetryCount q - 1) : ℝ) ≤
+        (figureOneSampleCount q : ℝ) *
+          (9 * figureOneScheduledAccuracyLog q *
+            protectedLog (1 / figureOneCorrectedBlockMixingError q
+              (figureOneSafeRetryCount q - 1)) *
+                (figureOneWalkSteps q (terminalVariance q) : ℝ)) :=
+        mul_le_mul_of_nonneg_left hterminal (Nat.cast_nonneg _)
+      _ = _ := by ring
+  calc
+    _ ≤ 9 * A * B *
+          (∑ k ∈ Finset.range (terminalPhaseSteps q),
+            (figureOnePhaseSampleCount q (scheduleValue q k) : ℝ) *
+              (figureOneWalkSteps q (scheduleValue q k) : ℝ)) +
+        9 * A * B *
+          ((figureOneSampleCount q : ℝ) *
+            (figureOneWalkSteps q (terminalVariance q) : ℝ)) :=
+      add_le_add hphase hterminal'
+    _ = _ := by ring
+
 #print axioms figureOneSafeRetryCount_cast_le_correctedMixingLog
 #print axioms figureOneScheduledMixingDenominator_inv_sq_le
 #print axioms figureOneScheduledCorrectedProperStride_cast_le
+#print axioms figureOneScheduledProperWork_cast_le_old
 
 end ArlibCommunity.Algorithms.CV18
