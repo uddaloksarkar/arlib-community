@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofExpectedQueryCost
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLazyProperFailure
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofProperExpectedCostSubmeasure
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledProperSemantics
 
 /-! # Expected cost of the schedule-targeted proper block
@@ -475,6 +476,138 @@ theorem cappedScheduledAccuracyProperBlock_countedQueryCost_le
   exact cappedScheduledAccuracyProperBlockAux_countedQueryCost_le
     q I oracle hsigma2 properStride rawCap properStride current
 
+/-- The scheduled proposal remains below the Lovász--Vempala average local
+conductance scale of its actual (possibly sub-unit) phase body. -/
+theorem figureOneScheduledProposalRadius_le_phaseLVStep
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    figureOneScheduledProposalRadius q sigma2 ≤
+      min (Real.sqrt sigma2) (figureOneScheduledPhaseInradius q sigma2) /
+        (4096 * Real.sqrt q.n) := by
+  let sigma : ℝ := Real.sqrt sigma2
+  let L : ℝ := figureOneScheduledAccuracyLog q
+  have hsigma : 0 < sigma := Real.sqrt_pos.2 hsigma2
+  have hnR : (1 : ℝ) ≤ q.n := by
+    exact_mod_cast (le_trans (by norm_num : 1 ≤ 3) q.dim_ok)
+  have hL : 1 ≤ L := by
+    simpa [L] using figureOneScheduledAccuracyLog_one_le q
+  have hnL : 1 ≤ (q.n : ℝ) * L := by nlinarith
+  have hsqrt1 : 1 ≤ Real.sqrt ((q.n : ℝ) * L) := by
+    simpa using Real.sqrt_le_sqrt hnL
+  have hsigmaR : sigma ≤ figureOneScheduledPhaseRadius q sigma2 := by
+    unfold figureOneScheduledPhaseRadius
+    change sigma ≤ 32 * sigma * Real.sqrt ((q.n : ℝ) * L)
+    nlinarith
+  have hmin : min sigma (figureOneScheduledPhaseInradius q sigma2) =
+      min sigma 1 := by
+    apply le_antisymm
+    · exact le_min (min_le_left _ _)
+        ((min_le_right _ _).trans (min_le_left _ _))
+    · apply le_min (min_le_left _ _)
+      exact le_min (min_le_right _ _) ((min_le_left _ _).trans hsigmaR)
+  rw [hmin]
+  unfold figureOneScheduledProposalRadius
+  change min sigma 1 / (4096 * Real.sqrt ((q.n : ℝ) * L)) ≤
+    min sigma 1 / (4096 * Real.sqrt q.n)
+  apply div_le_div_of_nonneg_left (le_min hsigma.le zero_le_one)
+  · positivity
+  · have hmul : (q.n : ℝ) ≤ (q.n : ℝ) * L := by nlinarith
+    nlinarith [Real.sqrt_le_sqrt hmul]
+
+theorem half_mul_gaussianWeight_le_scheduledPhaseEllGaussian
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    ENNReal.ofReal (1 / 2) *
+        (∫⁻ x in figureOneScheduledPhaseBody q I sigma2,
+          gaussianWeight sigma2 x) ≤
+      ellGaussianMeasure
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2 Set.univ := by
+  have hn2 : 2 ≤ q.n := le_trans (by norm_num) q.dim_ok
+  have hsigma : 0 < Real.sqrt sigma2 := Real.sqrt_pos.2 hsigma2
+  have hdelta : 0 < figureOneScheduledProposalRadius q sigma2 :=
+    figureOneScheduledProposalRadius_pos q hsigma2
+  have h :=
+    half_mul_lintegral_gaussianWeight_le_ellGaussianMeasure_univ_direct_radius
+      hn2 (figureOneScheduledPhaseBody_convex q I sigma2)
+      (figureOneScheduledPhaseBody_isCompact q I sigma2).isClosed
+      (figureOneScheduledPhaseBody_volume_ne_top q I sigma2)
+      (figureOneScheduledPhaseInradius_pos q hsigma2)
+      (ball_scheduledPhaseInradius_subset q I sigma2)
+      hsigma hdelta (figureOneScheduledProposalRadius_le_phaseLVStep q hsigma2)
+  simpa [Real.sq_sqrt hsigma2.le] using h
+
+/-- Warm-subprobability cost bound for the executable scheduled block.  This
+is the compositional form used by retry continuations. -/
+theorem lintegral_cappedScheduledAccuracyProperBlock_countedQueryCost_le_of_isWarm_submeasure
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {M : ENNReal} {mu : Measure (AmbientSpace q.n)}
+    (hwarm : _root_.Arlib.IsWarm M mu
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2))
+    (rawCap properStride : ℕ) :
+    ∫⁻ current, countedQueryCost
+        ((cappedScheduledAccuracyProperBlock q sigma2 rawCap properStride
+          current).run oracle.query) ∂mu ≤
+      (properStride : ENNReal) * (M * 2) + mu Set.univ := by
+  let K := figureOneScheduledPhaseBody q I sigma2
+  let hKm : MeasurableSet K := figureOneScheduledPhaseBody_measurable q I sigma2
+  let delta := figureOneScheduledProposalRadius q sigma2
+  let pi := ellGaussianProb K delta sigma2
+  have hpoint : ∀ current, countedQueryCost
+      ((cappedScheduledAccuracyProperBlock q sigma2 rawCap properStride
+        current).run oracle.query) ≤
+      totalLazyProperExpectedRawCost K hKm delta sigma2 properStride current + 1 := by
+    intro current
+    simpa only [K, hKm, delta] using
+      cappedScheduledAccuracyProperBlock_countedQueryCost_le
+        q I oracle hsigma2 rawCap properStride current
+  have hlocal : (∫⁻ current, (ell K delta current)⁻¹ ∂pi) ≤ 2 := by
+    have hKc : Convex ℝ K := figureOneScheduledPhaseBody_convex q I sigma2
+    have hKb : Bornology.IsBounded K :=
+      (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+    have hK0 : volume K ≠ 0 :=
+      figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2
+    have hdelta : 0 < delta := figureOneScheduledProposalRadius_pos q hsigma2
+    have hZ0 : ellGaussianMeasure K delta sigma2 Set.univ ≠ 0 :=
+      ellGaussianMeasure_univ_ne_zero hKm hKc hKb hK0 hdelta sigma2
+    have hZtop : ellGaussianMeasure K delta sigma2 Set.univ ≠ ⊤ :=
+      ellGaussianMeasure_ne_top_cv18
+        (figureOneScheduledPhaseBody_volume_ne_top q I sigma2) delta hsigma2
+    have hlambda : ENNReal.ofReal (1 / 2 : ℝ) *
+        (∫⁻ x in K, gaussianWeight sigma2 x) ≤
+          ellGaussianMeasure K delta sigma2 Set.univ := by
+      simpa only [K, delta] using
+        half_mul_gaussianWeight_le_scheduledPhaseEllGaussian q I hsigma2
+    have hhalf := mul_lintegral_inv_ell_ellGaussianProb_le_one
+      hKm hdelta sigma2 hZ0 hZtop hlambda
+    have hhalfEq : ENNReal.ofReal (1 / 2 : ℝ) = (2 : ENNReal)⁻¹ := by
+      rw [show (1 / 2 : ℝ) = (2 : ℝ)⁻¹ by norm_num,
+        ENNReal.ofReal_inv_of_pos (by norm_num)]
+      norm_num
+    rw [hhalfEq] at hhalf
+    calc
+      (∫⁻ current, (ell K delta current)⁻¹ ∂pi) =
+          2 * ((2 : ENNReal)⁻¹ *
+            ∫⁻ current, (ell K delta current)⁻¹ ∂pi) := by
+        rw [← mul_assoc, ENNReal.mul_inv_cancel]
+        · simp
+        · norm_num
+        · norm_num
+      _ ≤ 2 * 1 := by gcongr
+      _ = 2 := mul_one _
+  have h := lintegral_blockCost_le_of_isWarm K hKm delta sigma2 pi
+    (ellGaussianProb_compl_eq_zero hKm delta sigma2)
+    (isReversible_lazy
+      (isReversible_speedyMetropolisGaussian_prob hKm delta sigma2)).invariant
+    hwarm properStride 1 2 hlocal
+    (fun current => countedQueryCost
+      ((cappedScheduledAccuracyProperBlock q sigma2 rawCap properStride
+        current).run oracle.query)) hpoint
+  simpa [one_mul] using h
+
 #print axioms cappedScheduledAccuracyProperBlock_countedQueryCost_le
+#print axioms
+  lintegral_cappedScheduledAccuracyProperBlock_countedQueryCost_le_of_isWarm_submeasure
 
 end ArlibCommunity.Algorithms.CV18
