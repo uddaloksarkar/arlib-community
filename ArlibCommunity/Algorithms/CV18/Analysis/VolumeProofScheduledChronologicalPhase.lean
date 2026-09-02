@@ -564,6 +564,52 @@ theorem scheduledBalancedForwardHistoryLaw_bind_fromPoint
     _ balancedCoolingInitialHistory measurable_balancedCoolingInitialHistory
       phases
 
+/-- Pointwise executable-history semantics imply the integrated
+post-initial history identity used by the accuracy theorem. -/
+theorem bind_scheduledBalancedFigureOnePointContinuation_eq_forwardHistory_map_of_pointwise
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (hpoint : ∀ point,
+      MembershipOracleProgram.runEstimate oracle.query
+          (scheduledBalancedFigureOnePointContinuation parameters q point) =
+        (scheduledBalancedForwardHistoryLawFromPoint parameters q I
+          (figureOneDependentPhaseCount q) point).map
+            (balancedFigureOneHistoryEstimate q)) :
+    (truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+        (fun point =>
+          MembershipOracleProgram.runEstimate oracle.query
+            (scheduledBalancedFigureOnePointContinuation parameters q point)) =
+      (scheduledBalancedForwardHistoryLaw parameters q I
+        (figureOneDependentPhaseCount q)).map
+          (balancedFigureOneHistoryEstimate q) := by
+  let target := (truncatedGaussianProbability q I (initialVariance q)
+    (initialVariance_pos q) : Measure (AmbientSpace q.n))
+  let fromPoint := scheduledBalancedForwardHistoryLawFromPoint parameters q I
+    (figureOneDependentPhaseCount q)
+  have hfromPoint : Measurable fromPoint := by
+    unfold fromPoint scheduledBalancedForwardHistoryLawFromPoint
+    exact (iteratedKernelLaw_dirac_measurable_and_probability
+      (scheduledBalancedForwardPhaseKernel parameters q I)
+      (fun phase =>
+        (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+          parameters q I phase).1)
+      (fun phase history =>
+        (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+          parameters q I phase).2 history)
+      (figureOneDependentPhaseCount q)).1.comp
+        measurable_balancedCoolingInitialHistory
+  rw [show (fun point =>
+      MembershipOracleProgram.runEstimate oracle.query
+        (scheduledBalancedFigureOnePointContinuation parameters q point)) =
+      fun point =>
+      (fromPoint point).map (balancedFigureOneHistoryEstimate q) by
+    funext point
+    exact hpoint point]
+  rw [← map_bind_eq_bind_map_of_measurable target hfromPoint
+    (measurable_balancedFigureOneHistoryEstimate q)]
+  rw [scheduledBalancedForwardHistoryLaw_bind_fromPoint]
+
 theorem scheduledBalancedForwardPhaseKernel_ae_hasProduct
     (parameters : BalancedCoolingParameters) (q : VolumeParams)
     (I : VolumeInput q.n) (phase m : ℕ)
@@ -1660,6 +1706,7 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms figureOneIdealChronologicalAppend_coordinate
 #print axioms scheduledBalancedForwardPhaseKernel_measurable_and_probability
 #print axioms scheduledBalancedForwardHistoryLaw_isProbabilityMeasure
+#print axioms bind_scheduledBalancedFigureOnePointContinuation_eq_forwardHistory_map_of_pointwise
 #print axioms map_snd_iteratedKernelLaw_carryHistoryKernel
 #print axioms scheduledChronologicalActualIteration_map_snd
 #print axioms figureOneIdealChronologicalIteration_map_output
