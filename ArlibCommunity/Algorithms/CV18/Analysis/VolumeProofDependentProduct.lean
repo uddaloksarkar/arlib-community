@@ -535,6 +535,88 @@ theorem integral_dependentTruncatedProduct_sq_le
         _ = (1 + 2 * epsilon * alpha ^ 4 * (i + 1)) *
               (dependentPhaseMeanProduct second i * second (i + 1)) := by ring
 
+/-- The candidate form of equations (10)--(11), prior to the paper's final
+numerical estimate comparing the product of second moments with the square of
+the product of first moments. -/
+theorem integral_dependentTruncatedProduct_candidate_sq_le
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (alpha epsilon : ℝ) (mean rawMean second : ℕ → ℝ)
+    (V : ℕ → Omega → ℝ)
+    (halpha : 1 ≤ alpha) (hepsilon : 0 ≤ epsilon)
+    (hmean : ∀ j, 0 ≤ mean j) (hrawMean : ∀ j, 0 ≤ rawMean j)
+    (hsecond : ∀ j, 0 ≤ second j)
+    (hmeanSecond : ∀ j, mean j ^ 2 ≤ second j)
+    (hrawSecond : ∀ j, rawMean j ^ 2 ≤ 2 * second j)
+    (hVmeas : ∀ j, Measurable (V j))
+    (hV0 : ∀ j omega, 0 ≤ V j omega)
+    (hVcap : ∀ j omega, V j omega ≤ alpha * rawMean j)
+    (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
+    (hind : ∀ i, ApproxIndepFun epsilon
+      (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
+    (i : ℕ) :
+    (∫ omega, (dependentTruncatedProduct alpha mean V i omega *
+        V (i + 1) omega) ^ 2 ∂mu) ≤
+      (1 + 2 * epsilon * alpha ^ 4 * (i + 1)) *
+        dependentPhaseMeanProduct second (i + 1) := by
+  have hcandidate := integral_dependentTruncatedProduct_sq_mul_phase_sq_le
+    mu alpha epsilon mean rawMean second V halpha hepsilon hmean hrawMean
+      hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVsecond hind i
+  have hinduction := integral_dependentTruncatedProduct_sq_le
+    mu alpha epsilon mean rawMean second V halpha hepsilon hmean hrawMean
+      hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVsecond hind i
+  have hscaled := mul_le_mul_of_nonneg_right hinduction (hsecond (i + 1))
+  rw [dependentPhaseMeanProduct_succ]
+  calc
+    (∫ omega, (dependentTruncatedProduct alpha mean V i omega *
+        V (i + 1) omega) ^ 2 ∂mu) =
+        ∫ omega, dependentTruncatedProduct alpha mean V i omega ^ 2 *
+          V (i + 1) omega ^ 2 ∂mu := by
+      apply integral_congr_ae
+      filter_upwards with omega
+      ring
+    _ ≤ (∫ omega, dependentTruncatedProduct alpha mean V i omega ^ 2 ∂mu) *
+          second (i + 1) +
+        2 * epsilon * alpha ^ 4 *
+          (dependentPhaseMeanProduct second i * second (i + 1)) := by
+      simpa only [dependentPhaseMeanProduct_succ] using hcandidate
+    _ ≤ ((1 + 2 * epsilon * alpha ^ 4 * i) *
+          dependentPhaseMeanProduct second i) * second (i + 1) +
+        2 * epsilon * alpha ^ 4 *
+          (dependentPhaseMeanProduct second i * second (i + 1)) := by
+      exact add_le_add hscaled (le_refl _)
+    _ = (1 + 2 * epsilon * alpha ^ 4 * (i + 1)) *
+          (dependentPhaseMeanProduct second i * second (i + 1)) := by ring
+
+theorem dependentTruncatedProduct_candidateSecond_of_relativeProduct
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (alpha epsilon : ℝ) (mean rawMean second : ℕ → ℝ)
+    (V : ℕ → Omega → ℝ)
+    (halpha : 1 ≤ alpha) (hepsilon : 0 ≤ epsilon)
+    (hmean : ∀ j, 0 ≤ mean j) (hrawMean : ∀ j, 0 ≤ rawMean j)
+    (hsecond : ∀ j, 0 ≤ second j)
+    (hmeanSecond : ∀ j, mean j ^ 2 ≤ second j)
+    (hrawSecond : ∀ j, rawMean j ^ 2 ≤ 2 * second j)
+    (hVmeas : ∀ j, Measurable (V j))
+    (hV0 : ∀ j omega, 0 ≤ V j omega)
+    (hVcap : ∀ j omega, V j omega ≤ alpha * rawMean j)
+    (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
+    (hind : ∀ i, ApproxIndepFun epsilon
+      (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
+    (hrelative : ∀ i,
+      (1 + 2 * epsilon * alpha ^ 4 * i) * dependentPhaseMeanProduct second i ≤
+        2 * dependentPhaseMeanProduct mean i ^ 2) :
+    ∀ i,
+      (∫ omega, (dependentTruncatedProduct alpha mean V i omega *
+        V (i + 1) omega) ^ 2 ∂mu) ≤
+          2 * dependentPhaseMeanProduct mean (i + 1) ^ 2 := by
+  intro i
+  have hrel := hrelative (i + 1)
+  norm_num only [Nat.cast_add, Nat.cast_one] at hrel
+  exact (integral_dependentTruncatedProduct_candidate_sq_le
+    mu alpha epsilon mean rawMean second V halpha hepsilon hmean hrawMean
+      hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVsecond hind i).trans
+        hrel
+
 /-- Equation (12), before inserting the second-moment estimate: truncating
 the candidate `Uᵢ Vᵢ₊₁` at its deterministic cap loses at most its second
 moment divided by four times that cap. -/
@@ -729,6 +811,60 @@ theorem integral_dependentTruncatedProduct_ge
         _ ≤ ∫ omega, dependentTruncatedProduct alpha mean V (i + 1) omega ∂mu := by
           simpa only [dependentPhaseMeanProduct_succ] using hstep
 
+/-- Equations (7), (9), (10), and (14) assembled from the phasewise moment
+data and the single numerical relative-product estimate used by CV18. -/
+theorem dependentTruncatedProduct_moment_bounds_of_relativeProduct
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (alpha epsilon : ℝ) (mean rawMean second : ℕ → ℝ)
+    (V : ℕ → Omega → ℝ)
+    (halpha : 1 ≤ alpha) (hepsilon : 0 ≤ epsilon)
+    (hsmall : 4 * epsilon * alpha ^ 3 ≤ 1)
+    (hmean : ∀ j, 0 ≤ mean j) (hmeanPos : ∀ j, 0 < mean j)
+    (hrawMean : ∀ j, 0 ≤ rawMean j)
+    (hrawMean_le : ∀ j, rawMean j ≤ 2 * mean j)
+    (hsecond : ∀ j, 0 ≤ second j)
+    (hmeanSecond : ∀ j, mean j ^ 2 ≤ second j)
+    (hrawSecond : ∀ j, rawMean j ^ 2 ≤ 2 * second j)
+    (hVmeas : ∀ j, Measurable (V j))
+    (hV0 : ∀ j omega, 0 ≤ V j omega)
+    (hVcap : ∀ j omega, V j omega ≤ alpha * rawMean j)
+    (hVmean : ∀ j, (∫ omega, V j omega ∂mu) = mean j)
+    (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
+    (hind : ∀ i, ApproxIndepFun epsilon
+      (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
+    (hrelative : ∀ i,
+      (1 + 2 * epsilon * alpha ^ 4 * i) * dependentPhaseMeanProduct second i ≤
+        2 * dependentPhaseMeanProduct mean i ^ 2) :
+    ∀ i,
+      (1 - i / alpha) * dependentPhaseMeanProduct mean i ≤
+          ∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu ∧
+      (∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu) ≤
+          (1 + 2 * epsilon * alpha ^ 2 * i) *
+            dependentPhaseMeanProduct mean i ∧
+      (∫ omega, dependentTruncatedProduct alpha mean V i omega ^ 2 ∂mu) ≤
+          (1 + 2 * epsilon * alpha ^ 4 * i) *
+            dependentPhaseMeanProduct second i := by
+  have hVcapTwo : ∀ j omega, V j omega ≤ 2 * alpha * mean j := by
+    intro j omega
+    calc
+      V j omega ≤ alpha * rawMean j := hVcap j omega
+      _ ≤ alpha * (2 * mean j) :=
+        mul_le_mul_of_nonneg_left (hrawMean_le j) (zero_le_one.trans halpha)
+      _ = 2 * alpha * mean j := by ring
+  have hcandidate := dependentTruncatedProduct_candidateSecond_of_relativeProduct
+    mu alpha epsilon mean rawMean second V halpha hepsilon hmean hrawMean
+      hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVsecond hind hrelative
+  have hlower := integral_dependentTruncatedProduct_ge
+    mu alpha epsilon mean rawMean V halpha hepsilon hsmall hmean hmeanPos
+      hrawMean hrawMean_le hVmeas hV0 hVcap hVmean hind hcandidate
+  have hupper := integral_dependentTruncatedProduct_le
+    mu alpha epsilon mean V halpha hepsilon hmean hVmeas hV0 hVcapTwo hVmean hind
+  have hsquared := integral_dependentTruncatedProduct_sq_le
+    mu alpha epsilon mean rawMean second V halpha hepsilon hmean hrawMean
+      hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVsecond hind
+  intro i
+  exact ⟨hlower i, hupper i, hsquared i⟩
+
 #print axioms measurable_dependentTruncatedProduct
 #print axioms dependentTruncatedProduct_nonneg
 #print axioms abs_integral_dependentTruncatedProduct_mul_phase_sub_le
@@ -736,6 +872,7 @@ theorem integral_dependentTruncatedProduct_ge
 #print axioms integral_dependentTruncatedProduct_sq_le
 #print axioms integral_dependentTruncatedProduct_succ_ge
 #print axioms integral_dependentTruncatedProduct_ge
+#print axioms dependentTruncatedProduct_moment_bounds_of_relativeProduct
 #print axioms ApproxIndepFun.abs_integral_sq_mul_sq_sub_mul_integral_sq_le
 
 end ArlibCommunity.Algorithms.CV18
