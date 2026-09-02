@@ -69,6 +69,347 @@ theorem half_le_one_sub_balancedAccuracyGaussianAcceptance
           (by norm_num : (0 : ℝ) ≤ 1 / 2)]
       norm_num
 
+/-- One executable balanced KLS rejection test.  This is the original test
+with its acceptance threshold multiplied by `1/2`; it therefore uses exactly
+one membership query and does not change the target returned on success. -/
+noncomputable def balancedAccuracyGaussianRejectionAttempt (q : VolumeParams)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    MembershipOracleProgram q.n (Bool × AmbientSpace q.n) :=
+  let c := accuracyScaleFactor q
+  let target := c⁻¹ • current
+  .query target fun inside =>
+    .randomReal uniformUnitIntervalMeasure inferInstance fun coin =>
+      if inside = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target then
+        .pure (true, target)
+      else
+        .pure (false, target)
+
+theorem balancedAccuracyGaussianRejectionAttempt_queryBound
+    (q : VolumeParams) (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    (balancedAccuracyGaussianRejectionAttempt q sigma2 current).QueryBound 1 := by
+  unfold balancedAccuracyGaussianRejectionAttempt
+  apply MembershipOracleProgram.QueryBound.query
+  intro inside
+  apply MembershipOracleProgram.QueryBound.randomReal
+  intro coin
+  split <;> exact .pure _ 0
+
+theorem balancedAccuracyGaussianRejectionAttempt_stronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    (balancedAccuracyGaussianRejectionAttempt q sigma2 current).StronglyMeasurable
+      oracle.query := by
+  simp only [balancedAccuracyGaussianRejectionAttempt,
+    MembershipOracleProgram.StronglyMeasurable]
+  let target : AmbientSpace q.n := (accuracyScaleFactor q)⁻¹ • current
+  let output : ℝ → Bool × AmbientSpace q.n := fun coin =>
+    if oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+        ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+          Arlib.MarkovChains.gaussianScaleAcceptance sigma2
+            (accuracyScaleFactor q) target then
+      (true, target)
+    else (false, target)
+  have hout : Measurable output := by
+    by_cases heligible : oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ accuracyPhaseRadius q sigma2
+    · simp only [output, heligible.1, heligible.2.1, heligible.2.2, true_and]
+      exact Measurable.ite
+        (measurableSet_le (ENNReal.measurable_ofReal.comp measurable_id)
+          measurable_const)
+        measurable_const measurable_const
+    · have hfalse : ∀ coin : ℝ, ¬ (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2
+              (accuracyScaleFactor q) target) := by
+        intro coin h
+        exact heligible ⟨h.1, h.2.1, h.2.2.1⟩
+      simp only [output, hfalse, if_false]
+      exact measurable_const
+  constructor
+  · rw [show (fun coin => MembershipOracleProgram.runEstimate oracle.query
+        (if oracle.query target = true ∧
+            ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+            ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+            ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+              Arlib.MarkovChains.gaussianScaleAcceptance sigma2
+                (accuracyScaleFactor q) target then
+          .pure (true, target) else .pure (false, target))) =
+        fun coin => Measure.dirac (output coin) by
+      funext coin
+      by_cases h : oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2
+              (accuracyScaleFactor q) target
+      · simp [h, output, MembershipOracleProgram.runEstimate]
+      · simp [h, output, MembershipOracleProgram.runEstimate]]
+    exact Measure.measurable_dirac.comp hout
+  · intro coin
+    split <;> trivial
+
+/-- Exact mixture law of one balanced executable rejection attempt. -/
+noncomputable def balancedAccuracyGaussianRejectionLaw
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (current : AmbientSpace q.n) : Measure (Bool × AmbientSpace q.n) :=
+  let target := (accuracyScaleFactor q)⁻¹ • current
+  let accept := balancedAccuracyGaussianAcceptance q I sigma2 current
+  accept • Measure.dirac (true, target) +
+    (1 - accept) • Measure.dirac (false, target)
+
+theorem measurable_balancedAccuracyGaussianRejectionLaw
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
+    Measurable (balancedAccuracyGaussianRejectionLaw q I sigma2) := by
+  apply Measure.measurable_of_measurable_coe
+  intro S hS
+  simp only [balancedAccuracyGaussianRejectionLaw, Measure.add_apply,
+    Measure.smul_apply, smul_eq_mul, Measure.dirac_apply' _ hS]
+  have htarget : Measurable fun current : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹ • current :=
+    (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹).smul measurable_id
+  have htrue : Measurable fun current : AmbientSpace q.n =>
+      S.indicator (1 : Bool × AmbientSpace q.n → ENNReal)
+        (true, (accuracyScaleFactor q)⁻¹ • current) :=
+    (measurable_one.indicator hS).comp (measurable_const.prodMk htarget)
+  have hfalse : Measurable fun current : AmbientSpace q.n =>
+      S.indicator (1 : Bool × AmbientSpace q.n → ENNReal)
+        (false, (accuracyScaleFactor q)⁻¹ • current) :=
+    (measurable_one.indicator hS).comp (measurable_const.prodMk htarget)
+  have hacc := measurable_balancedAccuracyGaussianAcceptance q I sigma2
+  exact (hacc.mul htrue).add ((measurable_const.sub hacc).mul hfalse)
+
+theorem runEstimate_balancedAccuracyGaussianRejectionAttempt
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    (balancedAccuracyGaussianRejectionAttempt q sigma2 current).runEstimate
+        oracle.query =
+      balancedAccuracyGaussianRejectionLaw q I sigma2 current := by
+  let c := accuracyScaleFactor q
+  let target : AmbientSpace q.n := c⁻¹ • current
+  let accept := balancedAccuracyGaussianAcceptance q I sigma2 current
+  have haccept : accept ≤ 1 :=
+    (balancedAccuracyGaussianAcceptance_le_half q I hsigma2 current).trans
+      (by norm_num)
+  have hacceptTop : accept ≠ ⊤ :=
+    ne_top_of_le_ne_top ENNReal.one_ne_top haccept
+  have hacceptReal0 : 0 ≤ accept.toReal := ENNReal.toReal_nonneg
+  have hacceptReal1 : accept.toReal ≤ 1 :=
+    ENNReal.toReal_mono ENNReal.one_ne_top haccept
+  by_cases ht : target ∈ accuracyPhaseTruncatedBody q I sigma2
+  · have heligible := (oracle_and_radii_iff_mem_accuracyPhaseTruncatedBody
+      q I oracle sigma2 target).mpr ht
+    have hcond : ∀ coin : ℝ,
+        (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target) =
+        (coin ≤ accept.toReal) := by
+      intro coin
+      have hacceptEq : balancedAccuracyGaussianAcceptance q I sigma2 current =
+          (2 : ENNReal)⁻¹ *
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target := by
+        unfold balancedAccuracyGaussianAcceptance
+          accuracyGaussianRejectionAcceptance
+        rw [Set.indicator_of_mem ht]
+      rw [← hacceptEq]
+      apply propext
+      simpa only [heligible.1, heligible.2.1, heligible.2.2, true_and] using
+        (ENNReal.ofReal_le_iff_le_toReal hacceptTop :
+          ENNReal.ofReal coin ≤ accept ↔ coin ≤ accept.toReal)
+    simp only [balancedAccuracyGaussianRejectionAttempt,
+      MembershipOracleProgram.runEstimate]
+    dsimp only [c, target] at hcond
+    simp_rw [hcond]
+    have hout : Measurable fun coin : ℝ =>
+        if coin ≤ accept.toReal then (true, target) else (false, target) :=
+      Measurable.ite measurableSet_Iic measurable_const measurable_const
+    have hbind :
+        (uniformUnitIntervalMeasure.bind fun value =>
+          MembershipOracleProgram.runEstimate oracle.query
+            (if value ≤ accept.toReal then
+              MembershipOracleProgram.pure (true, target)
+            else MembershipOracleProgram.pure (false, target))) =
+          uniformUnitIntervalMeasure.bind fun value =>
+            Measure.dirac (if value ≤ accept.toReal then
+              (true, target) else (false, target)) := by
+      apply Measure.bind_congr_right
+      filter_upwards with value
+      split <;> simp [MembershipOracleProgram.runEstimate]
+    rw [hbind, Measure.bind_dirac_eq_map uniformUnitIntervalMeasure hout]
+    rw [uniformUnitInterval_map_threshold hacceptReal0 hacceptReal1
+      (true, target) (false, target)]
+    unfold balancedAccuracyGaussianRejectionLaw
+    dsimp only
+    rw [ENNReal.ofReal_toReal hacceptTop]
+    have hcompTop : 1 - accept ≠ ∞ :=
+      ne_top_of_le_ne_top ENNReal.one_ne_top (tsub_le_self : 1 - accept ≤ 1)
+    have hcomp : ENNReal.ofReal (1 - accept.toReal) = 1 - accept := by
+      rw [← ENNReal.toReal_one,
+        ← ENNReal.toReal_sub_of_le haccept ENNReal.one_ne_top,
+        ENNReal.ofReal_toReal hcompTop]
+    rw [hcomp]
+  · have hineligible : ¬ (oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ accuracyPhaseRadius q sigma2) := by
+      rwa [oracle_and_radii_iff_mem_accuracyPhaseTruncatedBody]
+    have haccept0 : accept = 0 := by
+      unfold accept balancedAccuracyGaussianAcceptance
+        accuracyGaussianRejectionAcceptance
+      rw [Set.indicator_of_notMem ht, mul_zero]
+    simp only [balancedAccuracyGaussianRejectionAttempt,
+      MembershipOracleProgram.runEstimate]
+    have hfalse : ∀ coin : ℝ,
+        ¬ (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ accuracyPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target) := by
+      intro coin h
+      exact hineligible ⟨h.1, h.2.1, h.2.2.1⟩
+    dsimp only [c, target] at hfalse
+    simp_rw [hfalse, if_false]
+    simp only [MembershipOracleProgram.runEstimate]
+    rw [Measure.bind_const, measure_univ, one_smul]
+    unfold balancedAccuracyGaussianRejectionLaw
+    dsimp only
+    rw [show balancedAccuracyGaussianAcceptance q I sigma2 current = 0 from
+      haccept0]
+    simp
+
+theorem balancedAccuracyGaussianRejectionLaw_isProbabilityMeasure
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    IsProbabilityMeasure
+      (balancedAccuracyGaussianRejectionLaw q I sigma2 current) := by
+  constructor
+  simp only [balancedAccuracyGaussianRejectionLaw, Measure.add_apply,
+    Measure.smul_apply, measure_univ, smul_eq_mul, mul_one]
+  rw [add_comm, tsub_add_cancel_of_le]
+  exact (balancedAccuracyGaussianAcceptance_le_half q I hsigma2 current).trans
+    (by norm_num)
+
+noncomputable def balancedAccuracyGaussianRejectionKernel
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
+    Kernel (AmbientSpace q.n) (Bool × AmbientSpace q.n) :=
+  ⟨balancedAccuracyGaussianRejectionLaw q I sigma2,
+    measurable_balancedAccuracyGaussianRejectionLaw q I sigma2⟩
+
+instance balancedAccuracyGaussianRejectionKernel_isMarkovKernel
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (sigma2 : ℝ) [Fact (0 < sigma2)] :
+    IsMarkovKernel (balancedAccuracyGaussianRejectionKernel q I sigma2) :=
+  ⟨balancedAccuracyGaussianRejectionLaw_isProbabilityMeasure
+    q I (Fact.out : 0 < sigma2)⟩
+
+/-- The successful slice of the balanced kernel is the balanced accepted
+state submeasure followed by the same homothety as the original KLS test. -/
+theorem balancedAccuracyGaussianRejectionKernel_true_prod
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (mu : Measure (AmbientSpace q.n)) {B : Set (AmbientSpace q.n)}
+    (hB : MeasurableSet B) :
+    (mu.bind (balancedAccuracyGaussianRejectionKernel q I sigma2))
+        ({true} ×ˢ B) =
+      ((mu.withDensity (balancedAccuracyGaussianAcceptance q I sigma2)).map
+        (fun x => (accuracyScaleFactor q)⁻¹ • x)) B := by
+  have hscale : Measurable (fun x : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹ • x) :=
+    (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹).smul measurable_id
+  have hprod : MeasurableSet ({true} ×ˢ B) :=
+    (measurableSet_singleton true).prod hB
+  rw [Measure.bind_apply hprod
+    (balancedAccuracyGaussianRejectionKernel q I sigma2).measurable.aemeasurable]
+  rw [Measure.map_apply hscale hB,
+    withDensity_apply _ (hscale hB)]
+  rw [← lintegral_indicator (hscale hB)]
+  apply lintegral_congr
+  intro current
+  change (balancedAccuracyGaussianRejectionLaw q I sigma2 current)
+      ({true} ×ˢ B) = _
+  simp only [balancedAccuracyGaussianRejectionLaw, Measure.add_apply,
+    Measure.smul_apply, smul_eq_mul, Measure.dirac_apply' _ hprod]
+  by_cases ht : (accuracyScaleFactor q)⁻¹ • current ∈ B
+  · simp [ht, Set.indicator_of_mem, hprod]
+  · simp [ht, Set.indicator_of_notMem, hprod]
+
+/-- Normalized target-point law returned by a successful balanced attempt. -/
+noncomputable def balancedAccuracyGaussianAcceptedTargetLaw
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (mu : Measure (AmbientSpace q.n)) : Measure (AmbientSpace q.n) :=
+  Arlib.condOn
+    ((mu.withDensity (balancedAccuracyGaussianAcceptance q I sigma2)).map
+      (fun x => (accuracyScaleFactor q)⁻¹ • x)) Set.univ
+
+/-- Multiplying every acceptance probability by `1/2` does not change the
+law conditioned on success. -/
+theorem balancedAccuracyGaussianAcceptedTargetLaw_eq
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (mu : Measure (AmbientSpace q.n)) :
+    balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 mu =
+      accuracyGaussianAcceptedTargetLaw q I sigma2 mu := by
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    (accuracyScaleFactor q)⁻¹ • x
+  have hscale : Measurable scale := by
+    dsimp [scale]
+    exact (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹).smul measurable_id
+  unfold balancedAccuracyGaussianAcceptedTargetLaw
+    accuracyGaussianAcceptedTargetLaw
+  unfold balancedAccuracyGaussianAcceptance
+  change Arlib.condOn
+      ((mu.withDensity ((2 : ENNReal)⁻¹ •
+        accuracyGaussianRejectionAcceptance q I sigma2)).map scale)
+        Set.univ = _
+  rw [withDensity_smul (2 : ENNReal)⁻¹
+    (measurable_accuracyGaussianRejectionAcceptance q I sigma2)]
+  change Arlib.condOn (((2 : ENNReal)⁻¹ •
+      mu.withDensity (accuracyGaussianRejectionAcceptance q I sigma2)).map
+        scale) Set.univ = _
+  rw [Measure.map_smul]
+  exact Arlib.MarkovChains.condOn_smul_cv18 _ MeasurableSet.univ
+    (by norm_num) (by norm_num)
+
+theorem balancedAccuracyGaussianAcceptedTargetLaw_tv_cv18
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {mu0 : Measure (AmbientSpace q.n)} [IsProbabilityMeasure mu0]
+    {M mixError : ℝ} (hM : 1 ≤ M)
+    (hwarm : Arlib.IsWarm (ENNReal.ofReal M) mu0
+      (Arlib.MarkovChains.ellGaussianProb
+        (accuracyPhaseTruncatedBody q I sigma2)
+        (figureOneProposalRadius q sigma2) sigma2))
+    (hmixError0 : 0 < mixError) (hmixError64 : mixError ≤ 1 / 64)
+    {t : ℕ} (ht : 4 * ((Real.log M + 2 * Real.log (1 / mixError)) /
+      (figureOneProposalRadius q sigma2 * Real.log 2 /
+        (640 * Real.sqrt sigma2 * Real.sqrt q.n)) ^ 2) + 1 ≤ (t : ℝ)) :
+    let K := accuracyPhaseTruncatedBody q I sigma2
+    let delta := figureOneProposalRadius q sigma2
+    let P := Arlib.MarkovChains.lazy
+      (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2)
+    let mixed := Arlib.MarkovChains.iterate P mu0 t
+    Arlib.TVLe
+      (balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 mixed)
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n))
+      (64 * ENNReal.ofReal mixError +
+        32 * ENNReal.ofReal (accuracyCoreError q) +
+        ENNReal.ofReal ((q.eps / (q.n : ℝ)) ^ 16)) := by
+  dsimp only
+  rw [balancedAccuracyGaussianAcceptedTargetLaw_eq]
+  exact accuracyGaussianAcceptedTargetLaw_tv_cv18 q I hsigma2 hM hwarm
+    hmixError0 hmixError64 ht
+
 /-- Current-state submeasure corresponding to a balanced successful attempt. -/
 noncomputable def balancedAcceptedStateMeasure
     (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
