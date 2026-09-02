@@ -9,7 +9,7 @@ import Mathlib.MeasureTheory.Integral.Layercake
 # Approximate independence for the CV18 product argument
 
 This file formalizes the probability lemmas used in Cousins--Vempala Lemmas
-7.13--7.18.  Their dependence coefficient is the strong-mixing coefficient
+7.12--7.17.  Their dependence coefficient is the strong-mixing coefficient
 
 `sup |P(X in A, Y in B) - P(X in A) P(Y in B)|`,
 
@@ -45,7 +45,7 @@ theorem ApproxIndepFun.mono {epsilon epsilon' : ℝ}
   intro A hA B hB
   exact (h A hA B hB).trans hle
 
-/-- CV18 Lemma 7.13: measurable postprocessing cannot increase the
+/-- CV18 Lemma 7.12: measurable postprocessing cannot increase the
 approximate-independence coefficient. -/
 theorem ApproxIndepFun.comp {epsilon : ℝ} {X : Omega -> S} {Y : Omega -> T}
     {mu : Measure Omega} (h : ApproxIndepFun epsilon X Y mu)
@@ -141,7 +141,7 @@ theorem integrableOn_measureReal_tail_Ioc
 
 /-- Rectangle approximate independence controls the mass of an `X`-tail
 under the measure weighted by a bounded nonnegative `Y`.  This is the inner
-layer-cake step in CV18 Lemma 7.14. -/
+layer-cake step in CV18 Lemma 7.13. -/
 theorem abs_withDensity_tail_sub_mul_univ_le
     (mu : Measure Omega) [IsProbabilityMeasure mu]
     {X Y : Omega -> ℝ} (hX : Measurable X) (hY : Measurable Y)
@@ -223,7 +223,7 @@ theorem abs_withDensity_tail_sub_mul_univ_le
       rw [setIntegral_const]
       simp [hb, mul_comm]
 
-/-- CV18 Lemma 7.14: if nonnegative random variables bounded by `a` and
+/-- CV18 Lemma 7.13: if nonnegative random variables bounded by `a` and
 `b` are `epsilon`-independent, their covariance has absolute value at most
 `epsilon * a * b`. -/
 theorem ApproxIndepFun.abs_integral_mul_sub_mul_integral_le
@@ -318,7 +318,7 @@ theorem ApproxIndepFun.abs_integral_mul_sub_mul_integral_le
       simp [ha]
       ring
 
-/-- The elementary pointwise inequality behind CV18 Lemma 7.15. -/
+/-- The elementary pointwise inequality behind CV18 Lemma 7.14. -/
 theorem sub_sq_div_four_mul_le_min {x a : ℝ} (_hx : 0 <= x) (ha : 0 < a) :
     x - x ^ 2 / (4 * a) <= min x a := by
   have hden : 0 < 4 * a := by positivity
@@ -331,7 +331,7 @@ theorem sub_sq_div_four_mul_le_min {x a : ℝ} (_hx : 0 <= x) (ha : 0 < a) :
       nlinarith [sq_nonneg (x - 2 * a)]
     nlinarith [sq_nonneg (x - 2 * a)]
 
-/-- CV18 Lemma 7.15 in integral form.  Truncating a nonnegative random
+/-- CV18 Lemma 7.14 in integral form.  Truncating a nonnegative random
 variable at `a` loses at most its second moment divided by `4a`. -/
 theorem integral_min_ge_integral_sub_secondMoment_div_four
     (mu : Measure Omega) [IsFiniteMeasure mu] {X : Omega -> ℝ} {a : ℝ}

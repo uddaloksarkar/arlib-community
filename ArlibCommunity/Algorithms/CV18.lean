@@ -31,6 +31,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPairedPrimitiv
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependence
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependenceMarkov
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependenceBalanced
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofDependentProduct
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFreshPhaseStart
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofStrongInitialWarmStart
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofGlobalQueryCap
