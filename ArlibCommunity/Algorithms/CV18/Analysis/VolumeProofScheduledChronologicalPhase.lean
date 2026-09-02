@@ -931,6 +931,27 @@ theorem figureOneIdealChronologicalIteration_map_output
           measurable_balancedCoolingInitialHistory.aemeasurable
       rw [Measure.map_fst_prod, measure_univ, one_smul]
 
+/-- The common-state actual iteration has exactly the scheduled chronological
+history's scalar output law. -/
+theorem figureOneScheduledActualChronologicalIteration_map_output
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phases : ℕ) :
+    (iteratedKernelLaw
+        (figureOneScheduledActualChronologicalPhaseKernel parameters q I)
+        (scheduledChronologicalCommonInitial q I) phases).map
+          (scheduledChronologicalCommonOutput q) =
+      (scheduledBalancedForwardHistoryLaw parameters q I phases).map
+        (balancedFigureOneHistoryEstimate q) := by
+  unfold scheduledChronologicalCommonOutput
+  rw [← Measure.map_map (measurable_balancedFigureOneHistoryEstimate q)
+    (show Measurable (Prod.snd : FigureOneIdealExperimentSpace q ×
+      Option (BalancedCoolingHistory q.n) →
+        Option (BalancedCoolingHistory q.n)) from measurable_snd)]
+  rw [show figureOneScheduledActualChronologicalPhaseKernel parameters q I =
+      carryHistoryKernel (A := FigureOneIdealExperimentSpace q)
+        (scheduledBalancedForwardPhaseKernel parameters q I) by rfl]
+  rw [scheduledChronologicalActualIteration_map_snd]
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
