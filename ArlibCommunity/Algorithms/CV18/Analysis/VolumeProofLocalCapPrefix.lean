@@ -16,6 +16,47 @@ globally capped proper collector.
 
 namespace ArlibCommunity.Algorithms.CV18
 
+open MeasureTheory
+
+/-- Counted pointwise measurability also supplies the estimate-only
+pointwise measurability needed by the ordinary interpreter laws. -/
+theorem MembershipOracleProgram.CountedStronglyMeasurable.stronglyMeasurable
+    {n : ℕ} {Result : Type} [MeasurableSpace Result]
+    {oracle : AmbientSpace n → Bool}
+    {program : MembershipOracleProgram n Result}
+    (h : program.CountedStronglyMeasurable oracle) :
+    program.StronglyMeasurable oracle := by
+  induction program with
+  | pure => trivial
+  | query point next ih => exact ih (oracle point) h
+  | randomNat law next ih =>
+      constructor
+      · rw [show (fun seed => (next seed).runEstimate oracle) =
+            fun seed => ((next seed).run oracle).map Prod.fst by
+          funext seed
+          exact MembershipOracleProgram.runEstimate_eq_map_fst_run
+            oracle (next seed) (h.2 seed).executionMeasurable]
+        exact (Measure.measurable_map _ measurable_fst).comp h.1
+      · exact fun seed => ih seed (h.2 seed)
+  | randomPoint law hprob next ih =>
+      constructor
+      · rw [show (fun point => (next point).runEstimate oracle) =
+            fun point => ((next point).run oracle).map Prod.fst by
+          funext point
+          exact MembershipOracleProgram.runEstimate_eq_map_fst_run
+            oracle (next point) (h.2 point).executionMeasurable]
+        exact (Measure.measurable_map _ measurable_fst).comp h.1
+      · exact fun point => ih point (h.2 point)
+  | randomReal law hprob next ih =>
+      constructor
+      · rw [show (fun value => (next value).runEstimate oracle) =
+            fun value => ((next value).run oracle).map Prod.fst by
+          funext value
+          exact MembershipOracleProgram.runEstimate_eq_map_fst_run
+            oracle (next value) (h.2 value).executionMeasurable]
+        exact (Measure.measurable_map _ measurable_fst).comp h.1
+      · exact fun value => ih value (h.2 value)
+
 /-- A syntax-level query bound is exactly strong enough for the outer cap to
 leave every execution branch intact. -/
 theorem MembershipOracleProgram.QueryBound.withQueryCap_eq
@@ -49,6 +90,50 @@ theorem MembershipOracleProgram.QueryBound.withQueryCap_eq
       congr 1
       funext value
       exact ih value
+
+/-- A structural query bound also bounds the expectation of the interpreter's
+actual query counter. -/
+theorem MembershipOracleProgram.QueryBound.lintegral_queryCount_le
+    {n : ℕ} {Result : Type} [MeasurableSpace Result]
+    {oracle : AmbientSpace n → Bool}
+    {program : MembershipOracleProgram n Result} {budget : ℕ}
+    (hbound : program.QueryBound budget)
+    (hmeas : program.CountedStronglyMeasurable oracle) :
+    ∫⁻ outcome, (outcome.2 : ENNReal) ∂(program.run oracle) ≤
+      (budget : ENNReal) := by
+  have hstrong := hmeas.stronglyMeasurable
+  have hnone : (program.withQueryCap budget).runEstimate oracle {none} = 0 := by
+    rw [hbound.withQueryCap_eq]
+    rw [MembershipOracleProgram.runEstimate_bind oracle program _ hstrong
+      (fun _ => by trivial)]
+    · simp only [MembershipOracleProgram.runEstimate]
+      rw [Measure.bind_dirac_eq_map _ measurable_some,
+        Measure.map_apply measurable_some measurableSet_queryCap_none]
+      rw [show some ⁻¹' ({none} : Set (Option Result)) = ∅ by
+        ext result
+        simp]
+      exact measure_empty
+    · simp only [MembershipOracleProgram.runEstimate]
+      exact Measure.measurable_dirac.comp measurable_some
+  have hlarge : program.run oracle {outcome | budget < outcome.2} = 0 := by
+    rw [← MembershipOracleProgram.runEstimate_withQueryCap_apply_none
+      oracle program budget hmeas.executionMeasurable]
+    exact hnone
+  have hae : ∀ᵐ outcome ∂(program.run oracle), outcome.2 ≤ budget := by
+    rw [ae_iff]
+    simpa only [not_le] using hlarge
+  have hae' : ∀ᵐ outcome ∂(program.run oracle),
+      (outcome.2 : ENNReal) ≤ (budget : ENNReal) :=
+    hae.mono fun outcome hout => by exact_mod_cast hout
+  calc
+    ∫⁻ outcome, (outcome.2 : ENNReal) ∂(program.run oracle) ≤
+        ∫⁻ _outcome, (budget : ENNReal) ∂(program.run oracle) :=
+      lintegral_mono_ae hae'
+    _ = (budget : ENNReal) := by
+      let _ : IsProbabilityMeasure (program.run oracle) :=
+        MembershipOracleProgram.run_isProbabilityMeasure oracle program
+          hmeas.executionMeasurable
+      simp
 
 /-- An outer query cutoff cannot observe the precise value of a larger local
 raw-proposal cap. -/
