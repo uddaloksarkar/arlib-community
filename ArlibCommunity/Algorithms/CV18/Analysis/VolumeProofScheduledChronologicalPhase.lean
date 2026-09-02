@@ -6,6 +6,8 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofChronologicalBalancedP
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledRetryKernel
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCoolingPrimitives
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledParameters
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledCounted
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLocalCapPrefix
 
 /-!
 # Chronological complete-phase law at the schedule-targeted geometry
@@ -1203,6 +1205,128 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_phaseIteration
       congr 1
       norm_num
 
+/-- Exact initial-sampling decomposition of the final scheduled executable.
+This removes the interpreter-level `hbaseLaw` premise from the accuracy
+wrapper; the only remaining law identification is the post-initial history. -/
+theorem figureOneFinalScheduledBalancedBaseProgram_runEstimate_eq_initial_bind
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) :
+    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query =
+      ((initialGaussianSamplingMeasure q).map
+        (initialTruncatedFallback q I)).bind fun point =>
+          (scheduledBalancedFigureOnePointContinuation
+            figureOneFinalScheduledBalancedParameters q point).runEstimate
+              oracle.query := by
+  let parameters := figureOneFinalScheduledBalancedParameters
+  have hpointCounted :=
+    scheduledBalancedFigureOnePointContinuation_countedMeasurable
+      parameters q I oracle
+  have hpointStrong : ∀ point,
+      MembershipOracleProgram.StronglyMeasurable oracle.query
+        (scheduledBalancedFigureOnePointContinuation parameters q point) := fun point =>
+    (hpointCounted.2 point).stronglyMeasurable
+  have hpointRun : Measurable fun point =>
+      MembershipOracleProgram.runEstimate oracle.query
+        (scheduledBalancedFigureOnePointContinuation parameters q point) := by
+    rw [show (fun point =>
+        MembershipOracleProgram.runEstimate oracle.query
+          (scheduledBalancedFigureOnePointContinuation parameters q point)) =
+        fun point =>
+          (MembershipOracleProgram.run oracle.query
+            (scheduledBalancedFigureOnePointContinuation parameters q point)).map
+              Prod.fst by
+      funext point
+      exact MembershipOracleProgram.runEstimate_eq_map_fst_run oracle.query _
+        (hpointCounted.2 point).executionMeasurable]
+    exact (Measure.measurable_map _ measurable_fst).comp hpointCounted.1
+  let initialTail : Option (AmbientSpace q.n) →
+      MembershipOracleProgram q.n ℝ := fun initialPoint =>
+    match initialPoint with
+    | none => .pure 0
+    | some point =>
+        scheduledBalancedFigureOnePointContinuation parameters q point
+  have hinitialTailStrong : ∀ initialPoint,
+      (initialTail initialPoint).StronglyMeasurable oracle.query := by
+    intro initialPoint
+    cases initialPoint with
+    | none => trivial
+    | some point => exact hpointStrong point
+  have hinitialTailRun : Measurable fun initialPoint =>
+      (initialTail initialPoint).runEstimate oracle.query := by
+    convert Measurable.optionElim (Measure.dirac (0 : ℝ)) hpointRun using 1
+    funext initialPoint
+    cases initialPoint <;> rfl
+  have hbase : figureOneFinalScheduledBalancedBaseProgram q =
+      (figureOneInitialSample q).bind initialTail := by
+    unfold figureOneFinalScheduledBalancedBaseProgram baseVolumeCooling
+      initialTail scheduledBalancedFigureOnePointContinuation parameters
+    congr 1
+  rw [hbase]
+  rw [MembershipOracleProgram.runEstimate_bind oracle.query _ initialTail
+    (figureOneInitialSample_stronglyMeasurable q I oracle)
+      hinitialTailStrong hinitialTailRun]
+  rw [runEstimate_figureOneInitialSample q I oracle]
+  rw [Measure.map_bind_eq_bind_comp _
+    (measurable_some.comp (measurable_initialTruncatedFallback q I))
+      hinitialTailRun]
+  rw [Measure.map_bind_eq_bind_comp _
+    (measurable_initialTruncatedFallback q I) hpointRun]
+  rfl
+
+/-- Final scheduled base accuracy with the interpreter decomposition fully
+discharged.  The two remaining inputs are exactly the post-initial history
+identification and the finite collection of complete-phase replacements. -/
+theorem figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_phaseIteration
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (hpostLaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          (fun point =>
+            (scheduledBalancedFigureOnePointContinuation
+              figureOneFinalScheduledBalancedParameters q point).runEstimate
+                oracle.query) =
+        (scheduledBalancedForwardHistoryLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)).map
+            (balancedFigureOneHistoryEstimate q))
+    (hphase : ∀ phase, phase < figureOneDependentPhaseCount q →
+      MeasureLeUpTo
+        ((iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
+          (scheduledChronologicalCommonInitial q I) phase).bind
+            (figureOneScheduledActualChronologicalPhaseKernel
+              figureOneFinalScheduledBalancedParameters q I phase))
+        (iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
+          (scheduledChronologicalCommonInitial q I) (phase + 1))
+        (figureOnePhaseReplacementBudget q)) :
+    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  let continuation : AmbientSpace q.n → Measure ℝ := fun point =>
+    (scheduledBalancedFigureOnePointContinuation
+      figureOneFinalScheduledBalancedParameters q point).runEstimate
+        oracle.query
+  have hpointCounted :=
+    scheduledBalancedFigureOnePointContinuation_countedMeasurable
+      figureOneFinalScheduledBalancedParameters q I oracle
+  have hcontinuationMeas : Measurable continuation := by
+    rw [show continuation = fun point =>
+        (MembershipOracleProgram.run oracle.query
+          (scheduledBalancedFigureOnePointContinuation
+            figureOneFinalScheduledBalancedParameters q point)).map Prod.fst by
+      funext point
+      exact MembershipOracleProgram.runEstimate_eq_map_fst_run oracle.query _
+        (hpointCounted.2 point).executionMeasurable]
+    exact (Measure.measurable_map _ measurable_fst).comp hpointCounted.1
+  have hcontinuationProb : ∀ point, IsProbabilityMeasure (continuation point) :=
+    fun point => MembershipOracleProgram.runEstimate_isProbabilityMeasure
+      oracle.query _ (hpointCounted.2 point).stronglyMeasurable.estimateMeasurable
+  apply figureOneFinalScheduledBalancedBase_failure_le_of_phaseIteration
+    q I oracle hrounded continuation hcontinuationMeas hcontinuationProb
+  · exact hpostLaw
+  · exact figureOneFinalScheduledBalancedBaseProgram_runEstimate_eq_initial_bind
+      q I oracle
+  · exact hphase
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
@@ -1391,6 +1515,8 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms figureOneIdealChronologicalIteration_map_output
 #print axioms scheduledPostInitialDirectFailureBound_of_phaseIteration
 #print axioms figureOneFinalScheduledBalancedBase_failure_le_of_phaseIteration
+#print axioms figureOneFinalScheduledBalancedBaseProgram_runEstimate_eq_initial_bind
+#print axioms figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_phaseIteration
 
 end
 
