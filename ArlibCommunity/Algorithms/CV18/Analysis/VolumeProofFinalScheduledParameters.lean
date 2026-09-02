@@ -34,11 +34,29 @@ theorem figureOneFinalScheduledQueryBudget_pos (q : VolumeParams) :
   positivity [figureOneFinalScheduledExpectedCostConstant_pos,
     volumeScheduledBaseComplexityRate_pos q]
 
+/-- The real-valued local block cap required by the cap-loss estimate.  The
+factor `16 * speedyAdjacentWarmConstant` is the larger of the first-block and
+retry-block warmness constants. -/
+noncomputable def figureOneFinalScheduledLocalCapRequirement
+    (q : VolumeParams) (sigma2 : ℝ) : ℝ :=
+  2 * (figureOneScheduledCorrectedProperStride q sigma2
+      (figureOneSafeRetryCount q - 1) : ℝ) *
+      (16 * speedyAdjacentWarmConstant q) /
+    figureOneCorrectedBlockMixingError q (figureOneSafeRetryCount q - 1)
+
+/-- The local collector cap contains the outer cutoff budget as a prefix and
+then adds enough slack to make cap exhaustion cost one corrected block budget.
+The outer query cutoff remains a separate global guard. -/
+noncomputable def figureOneFinalScheduledLocalProposalCap
+    (q : VolumeParams) (sigma2 : ℝ) : ℕ :=
+  figureOneFinalScheduledQueryBudget q +
+    Nat.ceil (figureOneFinalScheduledLocalCapRequirement q sigma2)
+
 /-- The parameters shared by the final cost, mapped-law, and prefix arguments.
 Only the global proposal cap differs from the earlier scheduled prototype. -/
 noncomputable def figureOneFinalScheduledBalancedParameters :
     BalancedCoolingParameters where
-  proposalCap := fun q _ => figureOneFinalScheduledQueryBudget q
+  proposalCap := figureOneFinalScheduledLocalProposalCap
   properStride := fun q sigma2 =>
     figureOneScheduledCorrectedProperStride q sigma2
       (figureOneSafeRetryCount q - 1)
@@ -47,7 +65,7 @@ noncomputable def figureOneFinalScheduledBalancedParameters :
 @[simp] theorem figureOneFinalScheduledBalancedParameters_proposalCap
     (q : VolumeParams) (sigma2 : ℝ) :
     figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 =
-      figureOneFinalScheduledQueryBudget q := rfl
+      figureOneFinalScheduledLocalProposalCap q sigma2 := rfl
 
 @[simp] theorem figureOneFinalScheduledBalancedParameters_properStride
     (q : VolumeParams) (sigma2 : ℝ) :
@@ -67,10 +85,17 @@ theorem figureOneFinalScheduledBalancedParameters_attempts_add_one
   simp only [figureOneFinalScheduledBalancedParameters_retryLimit]
   exact Nat.sub_add_cancel (figureOneSafeRetryCount_pos q)
 
-theorem figureOneFinalScheduled_localRawCap_eq_outer_add_one
+theorem figureOneFinalScheduled_outerBudget_le_localProposalCap
     (q : VolumeParams) (sigma2 : ℝ) :
-    figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 + 1 =
-      figureOneFinalScheduledQueryBudget q + 1 := rfl
+    figureOneFinalScheduledQueryBudget q ≤
+      figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 := by
+  simp [figureOneFinalScheduledLocalProposalCap]
+
+theorem figureOneFinalScheduledBalancedParameters_proposalCap_pos
+    (q : VolumeParams) (sigma2 : ℝ) :
+    0 < figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 :=
+  (figureOneFinalScheduledQueryBudget_pos q).trans_le
+    (figureOneFinalScheduled_outerBudget_le_localProposalCap q sigma2)
 
 noncomputable def figureOneFinalScheduledBalancedBaseProgram
     (q : VolumeParams) : MembershipOracleProgram q.n ℝ :=
