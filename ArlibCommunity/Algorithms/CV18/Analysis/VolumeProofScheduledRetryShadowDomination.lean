@@ -1,5 +1,6 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKilledChainCost
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCostComposition
 
 /-! # Domination of finite scheduled retries by a fixed-trial shadow -/
 
@@ -278,6 +279,170 @@ theorem scheduledRetryStep_countedQueryCost_le_padded
         ∫⁻ state, envelope state
           ∂scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap
             properStride current := by ring
+
+/-- The actual nested finite-retry collector is pointwise dominated by the
+fixed-trial killed-chain shadow with the exact number of live trials remaining
+in its lexicographic `(samples, attempts)` state. -/
+theorem scheduledBalancedAccuracyRetryCollectAux_countedQueryCost_le_shadow
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (proposalCap properStride retryLimit : ℕ) :
+    ∀ attempts samples total current,
+      countedQueryCost
+          ((scheduledBalancedAccuracyRetryCollectAux q sigma2 weight proposalCap
+            properStride retryLimit attempts samples total current).run
+              oracle.query) ≤
+        finiteKilledChainExpectedCost
+          (scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap properStride)
+          (scheduledPaddedTrialCost q I oracle sigma2 proposalCap properStride)
+          (balancedRemainingTrials retryLimit attempts samples) current := by
+  intro attempts samples
+  induction samples using Nat.strong_induction_on generalizing attempts with
+  | h samples ihSamples =>
+      cases samples with
+      | zero =>
+          intro total current
+          simp [scheduledBalancedAccuracyRetryCollectAux,
+            balancedRemainingTrials, finiteKilledChainExpectedCost,
+            MembershipOracleProgram.countedQueryCost_pure]
+      | succ future =>
+          induction attempts with
+          | zero =>
+              intro total current
+              rw [scheduledBalancedAccuracyRetryCollectAux]
+              simp only [MembershipOracleProgram.countedQueryCost_pure]
+              exact bot_le
+          | succ attempts ihAttempts =>
+              intro total current
+              let nextLaw := scheduledSuccessfulBlockEndpointLaw q I sigma2
+                proposalCap properStride
+              let trialCost := scheduledPaddedTrialCost q I oracle sigma2
+                proposalCap properStride
+              let remaining := balancedRemainingTrials retryLimit (attempts + 1)
+                (future + 1)
+              let envelope := finiteKilledChainExpectedCost nextLaw trialCost
+                (remaining - 1)
+              let next (z : AmbientSpace q.n ×
+                  (Bool × AmbientSpace q.n)) :=
+                if z.2.1 then
+                  scheduledBalancedAccuracyRetryCollectAux q sigma2 weight
+                    proposalCap properStride retryLimit retryLimit future
+                      (total + weight z.2.2) z.1
+                else
+                  scheduledBalancedAccuracyRetryCollectAux q sigma2 weight
+                    proposalCap properStride retryLimit attempts (future + 1)
+                      total z.1
+              have hnext : ∀ z, (next z).CountedStronglyMeasurable
+                  oracle.query := by
+                rintro ⟨mixed, mark, target⟩
+                cases mark with
+                | false =>
+                    exact (scheduledBalancedAccuracyRetryCollectAux_countedMeasurable
+                      q I oracle hsigma2 hweight proposalCap properStride retryLimit
+                        attempts (future + 1)).2 total mixed
+                | true =>
+                    exact (scheduledBalancedAccuracyRetryCollectAux_countedMeasurable
+                      q I oracle hsigma2 hweight proposalCap properStride retryLimit
+                        retryLimit future).2 (total + weight target) mixed
+              have hnextRun : Measurable fun z => (next z).run oracle.query := by
+                dsimp only [next]
+                rw [show (fun z : AmbientSpace q.n ×
+                      (Bool × AmbientSpace q.n) =>
+                      (if z.2.1 = true then
+                        scheduledBalancedAccuracyRetryCollectAux q sigma2 weight
+                          proposalCap properStride retryLimit retryLimit future
+                            (total + weight z.2.2) z.1
+                      else
+                        scheduledBalancedAccuracyRetryCollectAux q sigma2 weight
+                          proposalCap properStride retryLimit attempts (future + 1)
+                            total z.1).run oracle.query) =
+                    fun z => if z.2.1 = true then
+                      (scheduledBalancedAccuracyRetryCollectAux q sigma2 weight
+                        proposalCap properStride retryLimit retryLimit future
+                          (total + weight z.2.2) z.1).run oracle.query
+                    else
+                      (scheduledBalancedAccuracyRetryCollectAux q sigma2 weight
+                        proposalCap properStride retryLimit attempts (future + 1)
+                          total z.1).run oracle.query by
+                    funext z
+                    split <;> rfl]
+                apply Measurable.ite
+                · exact (measurable_fst.comp measurable_snd)
+                    (measurableSet_singleton true)
+                · exact (scheduledBalancedAccuracyRetryCollectAux_countedMeasurable
+                    q I oracle hsigma2 hweight proposalCap properStride retryLimit
+                      retryLimit future).1.comp <|
+                      ((measurable_const.add
+                        (hweight.comp (measurable_snd.comp measurable_snd))).prodMk
+                          measurable_fst)
+                · exact (scheduledBalancedAccuracyRetryCollectAux_countedMeasurable
+                    q I oracle hsigma2 hweight proposalCap properStride retryLimit
+                      attempts (future + 1)).1.comp
+                        (measurable_const.prodMk measurable_fst)
+              have henvelope : Measurable envelope :=
+                measurable_finiteKilledChainExpectedCost
+                  (scheduledSuccessfulBlockEndpointLaw_measurable q I hsigma2
+                    proposalCap properStride)
+                  (measurable_scheduledPaddedTrialCost q I oracle hsigma2
+                    proposalCap properStride) _
+              have hbound : ∀ mixed result,
+                  countedQueryCost ((next (mixed, result)).run oracle.query) ≤
+                    envelope mixed := by
+                intro mixed result
+                rcases result with ⟨mark, target⟩
+                cases mark with
+                | false =>
+                    dsimp only [next, Bool.false_eq_true, ↓reduceIte]
+                    calc
+                      countedQueryCost
+                          ((scheduledBalancedAccuracyRetryCollectAux q sigma2
+                            weight proposalCap properStride retryLimit attempts
+                              (future + 1) total mixed).run oracle.query) ≤
+                        finiteKilledChainExpectedCost nextLaw trialCost
+                          (balancedRemainingTrials retryLimit attempts
+                            (future + 1)) mixed := ihAttempts total mixed
+                      _ ≤ envelope mixed :=
+                        finiteKilledChainExpectedCost_mono nextLaw trialCost
+                          (by rw [balancedRemainingTrials_reject]) mixed
+                | true =>
+                    dsimp only [next, ↓reduceIte]
+                    calc
+                      countedQueryCost
+                          ((scheduledBalancedAccuracyRetryCollectAux q sigma2
+                            weight proposalCap properStride retryLimit retryLimit
+                              future (total + weight target) mixed).run
+                                oracle.query) ≤
+                        finiteKilledChainExpectedCost nextLaw trialCost
+                          (balancedRemainingTrials retryLimit retryLimit future)
+                            mixed :=
+                              ihSamples future (by omega) retryLimit
+                                (total + weight target) mixed
+                      _ ≤ envelope mixed :=
+                        finiteKilledChainExpectedCost_mono nextLaw trialCost
+                          (balancedRemainingTrials_accept retryLimit attempts future)
+                            mixed
+              have hstep := scheduledRetryStep_countedQueryCost_le_padded
+                q I oracle hsigma2 proposalCap properStride current
+                  (none : Option (ℝ × AmbientSpace q.n)) next hnext hnextRun
+                    envelope henvelope hbound
+              have hremaining : remaining = remaining - 1 + 1 := by
+                dsimp only [remaining, balancedRemainingTrials]
+                omega
+              calc
+                countedQueryCost
+                    ((scheduledBalancedAccuracyRetryCollectAux q sigma2 weight
+                      proposalCap properStride retryLimit (attempts + 1)
+                        (future + 1) total current).run oracle.query) ≤
+                  trialCost current + ∫⁻ state, envelope state ∂nextLaw current := by
+                    rw [scheduledBalancedAccuracyRetryCollectAux]
+                    convert hstep using 1
+                    simp only [next]
+                    rfl
+                _ = finiteKilledChainExpectedCost nextLaw trialCost remaining
+                    current := by
+                      rw [hremaining]
+                      rfl
 
 
 
