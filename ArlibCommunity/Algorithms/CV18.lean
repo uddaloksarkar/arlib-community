@@ -26,6 +26,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofStrongInitialWarmStart
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofGlobalQueryCap
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedRejection
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedRetryProgram
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedRetryApproximation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScaleInvariant
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofMarkovEmpirical
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofMarkovVariance
