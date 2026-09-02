@@ -75,7 +75,7 @@ theorem figureOneScheduledMixingDenominator_inv_sq_le
     let d := figureOneScheduledProposalRadius q sigma2 * Real.log 2 /
       (640 * Real.sqrt sigma2 * Real.sqrt q.n)
     1 / d ^ 2 ≤
-      10 ^ 15 * max 1 sigma2 * (q.n : ℝ) ^ 2 *
+      10 ^ 14 * max 1 sigma2 * (q.n : ℝ) ^ 2 *
         figureOneScheduledAccuracyLog q := by
   dsimp only
   let n : ℝ := q.n
@@ -99,7 +99,7 @@ theorem figureOneScheduledMixingDenominator_inv_sq_le
   have hd : 0 < d := by
     dsimp only [d]
     positivity
-  change 1 / d ^ 2 ≤ 10 ^ 15 * max 1 sigma2 * n ^ 2 * A
+  change 1 / d ^ 2 ≤ 10 ^ 14 * max 1 sigma2 * n ^ 2 * A
   rw [div_le_iff₀ (sq_pos_of_pos hd)]
   by_cases hsmall : sigma2 ≤ 1
   · have hsle : s ≤ 1 := by
@@ -116,7 +116,7 @@ theorem figureOneScheduledMixingDenominator_inv_sq_le
       simpa [rA] using Real.sq_sqrt
         (mul_nonneg hn.le (le_trans zero_le_one hA))
     have hcoef : (4096 : ℝ) ^ 2 * 640 ^ 2 ≤
-        10 ^ 15 * Real.log 2 ^ 2 := by
+        10 ^ 14 * Real.log 2 ^ 2 := by
       nlinarith [sq_nonneg (Real.log 2 - 1 / 2)]
     have hscaled := mul_le_mul_of_nonneg_right hcoef
       (mul_nonneg (sq_nonneg n) (le_trans zero_le_one hA))
@@ -141,7 +141,7 @@ theorem figureOneScheduledMixingDenominator_inv_sq_le
       simpa [rA] using Real.sq_sqrt
         (mul_nonneg hn.le (le_trans zero_le_one hA))
     have hcoef : (4096 : ℝ) ^ 2 * 640 ^ 2 ≤
-        10 ^ 15 * Real.log 2 ^ 2 := by
+        10 ^ 14 * Real.log 2 ^ 2 := by
       nlinarith [sq_nonneg (Real.log 2 - 1 / 2)]
     have hscaled := mul_le_mul_of_nonneg_right hcoef
       (mul_nonneg hsigma2.le
@@ -162,7 +162,7 @@ theorem figureOneScheduledCorrectedProperStride_cast_le
         (figureOneSafeRetryCount q - 1))
     (figureOneScheduledCorrectedProperStride q sigma2
         (figureOneSafeRetryCount q - 1) : ℝ) ≤
-      10 ^ 19 * max 1 sigma2 * (q.n : ℝ) ^ 2 *
+      (9 * 10 ^ 16) * max 1 sigma2 * (q.n : ℝ) ^ 2 *
         protectedLog ((q.n : ℝ) / q.eps) ^ 2 *
         figureOneScheduledAccuracyLog q * B := by
   dsimp only
@@ -197,11 +197,11 @@ theorem figureOneScheduledCorrectedProperStride_cast_le
   have hd : 0 < d := by
     dsimp only [d]
     positivity [figureOneScheduledProposalRadius_pos q hsigma2]
-  have hinv : 1 / d ^ 2 ≤ 10 ^ 15 * X := by
+  have hinv : 1 / d ^ 2 ≤ 10 ^ 14 * X := by
     have h := figureOneScheduledMixingDenominator_inv_sq_le q hsigma2
     dsimp only at h
     dsimp only [d, X]
-    let Y := 10 ^ 15 * max 1 sigma2 * (q.n : ℝ) ^ 2 * A
+    let Y := 10 ^ 14 * max 1 sigma2 * (q.n : ℝ) ^ 2 * A
     have hY0 : 0 ≤ Y := by dsimp only [Y]; positivity
     calc
       1 / (figureOneScheduledProposalRadius q sigma2 * Real.log 2 /
@@ -210,7 +210,7 @@ theorem figureOneScheduledCorrectedProperStride_cast_le
       _ ≤ Y * L ^ 2 := by
         have hL2 : 1 ≤ L ^ 2 := one_le_pow₀ hL
         nlinarith [mul_nonneg hY0 (sub_nonneg.mpr hL2)]
-      _ = 10 ^ 15 * (max 1 sigma2 * ↑q.n ^ 2 * L ^ 2 * A) := by
+      _ = 10 ^ 14 * (max 1 sigma2 * ↑q.n ^ 2 * L ^ 2 * A) := by
         dsimp only [Y]
         ring
   have hM : speedyAdjacentWarmConstant q ≤ 12 :=
@@ -236,28 +236,28 @@ theorem figureOneScheduledCorrectedProperStride_cast_le
   have hfirstQuot :
       (Real.log (16 * speedyAdjacentWarmConstant q) +
           2 * Real.log (1 / e)) / d ^ 2 ≤
-        193 * B * (10 ^ 15 * X) := by
+        193 * B * (10 ^ 14 * X) := by
     calc
       _ ≤ (193 * B) / d ^ 2 := by gcongr
       _ = (193 * B) * (1 / d ^ 2) := by ring
-      _ ≤ 193 * B * (10 ^ 15 * X) := by gcongr
+      _ ≤ 193 * B * (10 ^ 14 * X) := by gcongr
   have hretryQuot :
       (Real.log 2 + 2 * Real.log (1 / e)) / d ^ 2 ≤
-        3 * B * (10 ^ 15 * X) := by
+        3 * B * (10 ^ 14 * X) := by
     calc
       _ ≤ (3 * B) / d ^ 2 := by gcongr
       _ = (3 * B) * (1 / d ^ 2) := by ring
-      _ ≤ 3 * B * (10 ^ 15 * X) := by gcongr
+      _ ≤ 3 * B * (10 ^ 14 * X) := by gcongr
   have hfirst :
       figureOneScheduledCorrectedFirstWalkRequirement q sigma2 attempts ≤
-        10 ^ 18 * X * B := by
+        (8 * 10 ^ 16) * X * B := by
     rw [figureOneScheduledCorrectedFirstWalkRequirement_explicit]
     change 4 * ((Real.log (16 * speedyAdjacentWarmConstant q) +
       2 * Real.log (1 / e)) / d ^ 2) + 1 ≤ _
     nlinarith [mul_nonneg (sub_nonneg.mpr hX) (sub_nonneg.mpr hB)]
   have hretry :
       figureOneScheduledCorrectedRetryWalkRequirement q sigma2 attempts ≤
-        10 ^ 18 * X * B := by
+        (8 * 10 ^ 16) * X * B := by
     rw [figureOneScheduledCorrectedRetryWalkRequirement_explicit]
     change 4 * ((Real.log 2 + 2 * Real.log (1 / e)) / d ^ 2) + 1 ≤ _
     nlinarith [mul_nonneg (sub_nonneg.mpr hX) (sub_nonneg.mpr hB)]
@@ -271,7 +271,7 @@ theorem figureOneScheduledCorrectedProperStride_cast_le
   have hmax : max 1 (max
       (figureOneScheduledCorrectedFirstWalkRequirement q sigma2 attempts)
       (figureOneScheduledCorrectedRetryWalkRequirement q sigma2 attempts)) ≤
-      10 ^ 18 * X * B := by
+      (8 * 10 ^ 16) * X * B := by
     apply max_le
     · nlinarith [mul_nonneg (sub_nonneg.mpr hX) (sub_nonneg.mpr hB)]
     · exact max_le hfirst hretry
