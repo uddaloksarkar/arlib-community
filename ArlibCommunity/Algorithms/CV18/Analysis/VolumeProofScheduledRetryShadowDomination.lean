@@ -8,6 +8,7 @@ namespace ArlibCommunity.Algorithms.CV18
 
 open MeasureTheory ProbabilityTheory
 open scoped ENNReal
+open _root_.Arlib.MarkovChains
 
 /-- Number of live trials still possible in the lexicographic retry state. -/
 def balancedRemainingTrials (retryLimit attempts samples : ℕ) : ℕ :=
@@ -443,6 +444,68 @@ theorem scheduledBalancedAccuracyRetryCollectAux_countedQueryCost_le_shadow
                     current := by
                       rw [hremaining]
                       rfl
+
+/-- The public scheduled collector's final output normalization is query-free,
+so its cost is bounded by the `samples * retryLimit` fixed shadow. -/
+theorem scheduledBalancedAccuracyRetryCollect_countedQueryCost_le_shadow
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (proposalCap properStride retryLimit samples : ℕ)
+    (current : AmbientSpace q.n) :
+    countedQueryCost
+        ((scheduledBalancedAccuracyRetryCollect q sigma2 weight proposalCap
+          properStride retryLimit samples current).run oracle.query) ≤
+      finiteKilledChainExpectedCost
+        (scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap properStride)
+        (scheduledPaddedTrialCost q I oracle sigma2 proposalCap properStride)
+        (samples * retryLimit) current := by
+  unfold scheduledBalancedAccuracyRetryCollect
+  rw [MembershipOracleProgram.countedQueryCost_bind_pure_eq oracle.query _
+    (balancedAccuracyRetryOutput q) (measurable_balancedAccuracyRetryOutput q)
+    ((scheduledBalancedAccuracyRetryCollectAux_countedMeasurable q I oracle
+      hsigma2 hweight proposalCap properStride retryLimit retryLimit samples).2
+        0 current)]
+  cases samples with
+  | zero =>
+      simpa only [balancedRemainingTrials, Nat.zero_mul] using
+        scheduledBalancedAccuracyRetryCollectAux_countedQueryCost_le_shadow
+          q I oracle hsigma2 hweight proposalCap properStride retryLimit retryLimit
+            0 0 current
+  | succ future =>
+      simpa only [balancedRemainingTrials, Nat.succ_mul] using
+        scheduledBalancedAccuracyRetryCollectAux_countedQueryCost_le_shadow
+          q I oracle hsigma2 hweight proposalCap properStride retryLimit retryLimit
+            (future + 1) 0 current
+
+/-- Warm-start expected query cost of a complete scheduled retry collector.
+Crucially, the bound is independent of the local proposal cap. -/
+theorem lintegral_scheduledBalancedAccuracyRetryCollect_countedQueryCost_le_of_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    {M : ENNReal} {mu : Measure (AmbientSpace q.n)}
+    (hwarm : _root_.Arlib.IsWarm M mu
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2))
+    (proposalCap properStride retryLimit samples : ℕ) :
+    ∫⁻ current,
+        countedQueryCost
+          ((scheduledBalancedAccuracyRetryCollect q sigma2 weight proposalCap
+            properStride retryLimit samples current).run oracle.query) ∂mu ≤
+      ((samples * retryLimit : ℕ) : ENNReal) *
+        ((properStride : ENNReal) * (M * 2) + 2 * M) := by
+  calc
+    _ ≤ ∫⁻ current, finiteKilledChainExpectedCost
+          (scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap properStride)
+          (scheduledPaddedTrialCost q I oracle sigma2 proposalCap properStride)
+          (samples * retryLimit) current ∂mu :=
+      lintegral_mono fun current =>
+        scheduledBalancedAccuracyRetryCollect_countedQueryCost_le_shadow
+          q I oracle hsigma2 hweight proposalCap properStride retryLimit samples
+            current
+    _ ≤ _ := lintegral_scheduledFixedPaddedTrialShadowCost_le_of_isWarm
+      q I oracle hsigma2 hwarm proposalCap properStride (samples * retryLimit)
 
 
 
