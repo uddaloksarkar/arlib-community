@@ -420,10 +420,164 @@ theorem bind_balancedFigureOnePointContinuation_eq_sampleProduct_map
   filter_upwards [hproduct] with history hhistory
   exact balancedFigureOneHistoryEstimate_eq_sampleProduct q history hhistory
 
+/-- Balanced-continuation specialization of the cross-history event-transfer
+wrapper.  The executable output law is identified exactly; the sole remaining
+comparison premise is the finite mapped-product domination `htransfer`. -/
+theorem balancedFigureOnePostInitialDirectFailureBound_of_mappedProductLe
+    {Ideal : Type*} [MeasurableSpace Ideal]
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (htrunc : FigureOneRadialTruncationBound q I)
+    (idealLaw : Measure Ideal) [IsProbabilityMeasure idealLaw]
+    (idealProduct : Ideal → ℝ) (hidealMeas : Measurable idealProduct)
+    (mean : ℝ)
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ i, figureOneIdealPhaseMean q I i) mean)
+    (hidealTail : idealLaw {state | (5 * q.eps / 8) * mean ≤
+      |idealProduct state - mean|} ≤ ENNReal.ofReal (11 / 64 : ℝ))
+    (hproduct : ∀ᵐ history ∂balancedFigureOnePostInitialHistoryLaw parameters q I,
+      BalancedCoolingHistoryHasProduct
+        (figureOneDependentPhaseCount q) history)
+    (htransfer : MeasureLeUpTo
+      ((balancedFigureOnePostInitialHistoryLaw parameters q I).map
+        (fun history => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (balancedCoolingChronologicalPhaseVariable q)
+            (figureOneDependentPhaseCount q) history))
+      (idealLaw.map
+        (fun state => initialGaussianIntegral q * idealProduct state))
+      (ENNReal.ofReal (1 / 64 : ℝ))) :
+    FigureOnePostInitialDirectFailureBoundFor q I
+      (fun point =>
+        (balancedFigureOnePointContinuation parameters q point).runEstimate
+          oracle.query) := by
+  apply figureOnePostInitialDirectFailureBoundFor_of_mappedProductLe
+    q I (fun point =>
+      (balancedFigureOnePointContinuation parameters q point).runEstimate
+        oracle.query)
+    htrunc (balancedFigureOnePostInitialHistoryLaw parameters q I) idealLaw
+    (dependentPhaseSampleProduct
+      (balancedCoolingChronologicalPhaseVariable q)
+      (figureOneDependentPhaseCount q))
+    idealProduct
+  · unfold dependentPhaseSampleProduct
+    exact (Finset.range (figureOneDependentPhaseCount q)).measurable_fun_prod
+      fun j _ => measurable_balancedCoolingChronologicalPhaseVariable q (j + 1)
+  · exact hidealMeas
+  · exact hmeanApprox
+  · exact hidealTail
+  · exact htransfer
+  · exact bind_balancedFigureOnePointContinuation_eq_sampleProduct_map
+      parameters q I oracle hproduct
+
+/-- All ideal-coordinate moment, truncation, product-center, and finite
+independence obligations are discharged here.  For the concrete balanced
+continuation, only its structural product invariant and the finite mapped-law
+replacement estimate remain. -/
+theorem balancedFigureOnePostInitialDirectFailureBound_of_idealMappedProductLe
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (htrunc : FigureOneRadialTruncationBound q I)
+    (hsharp : FigureOneSharpAcceleratedMoments q I)
+    (hproduct : ∀ᵐ history ∂balancedFigureOnePostInitialHistoryLaw parameters q I,
+      BalancedCoolingHistoryHasProduct
+        (figureOneDependentPhaseCount q) history)
+    (htransfer : MeasureLeUpTo
+      ((balancedFigureOnePostInitialHistoryLaw parameters q I).map
+        (fun history => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (balancedCoolingChronologicalPhaseVariable q)
+            (figureOneDependentPhaseCount q) history))
+      ((figureOneIdealExperimentLaw q I).map
+        (fun samples => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (figureOneChronologicalIdealCoordinate q)
+            (figureOneDependentPhaseCount q) samples))
+      (ENNReal.ofReal (1 / 64 : ℝ))) :
+    FigureOnePostInitialDirectFailureBoundFor q I
+      (fun point =>
+        (balancedFigureOnePointContinuation parameters q point).runEstimate
+          oracle.query) := by
+  let W := figureOneChronologicalIdealCoordinate q
+  let mu := figureOneIdealExperimentLaw q I
+  let mean := dependentPhaseMeanProduct
+    (figureOneChronologicalTruncatedMean q I mu W)
+    (figureOneDependentPhaseCount q)
+  let _ : IsProbabilityMeasure mu :=
+    figureOneIdealExperimentLaw_isProbabilityMeasure q I
+  have hmeas : ∀ j, Measurable (W j) :=
+    fun j => figureOneChronologicalIdealCoordinate_measurable q j
+  have hnonneg : ∀ j samples, 0 ≤ W j samples :=
+    fun j samples => figureOneChronologicalIdealCoordinate_nonneg q j samples
+  have hmem : ∀ j, MemLp (W j) 2 mu :=
+    fun j => figureOneChronologicalIdealCoordinate_memLp q I j 2
+  have hmean : ∀ j, (∫ samples, W j samples ∂mu) =
+      figureOneChronologicalRawMean q I j :=
+    fun j => figureOneChronologicalIdealCoordinate_mean q I hsharp j
+  have hsecond : ∀ j, (∫ samples, W j samples ^ 2 ∂mu) ≤
+      figureOneChronologicalMomentFactor q j *
+        figureOneChronologicalRawMean q I j ^ 2 :=
+    fun j => figureOneChronologicalIdealCoordinate_secondMoment_le q I hsharp j
+  have hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
+        (dependentTruncatedProduct (figureOneDependentAlpha q)
+          (figureOneChronologicalTruncatedMean q I mu W)
+          (figureOneChronologicalTruncatedPhase q I W) i)
+        (figureOneChronologicalTruncatedPhase q I W (i + 1)) mu := by
+    intro i hi
+    exact (figureOneChronologicalIdeal_exactIndependence q I i hi).mono
+      (figureOneDependentEpsilon_nonneg q)
+  have htail := measure_chronologicalIdealPhaseSampleProduct_figureOne_le
+    q I mu W hmeas hnonneg hmem hmean hsecond hind
+  have hmeanApprox :=
+    figureOneChronologicalTruncatedMeanProduct_relativeApprox
+      q I mu W hmeas hnonneg hmem hmean hsecond
+  apply balancedFigureOnePostInitialDirectFailureBound_of_mappedProductLe
+    parameters q I oracle htrunc mu
+      (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q))
+      (by
+        unfold dependentPhaseSampleProduct
+        exact (Finset.range (figureOneDependentPhaseCount q)).measurable_fun_prod
+          fun j _ => hmeas (j + 1))
+      mean hmeanApprox htail hproduct
+  simpa [W, mu] using htransfer
+
+/-- End-user form: the geometric and ideal-moment hypotheses are supplied by
+the already-proved CV18 analytic theorems. -/
+theorem balancedFigureOnePostInitialDirectFailureBound_of_mappedLaw
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (hrounded : WellRounded q I)
+    (hproduct : ∀ᵐ history ∂balancedFigureOnePostInitialHistoryLaw parameters q I,
+      BalancedCoolingHistoryHasProduct
+        (figureOneDependentPhaseCount q) history)
+    (htransfer : MeasureLeUpTo
+      ((balancedFigureOnePostInitialHistoryLaw parameters q I).map
+        (fun history => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (balancedCoolingChronologicalPhaseVariable q)
+            (figureOneDependentPhaseCount q) history))
+      ((figureOneIdealExperimentLaw q I).map
+        (fun samples => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (figureOneChronologicalIdealCoordinate q)
+            (figureOneDependentPhaseCount q) samples))
+      (ENNReal.ofReal (1 / 64 : ℝ))) :
+    FigureOnePostInitialDirectFailureBoundFor q I
+      (fun point =>
+        (balancedFigureOnePointContinuation parameters q point).runEstimate
+          oracle.query) :=
+  balancedFigureOnePostInitialDirectFailureBound_of_idealMappedProductLe
+    parameters q I oracle (figureOneRadialTruncationBound q I hrounded)
+      (figureOneSharpAcceleratedMoments q I) hproduct htransfer
+
 #print axioms figureOneChronologicalIdealTruncatedFinCoordinates_iIndepFun
 #print axioms figureOneChronologicalIdeal_exactIndependence
 #print axioms iteratedKernelLaw_figureOneChronologicalIdealKernel
 #print axioms bind_balancedFigureOnePointContinuation_eq_sampleProduct_map
+#print axioms balancedFigureOnePostInitialDirectFailureBound_of_mappedProductLe
+#print axioms balancedFigureOnePostInitialDirectFailureBound_of_idealMappedProductLe
+#print axioms balancedFigureOnePostInitialDirectFailureBound_of_mappedLaw
 
 #print axioms figureOneChronologicalIdealCoordinate_mean
 #print axioms figureOneChronologicalIdealCoordinate_secondMoment_le

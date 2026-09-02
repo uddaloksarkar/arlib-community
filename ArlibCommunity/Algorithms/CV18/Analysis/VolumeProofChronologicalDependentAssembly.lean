@@ -647,7 +647,8 @@ theorem measure_chronologicalIdealPhaseSampleProduct_figureOne_le
     (hWsecond : ∀ j, (∫ omega, Wbar j omega ^ 2 ∂mu) ≤
       figureOneChronologicalMomentFactor q j *
         figureOneChronologicalRawMean q I j ^ 2)
-    (hind : ∀ i, ApproxIndepFun (figureOneDependentEpsilon q)
+    (hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
       (dependentTruncatedProduct (figureOneDependentAlpha q)
         (figureOneChronologicalTruncatedMean q I mu Wbar)
         (figureOneChronologicalTruncatedPhase q I Wbar) i)
@@ -698,11 +699,11 @@ theorem measure_chronologicalIdealPhaseSampleProduct_figureOne_le
       q I Wbar j omega
   · exact fun j => rfl
   · exact fun j => rfl
-  · exact fun j omega => rfl
-  · exact hWmeas
-  · exact hW0
-  · exact fun j => (hWmem j).integrable (by norm_num)
-  · exact hWmean
+  · exact fun j _ _ omega => rfl
+  · exact fun j _ _ => hWmeas j
+  · exact fun j _ _ omega => hW0 j omega
+  · exact fun j _ _ => (hWmem j).integrable (by norm_num)
+  · exact fun j _ _ => hWmean j
   · exact hind
   · exact figureOneChronological_relativeProduct_finite
       q I mu Wbar hWmeas hW0 hWmem hWmean hWsecond
@@ -777,6 +778,162 @@ theorem figureOneChronologicalApproxIndep_of_exactChance
   ApproxIndepFun.of_figureOne_exactChance q actualK idealK initial
     hactualMeas hactualProb hidealMeas hidealProb hstep X Y hX hY hexact
 
+/-- Finite-horizon exact-chance wrapper for the output of Lemma 7.15.  It
+uses only measurability of the chronological coordinates actually multiplied;
+all moment and independence premises have already been discharged into
+`htail`. -/
+theorem figureOnePostInitialDirectFailureBoundFor_of_finiteDeviationExactChance
+    {State : Type*} [MeasurableSpace State]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (continuation : AmbientSpace q.n → Measure ℝ)
+    (htrunc : FigureOneRadialTruncationBound q I)
+    (actualK idealK : ℕ → State → Measure State)
+    (initial : Measure State) [IsProbabilityMeasure initial]
+    (hactualMeas : ∀ i, Measurable (actualK i))
+    (hactualProb : ∀ i state, IsProbabilityMeasure (actualK i state))
+    (hidealMeas : ∀ i, Measurable (idealK i))
+    (hidealProb : ∀ i state, IsProbabilityMeasure (idealK i state))
+    (hstep : ∀ i,
+      MeasureLeUpTo
+        ((iteratedKernelLaw idealK initial i).bind (actualK i))
+        (iteratedKernelLaw idealK initial (i + 1))
+        (ENNReal.ofReal (figureOnePerSampleMixingError q)))
+    (Wbar : ℕ → State → ℝ)
+    (hWmeas : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      Measurable (Wbar j))
+    (mean : ℝ)
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ i, figureOneIdealPhaseMean q I i) mean)
+    (htail :
+      let idealLaw := iteratedKernelLaw idealK initial
+        (figureOneDependentMaxSampleCount q *
+          figureOneDependentPhaseCount q)
+      idealLaw {state | (5 * q.eps / 8) * mean ≤
+        |dependentPhaseSampleProduct Wbar
+            (figureOneDependentPhaseCount q) state - mean|} ≤
+          ENNReal.ofReal (11 / 64 : ℝ))
+    (hlaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation =
+        (iteratedKernelLaw actualK initial
+          (figureOneDependentMaxSampleCount q *
+            figureOneDependentPhaseCount q)).map
+          (fun state => initialGaussianIntegral q *
+            dependentPhaseSampleProduct Wbar
+              (figureOneDependentPhaseCount q) state)) :
+    FigureOnePostInitialDirectFailureBoundFor q I continuation := by
+  let t := figureOneDependentMaxSampleCount q *
+    figureOneDependentPhaseCount q
+  let idealLaw := iteratedKernelLaw idealK initial t
+  let actualLaw := iteratedKernelLaw actualK initial t
+  let X := dependentPhaseSampleProduct Wbar (figureOneDependentPhaseCount q)
+  let output : State → ℝ := fun state => initialGaussianIntegral q * X state
+  let _ : IsProbabilityMeasure idealLaw :=
+    iteratedKernelLaw_isProbabilityMeasure idealK initial inferInstance
+      hidealMeas hidealProb t
+  have hX : Measurable X := by
+    dsimp only [X, dependentPhaseSampleProduct]
+    exact (Finset.range (figureOneDependentPhaseCount q)).measurable_fun_prod
+      fun j hj => hWmeas (j + 1) (by omega)
+        (Nat.succ_le_iff.mpr (Finset.mem_range.mp hj))
+  have houtput : Measurable output := measurable_const.mul hX
+  have hidealFailure :
+      idealLaw {state | output state ∉ accurateOutcome q I} ≤
+        ENNReal.ofReal (11 / 64 : ℝ) := by
+    simpa [output, X, idealLaw, t] using
+      measure_scaledDependentProduct_failure_le_of_relativeDeviation
+        q I htrunc idealLaw X hmeanApprox htail
+  have hevent := measure_map_iteratedKernelLaw_event_le_exactChance
+    actualK idealK initial hactualMeas hactualProb hstep t output houtput
+      (accurateOutcome q I)ᶜ
+  have hidealMap : idealLaw.map output (accurateOutcome q I)ᶜ =
+      idealLaw {state | output state ∉ accurateOutcome q I} := by
+    rw [Measure.map_apply houtput (accurateOutcome_measurable q I).compl]
+    rfl
+  unfold FigureOnePostInitialDirectFailureBoundFor
+  rw [hlaw]
+  calc
+    actualLaw.map output (accurateOutcome q I)ᶜ ≤
+        idealLaw.map output (accurateOutcome q I)ᶜ +
+          t • ENNReal.ofReal (figureOnePerSampleMixingError q) := by
+      simpa [actualLaw, idealLaw, t] using hevent
+    _ = idealLaw {state | output state ∉ accurateOutcome q I} +
+          t • ENNReal.ofReal (figureOnePerSampleMixingError q) := by
+      rw [hidealMap]
+    _ ≤ ENNReal.ofReal (11 / 64 : ℝ) + ENNReal.ofReal (1 / 64 : ℝ) :=
+      add_le_add hidealFailure (by
+        simpa [t] using figureOne_exactChance_event_budget_le q)
+    _ = ENNReal.ofReal (3 / 16 : ℝ) := by
+      rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 11 / 64)
+        (by norm_num : (0 : ℝ) ≤ 1 / 64)]
+      congr 1
+      norm_num
+
+/-- Final event transfer with different executable and ideal history spaces.
+This is the interface used by the balanced history law: its only probabilistic
+bridge is a finite additive domination between the two mapped scalar laws. -/
+theorem figureOnePostInitialDirectFailureBoundFor_of_mappedProductLe
+    {Actual Ideal : Type*} [MeasurableSpace Actual] [MeasurableSpace Ideal]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (continuation : AmbientSpace q.n → Measure ℝ)
+    (htrunc : FigureOneRadialTruncationBound q I)
+    (actualLaw : Measure Actual) (idealLaw : Measure Ideal)
+    [IsProbabilityMeasure idealLaw]
+    (actualProduct : Actual → ℝ) (idealProduct : Ideal → ℝ)
+    (hactualMeas : Measurable actualProduct)
+    (hidealMeas : Measurable idealProduct)
+    (mean : ℝ)
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ i, figureOneIdealPhaseMean q I i) mean)
+    (hidealTail : idealLaw {state | (5 * q.eps / 8) * mean ≤
+      |idealProduct state - mean|} ≤ ENNReal.ofReal (11 / 64 : ℝ))
+    (htransfer : MeasureLeUpTo
+      (actualLaw.map (fun state => initialGaussianIntegral q * actualProduct state))
+      (idealLaw.map (fun state => initialGaussianIntegral q * idealProduct state))
+      (ENNReal.ofReal (1 / 64 : ℝ)))
+    (hlaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation =
+        actualLaw.map
+          (fun state => initialGaussianIntegral q * actualProduct state)) :
+    FigureOnePostInitialDirectFailureBoundFor q I continuation := by
+  let actualOutput : Actual → ℝ := fun state =>
+    initialGaussianIntegral q * actualProduct state
+  let idealOutput : Ideal → ℝ := fun state =>
+    initialGaussianIntegral q * idealProduct state
+  have hactualOutput : Measurable actualOutput :=
+    measurable_const.mul hactualMeas
+  have hidealOutput : Measurable idealOutput := measurable_const.mul hidealMeas
+  have hidealFailure :
+      idealLaw {state | idealOutput state ∉ accurateOutcome q I} ≤
+        ENNReal.ofReal (11 / 64 : ℝ) := by
+    simpa [idealOutput] using
+      measure_scaledDependentProduct_failure_le_of_relativeDeviation
+        q I htrunc idealLaw idealProduct hmeanApprox hidealTail
+  have hidealMap : idealLaw.map idealOutput (accurateOutcome q I)ᶜ =
+      idealLaw {state | idealOutput state ∉ accurateOutcome q I} := by
+    rw [Measure.map_apply hidealOutput (accurateOutcome_measurable q I).compl]
+    rfl
+  unfold FigureOnePostInitialDirectFailureBoundFor
+  rw [hlaw]
+  change actualLaw.map actualOutput (accurateOutcome q I)ᶜ ≤ _
+  calc
+    actualLaw.map actualOutput (accurateOutcome q I)ᶜ ≤
+        idealLaw.map idealOutput (accurateOutcome q I)ᶜ +
+          ENNReal.ofReal (1 / 64 : ℝ) := by
+      exact htransfer.event_le _
+    _ = idealLaw {state | idealOutput state ∉ accurateOutcome q I} +
+          ENNReal.ofReal (1 / 64 : ℝ) := by rw [hidealMap]
+    _ ≤ ENNReal.ofReal (11 / 64 : ℝ) + ENNReal.ofReal (1 / 64 : ℝ) :=
+      add_le_add hidealFailure le_rfl
+    _ = ENNReal.ofReal (3 / 16 : ℝ) := by
+      rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 11 / 64)
+        (by norm_num : (0 : ℝ) ≤ 1 / 64)]
+      congr 1
+      norm_num
+
 /-- Strongest paper-aligned post-initial wrapper currently available.  All
 moment statements concern chronological ideal `bar-W` coordinates.  The
 executable law is transferred only at the final measurable failure event by
@@ -784,7 +941,7 @@ the finite exact-chance theorem. -/
 theorem figureOnePostInitialDirectFailureBound_of_chronologicalExactChance
     {State : Type*} [MeasurableSpace State]
     (q : VolumeParams) (I : VolumeInput q.n)
-    (oracle : MembershipOracle I)
+    (continuation : AmbientSpace q.n → Measure ℝ)
     (htrunc : FigureOneRadialTruncationBound q I)
     (actualK idealK : ℕ → State → Measure State)
     (initial : Measure State) [IsProbabilityMeasure initial]
@@ -815,7 +972,8 @@ theorem figureOnePostInitialDirectFailureBound_of_chronologicalExactChance
           figureOneDependentPhaseCount q)) ≤
         figureOneChronologicalMomentFactor q j *
           figureOneChronologicalRawMean q I j ^ 2)
-    (hind : ∀ i, ApproxIndepFun (figureOneDependentEpsilon q)
+    (hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
       (dependentTruncatedProduct (figureOneDependentAlpha q)
         (figureOneChronologicalTruncatedMean q I
           (iteratedKernelLaw idealK initial
@@ -829,14 +987,14 @@ theorem figureOnePostInitialDirectFailureBound_of_chronologicalExactChance
     (hlaw :
       (truncatedGaussianProbability q I (initialVariance q)
           (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
-          (figureOneContinuationLaw explicitVolumeCoolingSchedule q I oracle) =
+          continuation =
         (iteratedKernelLaw actualK initial
           (figureOneDependentMaxSampleCount q *
             figureOneDependentPhaseCount q)).map
           (fun state => initialGaussianIntegral q *
             dependentPhaseSampleProduct Wbar
               (figureOneDependentPhaseCount q) state)) :
-    FigureOnePostInitialDirectFailureBound q I oracle := by
+    FigureOnePostInitialDirectFailureBoundFor q I continuation := by
   let t := figureOneDependentMaxSampleCount q *
     figureOneDependentPhaseCount q
   let idealLaw := iteratedKernelLaw idealK initial t
@@ -882,7 +1040,7 @@ theorem figureOnePostInitialDirectFailureBound_of_chronologicalExactChance
       idealLaw {state | output state ∉ accurateOutcome q I} := by
     rw [Measure.map_apply houtput (accurateOutcome_measurable q I).compl]
     rfl
-  unfold FigureOnePostInitialDirectFailureBound
+  unfold FigureOnePostInitialDirectFailureBoundFor
   rw [hlaw]
   calc
     actualLaw.map output (accurateOutcome q I)ᶜ ≤
@@ -903,6 +1061,8 @@ theorem figureOnePostInitialDirectFailureBound_of_chronologicalExactChance
 #print axioms measure_chronologicalIdealPhaseSampleProduct_figureOne_le
 #print axioms figureOneChronologicalTruncatedMeanProduct_relativeApprox
 #print axioms figureOneChronologicalApproxIndep_of_exactChance
+#print axioms figureOnePostInitialDirectFailureBoundFor_of_finiteDeviationExactChance
+#print axioms figureOnePostInitialDirectFailureBoundFor_of_mappedProductLe
 #print axioms figureOnePostInitialDirectFailureBound_of_chronologicalExactChance
 
 end

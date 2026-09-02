@@ -247,13 +247,19 @@ theorem measure_dependentPhaseSampleProduct_figureOne_le
       V j omega ≤ figureOneDependentAlpha q * rawMean j)
     (hVmean : ∀ j, (∫ omega, V j omega ∂mu) = mean j)
     (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
-    (hVeq : ∀ j omega, V j omega =
-      dependentTruncatedPhase (figureOneDependentAlpha q) rawMean W j omega)
-    (hWmeas : ∀ j, Measurable (W j))
-    (hW0 : ∀ j omega, 0 ≤ W j omega)
-    (hWint : ∀ j, Integrable (W j) mu)
-    (hWmean : ∀ j, (∫ omega, W j omega ∂mu) = rawMean j)
-    (hind : ∀ i, ApproxIndepFun (figureOneDependentEpsilon q)
+    (hVeq : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q → ∀ omega,
+      V j omega =
+        dependentTruncatedPhase (figureOneDependentAlpha q) rawMean W j omega)
+    (hWmeas : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      Measurable (W j))
+    (hW0 : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      ∀ omega, 0 ≤ W j omega)
+    (hWint : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      Integrable (W j) mu)
+    (hWmean : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ omega, W j omega ∂mu) = rawMean j)
+    (hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
       (dependentTruncatedProduct (figureOneDependentAlpha q) mean V i)
       (V (i + 1)) mu)
     (hrelative : ∀ i, i ≤ figureOneDependentPhaseCount q →
@@ -285,9 +291,9 @@ theorem measure_dependentPhaseSampleProduct_figureOne_le
       (figureOneDependentEpsilon_nonneg q)
       (figureOneDependent_smallness q)
       hmean hmeanPos hrawMean hrawMeanPos hrawMean_le hsecond
-      hmeanSecond hrawSecond hVmeas hV0 hVcap hVmean hVsecond hVeq
-      hWmeas hW0 hWint hWmean hind
-      (figureOneDependentPhaseCount q) hrelative
+      hmeanSecond hrawSecond hVmeas hV0 hVcap hVmean hVsecond
+      (figureOneDependentPhaseCount q) hVeq hWmeas hW0 hWint hWmean hind
+      hrelative
       (fun i hi => figureOneDependent_coefficient q hi)
       (tailDelta := q.eps ^ 2 / 16) (relativeEps := 5 * q.eps / 8)
       (div_nonneg (sq_nonneg q.eps) (by norm_num))
@@ -405,16 +411,50 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
   exact (measure_mono hsubset).trans htail
 
 /-- The direct post-initial statement naturally produced by the paper's
-Lemma 7.15 argument.  Unlike `FigureOnePostInitialMixingBound`, it does not
-compare the executable experiment with the exact failure mass of an ideal
-experiment. -/
+Lemma 7.15 argument, parametrized by the continuation law.  This is the
+law-level contract shared by the canonical and balanced implementations. -/
+def FigureOnePostInitialDirectFailureBoundFor
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (continuation : AmbientSpace q.n → Measure ℝ) : Prop :=
+  ((truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+    continuation)
+      (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (3 / 16 : ℝ)
+
+/-- Canonical specialization of the continuation-parametric direct contract. -/
 def FigureOnePostInitialDirectFailureBound
     (q : VolumeParams) (I : VolumeInput q.n)
     (oracle : MembershipOracle I) : Prop :=
-  ((truncatedGaussianProbability q I (initialVariance q)
-      (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
-    (figureOneContinuationLaw explicitVolumeCoolingSchedule q I oracle))
-      (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (3 / 16 : ℝ)
+  FigureOnePostInitialDirectFailureBoundFor q I
+    (figureOneContinuationLaw explicitVolumeCoolingSchedule q I oracle)
+
+/-- Smallest law-level bridge for an arbitrary executable continuation. -/
+theorem figureOnePostInitialDirectFailureBoundFor_of_dependentProduct
+    {Omega : Type*} [MeasurableSpace Omega]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (continuation : AmbientSpace q.n → Measure ℝ)
+    (htrunc : FigureOneRadialTruncationBound q I)
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (X : Omega → ℝ) (hX : Measurable X) {mean : ℝ}
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ i, figureOneIdealPhaseMean q I i) mean)
+    (hlaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation =
+        mu.map fun omega => initialGaussianIntegral q * X omega)
+    (htail : mu {omega | (5 * q.eps / 8) * mean ≤
+      |X omega - mean|} ≤ ENNReal.ofReal (11 / 64 : ℝ)) :
+    FigureOnePostInitialDirectFailureBoundFor q I continuation := by
+  have hscaled : Measurable fun omega => initialGaussianIntegral q * X omega :=
+    measurable_const.mul hX
+  have hfailure :=
+    measure_scaledDependentProduct_failure_le_of_relativeDeviation
+      q I htrunc mu X hmeanApprox htail
+  unfold FigureOnePostInitialDirectFailureBoundFor
+  rw [hlaw, Measure.map_apply hscaled (accurateOutcome_measurable q I).compl]
+  refine hfailure.trans ?_
+  exact ENNReal.ofReal_le_ofReal (by norm_num)
 
 /-- Smallest law-level bridge from the executable continuation to the
 paper's dependent-product experiment.  Once the continuation law is the map
@@ -437,15 +477,10 @@ theorem figureOnePostInitialDirectFailureBound_of_dependentProduct
     (htail : mu {omega | (5 * q.eps / 8) * mean ≤
       |X omega - mean|} ≤ ENNReal.ofReal (11 / 64 : ℝ)) :
     FigureOnePostInitialDirectFailureBound q I oracle := by
-  have hscaled : Measurable fun omega => initialGaussianIntegral q * X omega :=
-    measurable_const.mul hX
-  have hfailure :=
-    measure_scaledDependentProduct_failure_le_of_relativeDeviation
-      q I htrunc mu X hmeanApprox htail
   unfold FigureOnePostInitialDirectFailureBound
-  rw [hlaw, Measure.map_apply hscaled (accurateOutcome_measurable q I).compl]
-  refine hfailure.trans ?_
-  exact ENNReal.ofReal_le_ofReal (by norm_num)
+  exact figureOnePostInitialDirectFailureBoundFor_of_dependentProduct
+    q I (figureOneContinuationLaw explicitVolumeCoolingSchedule q I oracle)
+      htrunc mu X hX hmeanApprox hlaw htail
 
 /-- Paper-aligned post-initial assembly: the finite-horizon premises of
 Lemma 7.15, the quantitative truncation bias of its phase means, and the
@@ -471,13 +506,19 @@ theorem figureOnePostInitialDirectFailureBound_of_lemma715
       V j omega ≤ figureOneDependentAlpha q * rawMean j)
     (hVmean : ∀ j, (∫ omega, V j omega ∂mu) = mean j)
     (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
-    (hVeq : ∀ j omega, V j omega =
-      dependentTruncatedPhase (figureOneDependentAlpha q) rawMean W j omega)
-    (hWmeas : ∀ j, Measurable (W j))
-    (hW0 : ∀ j omega, 0 ≤ W j omega)
-    (hWint : ∀ j, Integrable (W j) mu)
-    (hWmean : ∀ j, (∫ omega, W j omega ∂mu) = rawMean j)
-    (hind : ∀ i, ApproxIndepFun (figureOneDependentEpsilon q)
+    (hVeq : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q → ∀ omega,
+      V j omega =
+        dependentTruncatedPhase (figureOneDependentAlpha q) rawMean W j omega)
+    (hWmeas : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      Measurable (W j))
+    (hW0 : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      ∀ omega, 0 ≤ W j omega)
+    (hWint : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      Integrable (W j) mu)
+    (hWmean : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ omega, W j omega ∂mu) = rawMean j)
+    (hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
       (dependentTruncatedProduct (figureOneDependentAlpha q) mean V i)
       (V (i + 1)) mu)
     (hrelative : ∀ i, i ≤ figureOneDependentPhaseCount q →
@@ -511,7 +552,10 @@ theorem figureOnePostInitialDirectFailureBound_of_lemma715
   have hX : Measurable
       (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q)) := by
     unfold dependentPhaseSampleProduct
-    fun_prop
+    exact (Finset.range (figureOneDependentPhaseCount q)).measurable_fun_prod
+      fun j hj =>
+      hWmeas (j + 1) (by omega)
+        (Nat.succ_le_iff.mpr (Finset.mem_range.mp hj))
   exact figureOnePostInitialDirectFailureBound_of_dependentProduct
     q I oracle htrunc mu
       (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q)) hX
@@ -554,7 +598,8 @@ theorem figureOne_base_accuracy_of_direct_postInitialFailure
           (accurateOutcome_measurable q I).compl
     _ ≤ ENNReal.ofReal (3 / 16 : ℝ) + ENNReal.ofReal (q.eps / 64) := by
       exact add_le_add
-        (by simpa [FigureOnePostInitialDirectFailureBound] using hpost) le_rfl
+        (by simpa [FigureOnePostInitialDirectFailureBound,
+          FigureOnePostInitialDirectFailureBoundFor] using hpost) le_rfl
     _ ≤ ENNReal.ofReal (3 / 16 : ℝ) + ENNReal.ofReal (1 / 64 : ℝ) := by
       gcongr
       exact q.heps.2.le
