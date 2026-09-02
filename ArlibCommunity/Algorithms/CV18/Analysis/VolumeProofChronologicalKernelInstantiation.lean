@@ -108,9 +108,221 @@ theorem figureOneChronologicalIdealCoordinate_indepFun
   have : j - 1 = k - 1 := congrArg Fin.val hfin
   omega
 
+/-- The finite family actually consumed by Figure One is mutually
+independent, not merely pairwise independent. -/
+theorem figureOneChronologicalIdealFinCoordinates_iIndepFun
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    iIndepFun
+      (fun i : Fin (figureOneDependentPhaseCount q) =>
+        figureOneChronologicalIdealCoordinate q (i.1 + 1))
+      (figureOneIdealExperimentLaw q I) := by
+  have h := iIndepFun.precomp (figureOneChronologicalPhaseOrder q).injective
+    (figureOneIdealCoordinates_iIndepFun q I)
+  rw [show (fun i : Fin (figureOneDependentPhaseCount q) =>
+      figureOneChronologicalIdealCoordinate q (i.1 + 1)) =
+      fun i => figureOneIdealCoordinate q
+        (figureOneChronologicalPhaseOrder q i) by
+    funext i
+    unfold figureOneChronologicalIdealCoordinate figureOneChronologicalPhaseAt
+    congr 2
+    apply Fin.ext
+    simp only
+    rw [show i.1 + 1 - 1 = i.1 by omega, Nat.mod_eq_of_lt i.isLt]]
+  exact h
+
+set_option maxHeartbeats 800000 in
+/-- First-truncated chronological coordinates retain mutual independence. -/
+theorem figureOneChronologicalIdealTruncatedFinCoordinates_iIndepFun
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    iIndepFun
+      (fun i : Fin (figureOneDependentPhaseCount q) =>
+        figureOneChronologicalTruncatedPhase q I
+          (figureOneChronologicalIdealCoordinate q) (i.1 + 1))
+      (figureOneIdealExperimentLaw q I) := by
+  have h := figureOneChronologicalIdealFinCoordinates_iIndepFun q I
+  let truncate : ∀ _i : Fin (figureOneDependentPhaseCount q), ℝ → ℝ :=
+    fun i value => min value
+      (figureOneDependentAlpha q *
+        figureOneChronologicalRawMean q I (i.1 + 1))
+  have htruncate : ∀ i, Measurable (truncate i) := fun _ =>
+    measurable_id.min measurable_const
+  have hc := h.comp truncate htruncate
+  change iIndepFun (fun (i : Fin (figureOneDependentPhaseCount q)) samples => min
+      (figureOneChronologicalIdealCoordinate q (i.1 + 1) samples)
+      (figureOneDependentAlpha q *
+        figureOneChronologicalRawMean q I (i.1 + 1)))
+    (figureOneIdealExperimentLaw q I)
+  convert hc using 1 <;> rfl
+
+noncomputable def figureOneChronologicalPrefixIndices
+    (q : VolumeParams) (i : ℕ) :
+    Finset (Fin (figureOneDependentPhaseCount q)) :=
+  Finset.univ.filter fun k => k.1 < i
+
+noncomputable def figureOneChronologicalPrefixValue
+    (q : VolumeParams) (i : ℕ)
+    (hi : i < figureOneDependentPhaseCount q)
+    (values : (k : figureOneChronologicalPrefixIndices q i) → ℝ)
+    (j : ℕ) : ℝ :=
+  if hj : 1 ≤ j ∧ j ≤ i then
+    values ⟨⟨j - 1, by omega⟩, by
+      simp only [figureOneChronologicalPrefixIndices, Finset.mem_filter,
+        Finset.mem_univ, true_and]
+      omega⟩
+  else 0
+
+theorem measurable_figureOneChronologicalPrefixValue
+    (q : VolumeParams) (i : ℕ)
+    (hi : i < figureOneDependentPhaseCount q) (j : ℕ) :
+    Measurable (fun values =>
+      figureOneChronologicalPrefixValue q i hi values j) := by
+  unfold figureOneChronologicalPrefixValue
+  split_ifs
+  · exact measurable_pi_apply _
+  · exact measurable_const
+
+noncomputable def figureOneChronologicalTruncatedProductFromPrefix
+    (q : VolumeParams) (I : VolumeInput q.n) (i : ℕ)
+    (hi : i < figureOneDependentPhaseCount q) :
+    ((k : figureOneChronologicalPrefixIndices q i) → ℝ) → ℝ :=
+  dependentTruncatedProduct (figureOneDependentAlpha q)
+    (figureOneChronologicalTruncatedMean q I
+      (figureOneIdealExperimentLaw q I)
+      (figureOneChronologicalIdealCoordinate q))
+    (fun j values => figureOneChronologicalPrefixValue q i hi values j) i
+
+theorem measurable_figureOneChronologicalTruncatedProductFromPrefix
+    (q : VolumeParams) (I : VolumeInput q.n) (i : ℕ)
+    (hi : i < figureOneDependentPhaseCount q) :
+    Measurable (figureOneChronologicalTruncatedProductFromPrefix q I i hi) := by
+  exact measurable_dependentTruncatedProduct _ _ _
+    (measurable_figureOneChronologicalPrefixValue q i hi) i
+
+theorem figureOneChronologicalTruncatedProductFromPrefix_apply
+    (q : VolumeParams) (I : VolumeInput q.n) (i : ℕ)
+    (hi : i < figureOneDependentPhaseCount q)
+    (samples : FigureOneIdealExperimentSpace q) :
+    figureOneChronologicalTruncatedProductFromPrefix q I i hi
+        (fun k => figureOneChronologicalTruncatedPhase q I
+          (figureOneChronologicalIdealCoordinate q) (k.1.1 + 1) samples) =
+      dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I
+          (figureOneIdealExperimentLaw q I)
+          (figureOneChronologicalIdealCoordinate q))
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneChronologicalIdealCoordinate q)) i samples := by
+  let mean := figureOneChronologicalTruncatedMean q I
+    (figureOneIdealExperimentLaw q I)
+    (figureOneChronologicalIdealCoordinate q)
+  let V := figureOneChronologicalTruncatedPhase q I
+    (figureOneChronologicalIdealCoordinate q)
+  have haux : ∀ m, m ≤ i →
+      dependentTruncatedProduct (figureOneDependentAlpha q) mean
+          (fun j values => figureOneChronologicalPrefixValue q i hi values j) m
+          (fun k => V (k.1.1 + 1) samples) =
+        dependentTruncatedProduct (figureOneDependentAlpha q) mean V m samples := by
+    intro m hm
+    induction m with
+    | zero => rfl
+    | succ m ih =>
+        rw [dependentTruncatedProduct_succ,
+          dependentTruncatedProduct_succ, ih (by omega)]
+        congr 2
+        simp only [figureOneChronologicalPrefixValue]
+        rw [dif_pos ⟨by omega, hm⟩]
+        congr 2
+  exact haux i le_rfl
+
+theorem figureOneChronologicalIdealTruncatedProduct_indepFun
+    (q : VolumeParams) (I : VolumeInput q.n) (i : ℕ)
+    (hi : i < figureOneDependentPhaseCount q) :
+    IndepFun
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I
+          (figureOneIdealExperimentLaw q I)
+          (figureOneChronologicalIdealCoordinate q))
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneChronologicalIdealCoordinate q)) i)
+      (figureOneChronologicalTruncatedPhase q I
+        (figureOneChronologicalIdealCoordinate q) (i + 1))
+      (figureOneIdealExperimentLaw q I) := by
+  let V := figureOneChronologicalTruncatedPhase q I
+    (figureOneChronologicalIdealCoordinate q)
+  let S := figureOneChronologicalPrefixIndices q i
+  let next : Fin (figureOneDependentPhaseCount q) := ⟨i, hi⟩
+  have hind := figureOneChronologicalIdealTruncatedFinCoordinates_iIndepFun q I
+  have hdisjoint : Disjoint S ({next} : Finset _) := by
+    rw [Finset.disjoint_singleton_right]
+    simp only [S, next, figureOneChronologicalPrefixIndices,
+      Finset.mem_filter, Finset.mem_univ, true_and]
+    exact Nat.lt_irrefl i
+  have hvectors := hind.indepFun_finset S {next} hdisjoint fun k =>
+    figureOneChronologicalTruncatedPhase_measurable q I
+      (figureOneChronologicalIdealCoordinate q)
+      (figureOneChronologicalIdealCoordinate_measurable q) (k.1 + 1)
+  have hcomp := hvectors.comp
+    (measurable_figureOneChronologicalTruncatedProductFromPrefix q I i hi)
+    (measurable_pi_apply
+      (⟨next, Finset.mem_singleton_self next⟩ : ({next} : Finset _) ))
+  have hleft :
+      figureOneChronologicalTruncatedProductFromPrefix q I i hi ∘
+          (fun samples (k : S) => V (k.1.1 + 1) samples) =
+        dependentTruncatedProduct (figureOneDependentAlpha q)
+          (figureOneChronologicalTruncatedMean q I
+            (figureOneIdealExperimentLaw q I)
+            (figureOneChronologicalIdealCoordinate q)) V i := by
+    funext samples
+    exact figureOneChronologicalTruncatedProductFromPrefix_apply
+      q I i hi samples
+  have hright :
+      (fun values : (k : ({next} : Finset _)) → ℝ =>
+          values ⟨next, Finset.mem_singleton_self next⟩) ∘
+          (fun samples (k : ({next} : Finset _)) => V (k.1.1 + 1) samples) =
+        V (i + 1) := by
+    rfl
+  rw [hleft, hright] at hcomp
+  exact hcomp
+
+theorem IndepFun.approxIndepFun_zero
+    {Omega S T : Type*} [MeasurableSpace Omega]
+    [MeasurableSpace S] [MeasurableSpace T]
+    {mu : Measure Omega} [IsFiniteMeasure mu]
+    {X : Omega → S} {Y : Omega → T} (h : IndepFun X Y mu) :
+    ApproxIndepFun 0 X Y mu := by
+  intro A hA B hB
+  have heq := h.measure_inter_preimage_eq_mul A B hA hB
+  have hreal := congrArg ENNReal.toReal heq
+  rw [ENNReal.toReal_mul] at hreal
+  change |(mu (X ⁻¹' A ∩ Y ⁻¹' B)).toReal -
+    (mu (X ⁻¹' A)).toReal * (mu (Y ⁻¹' B)).toReal| ≤ 0
+  rw [hreal]
+  norm_num
+
+theorem figureOneChronologicalIdeal_exactIndependence
+    (q : VolumeParams) (I : VolumeInput q.n) (i : ℕ)
+    (hi : i < figureOneDependentPhaseCount q) :
+    ApproxIndepFun 0
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I
+          (figureOneIdealExperimentLaw q I)
+          (figureOneChronologicalIdealCoordinate q))
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneChronologicalIdealCoordinate q)) i)
+      (figureOneChronologicalTruncatedPhase q I
+        (figureOneChronologicalIdealCoordinate q) (i + 1))
+      (figureOneIdealExperimentLaw q I) := by
+  let _ : IsProbabilityMeasure (figureOneIdealExperimentLaw q I) :=
+    figureOneIdealExperimentLaw_isProbabilityMeasure q I
+  exact IndepFun.approxIndepFun_zero
+    (figureOneChronologicalIdealTruncatedProduct_indepFun q I i hi)
+
+#print axioms figureOneChronologicalIdealTruncatedFinCoordinates_iIndepFun
+#print axioms figureOneChronologicalIdeal_exactIndependence
+
 #print axioms figureOneChronologicalIdealCoordinate_mean
 #print axioms figureOneChronologicalIdealCoordinate_secondMoment_le
 #print axioms figureOneChronologicalIdealCoordinate_indepFun
+#print axioms figureOneChronologicalIdealFinCoordinates_iIndepFun
 
 end
 
