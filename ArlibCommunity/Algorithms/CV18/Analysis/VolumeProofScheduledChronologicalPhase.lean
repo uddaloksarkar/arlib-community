@@ -20,6 +20,116 @@ namespace ArlibCommunity.Algorithms.CV18
 
 noncomputable section
 
+theorem figureOneIdealPhaseSampleCount_pos
+    (q : VolumeParams) (phase : FigureOneIdealPhase q) :
+    0 < figureOneIdealPhaseSampleCount q phase := by
+  cases phase with
+  | fixed k =>
+      exact figureOneFixedSampleCount_pos q
+  | accelerated k =>
+      exact figureOneSampleCount_pos q
+  | terminal =>
+      exact figureOneSampleCount_pos q
+
+/-- A canonical retained target point from a nonempty ideal phase block. -/
+noncomputable def figureOneIdealPhaseRetainedPoint
+    (q : VolumeParams) (phase : FigureOneIdealPhase q) :
+    FigureOneIdealPhaseSampleSpace q phase → AmbientSpace q.n :=
+  fun samples => samples ⟨0, figureOneIdealPhaseSampleCount_pos q phase⟩
+
+theorem measurable_figureOneIdealPhaseRetainedPoint
+    (q : VolumeParams) (phase : FigureOneIdealPhase q) :
+    Measurable (figureOneIdealPhaseRetainedPoint q phase) :=
+  measurable_pi_apply _
+
+theorem figureOneChronologicalPhaseAt_succ
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q) :
+    figureOneChronologicalPhaseAt q (phase + 1) =
+      figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩ := by
+  simp [figureOneChronologicalPhaseAt, Nat.mod_eq_of_lt hphase]
+
+/-- Deterministically append the ideal average for chronological `phase`,
+while retaining one stationary point from that same ideal block. -/
+noncomputable def figureOneIdealChronologicalAppend
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q) :
+    FigureOneIdealExperimentSpace q × Option (BalancedCoolingHistory q.n) →
+      FigureOneIdealExperimentSpace q × Option (BalancedCoolingHistory q.n) :=
+  let p := figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩
+  fun state =>
+    (state.1, match state.2 with
+      | none => none
+      | some history =>
+          balancedCoolingHistorySnocTerminal history <| some
+            (figureOneIdealPhaseEstimator q p (state.1 p),
+              figureOneIdealPhaseRetainedPoint q p (state.1 p)))
+
+theorem measurable_figureOneIdealChronologicalAppend
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q) :
+    Measurable (figureOneIdealChronologicalAppend q phase hphase) := by
+  let p := figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩
+  have hsample : Measurable fun state :
+      FigureOneIdealExperimentSpace q × BalancedCoolingHistory q.n =>
+      state.1 p := (measurable_pi_apply p).comp measurable_fst
+  have hresult : Measurable fun state :
+      FigureOneIdealExperimentSpace q × BalancedCoolingHistory q.n =>
+        (figureOneIdealPhaseEstimator q p (state.1 p),
+          figureOneIdealPhaseRetainedPoint q p (state.1 p)) :=
+    ((figureOneIdealPhaseEstimator_measurable q p).comp hsample).prodMk
+      ((measurable_figureOneIdealPhaseRetainedPoint q p).comp hsample)
+  have hsome : Measurable fun state :
+      FigureOneIdealExperimentSpace q × BalancedCoolingHistory q.n =>
+      balancedCoolingHistorySnocTerminal state.2 (some
+        (figureOneIdealPhaseEstimator q p (state.1 p),
+          figureOneIdealPhaseRetainedPoint q p (state.1 p))) :=
+    measurable_balancedCoolingHistorySnocTerminal.comp
+      (measurable_snd.prodMk (measurable_some.comp hresult))
+  have hoption : Measurable fun state :
+      FigureOneIdealExperimentSpace q × Option (BalancedCoolingHistory q.n) =>
+      match state.2 with
+      | none => none
+      | some history => balancedCoolingHistorySnocTerminal history (some
+          (figureOneIdealPhaseEstimator q p (state.1 p),
+            figureOneIdealPhaseRetainedPoint q p (state.1 p))) := by
+    convert Measurable.optionCases
+      ((fun _ => 0), 0, (1 : ℝ), (0 : AmbientSpace q.n))
+      (noneValue := fun _ : FigureOneIdealExperimentSpace q =>
+        (none : Option (BalancedCoolingHistory q.n)))
+      (someValue := fun state =>
+        balancedCoolingHistorySnocTerminal state.2 (some
+          (figureOneIdealPhaseEstimator q p (state.1 p),
+            figureOneIdealPhaseRetainedPoint q p (state.1 p))))
+      measurable_const hsome using 1
+    funext state
+    cases state.2 <;> rfl
+  exact measurable_fst.prodMk hoption
+
+theorem figureOneIdealChronologicalAppend_coordinate
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (samples : FigureOneIdealExperimentSpace q)
+    (history : BalancedCoolingHistory q.n)
+    (hcount : history.2.1 = phase) :
+    balancedCoolingChronologicalPhaseVariable q (phase + 1)
+        (figureOneIdealChronologicalAppend q phase hphase
+          (samples, some history)).2 =
+      figureOneChronologicalIdealCoordinate q (phase + 1) samples := by
+  rw [show figureOneIdealChronologicalAppend q phase hphase
+      (samples, some history) =
+      (samples, balancedCoolingHistorySnocTerminal history (some
+        (figureOneIdealPhaseEstimator q
+            (figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩)
+            (samples (figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩)),
+          figureOneIdealPhaseRetainedPoint q
+            (figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩)
+            (samples (figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩))))) by
+    rfl]
+  rw [balancedCoolingHistorySnocTerminal_coordinate q phase history hcount _ hphase]
+  unfold figureOneChronologicalIdealCoordinate figureOneIdealCoordinate
+  rw [figureOneChronologicalPhaseAt_succ q phase hphase]
+
 /-- Iterate the schedule-targeted endpoint transition while accumulating one
 phase observable.  The carried state is speedy-space and the returned state
 is converted back to target coordinates. -/
@@ -315,6 +425,8 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms scheduledBalancedTransitionCollectLaw_measurable_and_probability
 #print axioms MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
 #print axioms approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
+#print axioms measurable_figureOneIdealChronologicalAppend
+#print axioms figureOneIdealChronologicalAppend_coordinate
 
 end
 
