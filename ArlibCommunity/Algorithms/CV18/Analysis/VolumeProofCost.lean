@@ -378,12 +378,12 @@ theorem total_figureOneWalkSteps_cast_le (q : VolumeParams) :
 
 /-- The concrete Figure-1 base run obeys the exact unrestricted polylogarithmic
 query rate. -/
-theorem figureOne_base_query_cost_explicit (q : VolumeParams) :
+theorem figureOne_base_query_cost_sharp (q : VolumeParams) :
     1 + (figureOneCoolingQueryBudget q
             (explicitVolumeCoolingSchedule q).variances +
           figureOneSampleCount q *
             figureOneWalkSteps q (terminalVariance q)) ≤
-      Nat.ceil (10 ^ 25 * volumeBaseComplexityRate q) := by
+      Nat.ceil ((2 * 10 ^ 24) * volumeBaseComplexityRate q) := by
   let n : ℝ := q.n
   let M : ℝ := max 1 q.roundness
   let L : ℝ := protectedLog (n / q.eps)
@@ -593,7 +593,7 @@ theorem figureOne_base_query_cost_explicit (q : VolumeParams) :
               (explicitVolumeCoolingSchedule q).variances +
             figureOneSampleCount q *
               figureOneWalkSteps q (terminalVariance q)) : ℕ) : ℝ) ≤
-        10 ^ 25 * volumeBaseComplexityRate q := by
+        (2 * 10 ^ 24) * volumeBaseComplexityRate q := by
     have hbudgetCast :
         (((figureOneCoolingQueryBudget q
             (explicitVolumeCoolingSchedule q).variances +
@@ -604,7 +604,7 @@ theorem figureOne_base_query_cost_explicit (q : VolumeParams) :
               ((slowPhaseSteps q : ℝ) * (figureOneWalkSteps q 1 : ℝ)) := by
       exact_mod_cast hbudgetUpper
     rw [Nat.cast_add, Nat.cast_one]
-    have hconstant : (101384889 : ℝ) * 10 ^ 16 + 1 ≤ 10 ^ 25 := by norm_num
+    have hconstant : (101384889 : ℝ) * 10 ^ 16 + 1 ≤ 2 * 10 ^ 24 := by norm_num
     have hleft : 1 +
         ((figureOneCoolingQueryBudget q
             (explicitVolumeCoolingSchedule q).variances +
@@ -630,7 +630,21 @@ theorem figureOne_base_query_cost_explicit (q : VolumeParams) :
       dsimp [volumeBaseComplexityRate, R, M, n, Le, L, H, terminalVariance]
     rw [hrate]
     exact hleft.trans <| mul_le_mul_of_nonneg_right hconstant (le_trans zero_le_one hR)
-  exact_mod_cast le_trans hreal (Nat.le_ceil (10 ^ 25 * volumeBaseComplexityRate q))
+  exact_mod_cast le_trans hreal
+    (Nat.le_ceil ((2 * 10 ^ 24) * volumeBaseComplexityRate q))
+
+/-- Convenient decimal envelope used by the public existential statement. -/
+theorem figureOne_base_query_cost_explicit (q : VolumeParams) :
+    1 + (figureOneCoolingQueryBudget q
+            (explicitVolumeCoolingSchedule q).variances +
+          figureOneSampleCount q *
+            figureOneWalkSteps q (terminalVariance q)) ≤
+      Nat.ceil (10 ^ 25 * volumeBaseComplexityRate q) := by
+  refine (figureOne_base_query_cost_sharp q).trans (Nat.ceil_mono ?_)
+  have hrate : 0 ≤ volumeBaseComplexityRate q := by
+    unfold volumeBaseComplexityRate
+    positivity
+  nlinarith
 
 theorem figureOne_base_query_cost :
     ∃ C : ℝ, 0 < C ∧ ∀ q : VolumeParams,
