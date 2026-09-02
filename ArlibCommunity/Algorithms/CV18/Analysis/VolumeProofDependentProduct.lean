@@ -30,6 +30,12 @@ def dependentPhaseSampleProduct (W : ℕ → Omega → ℝ) (i : ℕ)
     (omega : Omega) : ℝ :=
   ∏ j ∈ Finset.range i, W (j + 1) omega
 
+/-- The first truncation layer in CV18 Lemma 7.15:
+`Vᵢ = min(W̄ᵢ, alpha * E(W̄ᵢ))`. -/
+def dependentTruncatedPhase (alpha : ℝ) (rawMean : ℕ → ℝ)
+    (W : ℕ → Omega → ℝ) (j : ℕ) (omega : Omega) : ℝ :=
+  min (W j omega) (alpha * rawMean j)
+
 @[simp]
 theorem dependentPhaseMeanProduct_zero (mean : ℕ → ℝ) :
     dependentPhaseMeanProduct mean 0 = 1 := by
@@ -1031,6 +1037,159 @@ theorem measure_dependentTruncatedProduct_relativeDeviation_le
   · exact hmoments.1
   · exact hmoments.2.2.trans htailSecond
 
+/-- Markov's inequality in exactly the form needed by both truncation layers
+of CV18 Lemma 7.15.  If a nonnegative random variable has mean at most
+`factor * scale`, then truncating it at `alpha * scale` changes it with
+probability at most `factor / alpha`. -/
+theorem measure_min_ne_self_le_of_integral_le
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (f : Omega → ℝ) (alpha scale factor : ℝ)
+    (hfmeas : Measurable f) (hf0 : ∀ omega, 0 ≤ f omega)
+    (hfint : Integrable f mu)
+    (halpha : 0 < alpha) (hscale : 0 < scale) (hfactor : 0 ≤ factor)
+    (hintegral : (∫ omega, f omega ∂mu) ≤ factor * scale) :
+    mu {omega | min (f omega) (alpha * scale) ≠ f omega} ≤
+      ENNReal.ofReal (factor / alpha) := by
+  let threshold := alpha * scale
+  have hthreshold : 0 < threshold := mul_pos halpha hscale
+  have hsubset :
+      {omega | min (f omega) threshold ≠ f omega} ⊆
+        {omega | threshold ≤ f omega} := by
+    intro omega hchanged
+    simp only [Set.mem_setOf_eq] at hchanged ⊢
+    by_contra hnot
+    exact hchanged (min_eq_left (le_of_not_ge hnot))
+  have hmarkov := mul_meas_ge_le_integral_of_nonneg
+    (μ := mu) (Filter.Eventually.of_forall hf0) hfint threshold
+  have hreal :
+      mu.real {omega | threshold ≤ f omega} ≤ factor / alpha := by
+    have hraw :
+        threshold * mu.real {omega | threshold ≤ f omega} ≤
+          factor * scale := hmarkov.trans hintegral
+    rw [le_div_iff₀ halpha]
+    exact le_of_mul_le_mul_left
+      (by simpa [threshold, mul_assoc, mul_left_comm, mul_comm] using hraw)
+      hscale
+  have htail :
+      mu {omega | threshold ≤ f omega} ≤ ENNReal.ofReal (factor / alpha) := by
+    rw [← ENNReal.toReal_le_toReal (measure_ne_top mu _)
+      ENNReal.ofReal_ne_top]
+    rw [ENNReal.toReal_ofReal (div_nonneg hfactor halpha.le)]
+    exact hreal
+  exact (measure_mono hsubset).trans htail
+
+/-- The paper's bound `Pr(Vᵢ ≠ W̄ᵢ) ≤ 1 / alpha` at the end of
+Lemma 7.15. -/
+theorem measure_dependentTruncatedPhase_ne_le
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (alpha : ℝ) (rawMean : ℕ → ℝ) (W : ℕ → Omega → ℝ)
+    (j : ℕ) (halpha : 0 < alpha) (hrawMeanPos : 0 < rawMean j)
+    (hWmeas : Measurable (W j)) (hW0 : ∀ omega, 0 ≤ W j omega)
+    (hWint : Integrable (W j) mu)
+    (hWmean : (∫ omega, W j omega ∂mu) = rawMean j) :
+    mu {omega | dependentTruncatedPhase alpha rawMean W j omega ≠ W j omega} ≤
+      ENNReal.ofReal (1 / alpha) := by
+  apply measure_min_ne_self_le_of_integral_le mu (W j) alpha (rawMean j) 1
+    hWmeas hW0 hWint halpha hrawMeanPos (by norm_num)
+  simpa using hWmean.le
+
+/-- Equation (8) and the first-moment recurrence imply the expectation bound
+used by the second Markov estimate, whenever the current numerical coefficient
+is at most two. -/
+theorem integral_dependentTruncatedProduct_mul_phase_le_two
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (alpha epsilon : ℝ) (mean : ℕ → ℝ) (V : ℕ → Omega → ℝ)
+    (halpha : 1 ≤ alpha) (hepsilon : 0 ≤ epsilon)
+    (hmean : ∀ j, 0 ≤ mean j)
+    (hVmeas : ∀ j, Measurable (V j))
+    (hV0 : ∀ j omega, 0 ≤ V j omega)
+    (hVcap : ∀ j omega, V j omega ≤ 2 * alpha * mean j)
+    (hVmean : ∀ j, (∫ omega, V j omega ∂mu) = mean j)
+    (hind : ∀ i, ApproxIndepFun epsilon
+      (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
+    (i : ℕ) (hcoefficient : 2 * epsilon * alpha ^ 2 * (i + 1) ≤ 1) :
+    (∫ omega, dependentTruncatedProduct alpha mean V i omega *
+        V (i + 1) omega ∂mu) ≤
+      2 * dependentPhaseMeanProduct mean (i + 1) := by
+  have hcov := abs_integral_dependentTruncatedProduct_mul_phase_sub_le
+    mu alpha epsilon mean V halpha hepsilon hmean hVmeas hV0 hVcap hind i
+  rw [hVmean (i + 1)] at hcov
+  have hcovUpper :
+      (∫ omega, dependentTruncatedProduct alpha mean V i omega *
+          V (i + 1) omega ∂mu) ≤
+        (∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu) *
+            mean (i + 1) +
+          2 * epsilon * alpha ^ 2 * dependentPhaseMeanProduct mean (i + 1) := by
+    linarith [le_abs_self
+      ((∫ omega, dependentTruncatedProduct alpha mean V i omega *
+          V (i + 1) omega ∂mu) -
+        (∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu) *
+          mean (i + 1))]
+  have hU := integral_dependentTruncatedProduct_le mu alpha epsilon mean V
+    halpha hepsilon hmean hVmeas hV0 hVcap hVmean hind i
+  have hscaled := mul_le_mul_of_nonneg_right hU (hmean (i + 1))
+  have hproduct0 := dependentPhaseMeanProduct_nonneg mean hmean (i + 1)
+  calc
+    (∫ omega, dependentTruncatedProduct alpha mean V i omega *
+        V (i + 1) omega ∂mu) ≤
+      (∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu) *
+          mean (i + 1) +
+        2 * epsilon * alpha ^ 2 * dependentPhaseMeanProduct mean (i + 1) :=
+      hcovUpper
+    _ ≤ ((1 + 2 * epsilon * alpha ^ 2 * i) *
+          dependentPhaseMeanProduct mean i) * mean (i + 1) +
+        2 * epsilon * alpha ^ 2 * dependentPhaseMeanProduct mean (i + 1) := by
+      exact add_le_add hscaled (le_refl _)
+    _ = (1 + 2 * epsilon * alpha ^ 2 * (i + 1)) *
+        dependentPhaseMeanProduct mean (i + 1) := by
+      rw [dependentPhaseMeanProduct_succ]
+      ring
+    _ ≤ 2 * dependentPhaseMeanProduct mean (i + 1) := by
+      exact mul_le_mul_of_nonneg_right (by linarith) hproduct0
+
+/-- The paper's bound `Pr(Uᵢ₊₁ ≠ Uᵢ Vᵢ₊₁) ≤ 2 / alpha` at the
+end of Lemma 7.15, from the already established candidate first-moment
+bound. -/
+theorem measure_dependentTruncatedProduct_succ_ne_mul_le
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (alpha : ℝ) (mean : ℕ → ℝ) (V : ℕ → Omega → ℝ) (i : ℕ)
+    (halpha : 1 ≤ alpha) (hmean : ∀ j, 0 ≤ mean j)
+    (hmeanPos : ∀ j, 0 < mean j)
+    (hVmeas : ∀ j, Measurable (V j))
+    (hV0 : ∀ j omega, 0 ≤ V j omega)
+    (hVcap : ∀ j omega, V j omega ≤ 2 * alpha * mean j)
+    (hcandidateMean :
+      (∫ omega, dependentTruncatedProduct alpha mean V i omega *
+          V (i + 1) omega ∂mu) ≤
+        2 * dependentPhaseMeanProduct mean (i + 1)) :
+    mu {omega |
+        dependentTruncatedProduct alpha mean V (i + 1) omega ≠
+          dependentTruncatedProduct alpha mean V i omega * V (i + 1) omega} ≤
+      ENNReal.ofReal (2 / alpha) := by
+  let candidate : Omega → ℝ := fun omega =>
+    dependentTruncatedProduct alpha mean V i omega * V (i + 1) omega
+  have hcandidateMeas : Measurable candidate :=
+    (measurable_dependentTruncatedProduct alpha mean V hVmeas i).mul
+      (hVmeas (i + 1))
+  have hcandidate0 : ∀ omega, 0 ≤ candidate omega := fun omega =>
+    mul_nonneg
+      (dependentTruncatedProduct_nonneg alpha mean V
+        (zero_le_one.trans halpha) hmean hV0 i omega)
+      (hV0 (i + 1) omega)
+  have hcandidateInt : Integrable candidate mu :=
+    integrable_dependentTruncatedProduct_mul_phase mu alpha mean V halpha
+      hmean hVmeas hV0 hVcap i
+  have hscalePos : 0 < dependentPhaseMeanProduct mean (i + 1) := by
+    dsimp [dependentPhaseMeanProduct]
+    apply Finset.prod_pos
+    intro j _
+    exact hmeanPos (j + 1)
+  simpa only [dependentTruncatedProduct_succ, candidate] using
+    (measure_min_ne_self_le_of_integral_le mu candidate alpha
+      (dependentPhaseMeanProduct mean (i + 1)) 2 hcandidateMeas hcandidate0
+      hcandidateInt (zero_lt_one.trans_le halpha) hscalePos (by norm_num)
+      hcandidateMean)
+
 /-- If neither level of truncation fires through phase `i`, the recursive
 variable `Uᵢ` equals the original estimator product. -/
 theorem dependentTruncatedProduct_eq_sampleProduct_of_eq
@@ -1113,6 +1272,145 @@ theorem measure_dependentTruncatedProduct_ne_sampleProduct_le
               dependentTruncatedProduct alpha mean V j omega *
                 V (j + 1) omega}) := rfl
 
+/-- Transfer any tail bound for the recursively truncated product `Uₘ` to
+the original estimator product.  This is the deterministic union-bound step
+at the end of CV18 Lemma 7.15. -/
+theorem measure_dependentPhaseSampleProduct_relativeDeviation_le_of_truncation_bounds
+    (mu : Measure Omega) (alpha : ℝ) (mean : ℕ → ℝ)
+    (V W : ℕ → Omega → ℝ) (phases : ℕ)
+    (relativeEps target : ℝ) (tailBound phaseBound accumBound : ENNReal)
+    (htail :
+      mu {omega | relativeEps * target ≤
+          |dependentTruncatedProduct alpha mean V phases omega - target|} ≤
+        tailBound)
+    (hphase : ∀ j, j < phases →
+      mu {omega | V (j + 1) omega ≠ W (j + 1) omega} ≤ phaseBound)
+    (haccum : ∀ j, j < phases →
+      mu {omega |
+          dependentTruncatedProduct alpha mean V (j + 1) omega ≠
+            dependentTruncatedProduct alpha mean V j omega * V (j + 1) omega} ≤
+        accumBound) :
+    mu {omega | relativeEps * target ≤
+        |dependentPhaseSampleProduct W phases omega - target|} ≤
+      tailBound + ∑ _ : Fin phases, (phaseBound + accumBound) := by
+  let truncatedBad : Set Omega :=
+    {omega | relativeEps * target ≤
+      |dependentTruncatedProduct alpha mean V phases omega - target|}
+  let couplingBad : Set Omega :=
+    {omega | dependentTruncatedProduct alpha mean V phases omega ≠
+      dependentPhaseSampleProduct W phases omega}
+  have hsubset :
+      {omega | relativeEps * target ≤
+          |dependentPhaseSampleProduct W phases omega - target|} ⊆
+        truncatedBad ∪ couplingBad := by
+    intro omega hbad
+    by_cases heq : dependentTruncatedProduct alpha mean V phases omega =
+        dependentPhaseSampleProduct W phases omega
+    · left
+      simpa [truncatedBad, heq] using hbad
+    · right
+      exact heq
+  have hcoupling := measure_dependentTruncatedProduct_ne_sampleProduct_le
+    mu alpha mean V W phases
+  have hcouplingBound :
+      mu couplingBad ≤ ∑ _ : Fin phases, (phaseBound + accumBound) := by
+    calc
+      mu couplingBad ≤
+          ∑ j : Fin phases,
+            (mu {omega | V (j + 1) omega ≠ W (j + 1) omega} +
+              mu {omega |
+                dependentTruncatedProduct alpha mean V (j + 1) omega ≠
+                  dependentTruncatedProduct alpha mean V j omega *
+                    V (j + 1) omega}) := by
+        simpa [couplingBad] using hcoupling
+      _ ≤ ∑ _ : Fin phases, (phaseBound + accumBound) := by
+        apply Finset.sum_le_sum
+        intro j _
+        exact add_le_add (hphase j j.isLt) (haccum j j.isLt)
+  calc
+    mu {omega | relativeEps * target ≤
+        |dependentPhaseSampleProduct W phases omega - target|} ≤
+      mu (truncatedBad ∪ couplingBad) := measure_mono hsubset
+    _ ≤ mu truncatedBad + mu couplingBad := measure_union_le _ _
+    _ ≤ tailBound + ∑ _ : Fin phases, (phaseBound + accumBound) :=
+      add_le_add (by simpa [truncatedBad] using htail) hcouplingBound
+
+/-- CV18 Lemma 7.15 in model-independent probability-space form.  It combines
+the dependent-product moment recurrence, Chebyshev, both Markov truncation
+bounds, and the final union bound, and concludes directly about the original
+estimator product `W₁ ⋯ Wₘ`. -/
+theorem measure_dependentPhaseSampleProduct_relativeDeviation_le
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (alpha epsilon : ℝ) (mean rawMean second : ℕ → ℝ)
+    (V W : ℕ → Omega → ℝ)
+    (halpha : 1 ≤ alpha) (hepsilon : 0 ≤ epsilon)
+    (hsmall : 4 * epsilon * alpha ^ 3 ≤ 1)
+    (hmean : ∀ j, 0 ≤ mean j) (hmeanPos : ∀ j, 0 < mean j)
+    (hrawMean : ∀ j, 0 ≤ rawMean j)
+    (hrawMeanPos : ∀ j, 0 < rawMean j)
+    (hrawMean_le : ∀ j, rawMean j ≤ 2 * mean j)
+    (hsecond : ∀ j, 0 ≤ second j)
+    (hmeanSecond : ∀ j, mean j ^ 2 ≤ second j)
+    (hrawSecond : ∀ j, rawMean j ^ 2 ≤ 2 * second j)
+    (hVmeas : ∀ j, Measurable (V j))
+    (hV0 : ∀ j omega, 0 ≤ V j omega)
+    (hVcap : ∀ j omega, V j omega ≤ alpha * rawMean j)
+    (hVmean : ∀ j, (∫ omega, V j omega ∂mu) = mean j)
+    (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
+    (hVeq : ∀ j omega,
+      V j omega = dependentTruncatedPhase alpha rawMean W j omega)
+    (hWmeas : ∀ j, Measurable (W j))
+    (hW0 : ∀ j omega, 0 ≤ W j omega)
+    (hWint : ∀ j, Integrable (W j) mu)
+    (hWmean : ∀ j, (∫ omega, W j omega ∂mu) = rawMean j)
+    (hind : ∀ i, ApproxIndepFun epsilon
+      (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
+    (hrelative : ∀ i,
+      (1 + 2 * epsilon * alpha ^ 4 * i) * dependentPhaseMeanProduct second i ≤
+        2 * dependentPhaseMeanProduct mean i ^ 2)
+    (phases : ℕ)
+    (hcoefficient : ∀ i, i < phases →
+      2 * epsilon * alpha ^ 2 * (i + 1) ≤ 1)
+    {tailDelta relativeEps : ℝ}
+    (htailDelta : 0 ≤ tailDelta) (hrelativeEps : 0 < relativeEps)
+    (htailSecond :
+      (1 + 2 * epsilon * alpha ^ 4 * phases) *
+          dependentPhaseMeanProduct second phases ≤
+        (1 + tailDelta) * dependentPhaseMeanProduct mean phases ^ 2) :
+    mu {omega | relativeEps * dependentPhaseMeanProduct mean phases ≤
+        |dependentPhaseSampleProduct W phases omega -
+          dependentPhaseMeanProduct mean phases|} ≤
+      ENNReal.ofReal ((tailDelta + 2 * (phases / alpha)) / relativeEps ^ 2) +
+        ∑ _ : Fin phases,
+          (ENNReal.ofReal (1 / alpha) + ENNReal.ofReal (2 / alpha)) := by
+  have hVcapTwo : ∀ j omega, V j omega ≤ 2 * alpha * mean j := by
+    intro j omega
+    calc
+      V j omega ≤ alpha * rawMean j := hVcap j omega
+      _ ≤ alpha * (2 * mean j) :=
+        mul_le_mul_of_nonneg_left (hrawMean_le j) (zero_le_one.trans halpha)
+      _ = 2 * alpha * mean j := by ring
+  have htail := measure_dependentTruncatedProduct_relativeDeviation_le
+    mu alpha epsilon mean rawMean second V halpha hepsilon hsmall hmean hmeanPos
+      hrawMean hrawMean_le hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap
+      hVmean hVsecond hind hrelative phases htailDelta hrelativeEps htailSecond
+  apply measure_dependentPhaseSampleProduct_relativeDeviation_le_of_truncation_bounds
+    mu alpha mean V W phases relativeEps (dependentPhaseMeanProduct mean phases)
+      (ENNReal.ofReal
+        ((tailDelta + 2 * (phases / alpha)) / relativeEps ^ 2))
+      (ENNReal.ofReal (1 / alpha)) (ENNReal.ofReal (2 / alpha)) htail
+  · intro j hj
+    simpa only [hVeq] using
+      (measure_dependentTruncatedPhase_ne_le mu alpha rawMean W (j + 1)
+        (zero_lt_one.trans_le halpha) (hrawMeanPos (j + 1)) (hWmeas (j + 1))
+        (hW0 (j + 1)) (hWint (j + 1)) (hWmean (j + 1)))
+  · intro j hj
+    apply measure_dependentTruncatedProduct_succ_ne_mul_le mu alpha mean V j
+      halpha hmean hmeanPos hVmeas hV0 hVcapTwo
+    exact integral_dependentTruncatedProduct_mul_phase_le_two
+      mu alpha epsilon mean V halpha hepsilon hmean hVmeas hV0 hVcapTwo
+        hVmean hind j (hcoefficient j hj)
+
 #print axioms measurable_dependentTruncatedProduct
 #print axioms dependentTruncatedProduct_nonneg
 #print axioms abs_integral_dependentTruncatedProduct_mul_phase_sub_le
@@ -1124,6 +1422,12 @@ theorem measure_dependentTruncatedProduct_ne_sampleProduct_le
 #print axioms measure_relativeDeviation_le_of_target_moments
 #print axioms measure_dependentTruncatedProduct_relativeDeviation_le
 #print axioms measure_dependentTruncatedProduct_ne_sampleProduct_le
+#print axioms measure_min_ne_self_le_of_integral_le
+#print axioms measure_dependentTruncatedPhase_ne_le
+#print axioms integral_dependentTruncatedProduct_mul_phase_le_two
+#print axioms measure_dependentTruncatedProduct_succ_ne_mul_le
+#print axioms measure_dependentPhaseSampleProduct_relativeDeviation_le_of_truncation_bounds
+#print axioms measure_dependentPhaseSampleProduct_relativeDeviation_le
 #print axioms ApproxIndepFun.abs_integral_sq_mul_sq_sub_mul_integral_sq_le
 
 end ArlibCommunity.Algorithms.CV18
