@@ -1,6 +1,6 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofInitialSpeedyWarmStart
-import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduleTargetedKLS
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledRetainedWarm
 
 /-! # Initial warm start for the schedule-targeted speedy body
 
@@ -327,7 +327,145 @@ theorem initialScheduledSpeedy_restrictOff_tvLe
     (initialTruncatedGaussian_scheduledInball_compl_le_half q I)).symm.mono
       (initialTruncatedGaussian_scheduledInball_compl_le q I)
 
+/-! ## Constant-warm scaled start used by the executable
+
+The actual first collector contracts its initial draw by `accuracyScaleFactor`.
+The KLS accepted target is already close to the truncated Gaussian; after the
+same contraction it supplies an `8`-warm good law.  This is the polynomial
+warm start needed by both mixing and expected-cost bounds.
+-/
+
+private theorem initialContractedAcceptedTarget_isProbabilityMeasure_aux
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    let sigma2 := initialVariance q
+    let pi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2
+    let contract : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+      accuracyScaleFactor q • x
+    IsProbabilityMeasure
+      ((scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+        q I sigma2 pi).map contract) := by
+  dsimp only
+  let sigma2 := initialVariance q
+  let K := figureOneScheduledPhaseBody q I sigma2
+  let delta := figureOneScheduledProposalRadius q sigma2
+  let pi := ellGaussianProb K delta sigma2
+  have hsigma2 : 0 < sigma2 := initialVariance_pos q
+  have hdelta : 0 < delta := figureOneScheduledProposalRadius_pos q hsigma2
+  have hmass0 : ellGaussianMeasure K delta sigma2 Set.univ ≠ 0 :=
+    ellGaussianMeasure_univ_ne_zero
+      (figureOneScheduledPhaseBody_measurable q I sigma2)
+      (figureOneScheduledPhaseBody_convex q I sigma2)
+      (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+      (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+      hdelta sigma2
+  have hmasstop : ellGaussianMeasure K delta sigma2 Set.univ ≠ ⊤ :=
+    ellGaussianMeasure_ne_top_cv18
+      (figureOneScheduledPhaseBody_volume_ne_top q I sigma2) delta hsigma2
+  let _ : IsProbabilityMeasure pi :=
+    isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
+  have haccepted : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      scheduledBalancedAcceptedStateMeasure q I sigma2 pi Set.univ := by
+    have hsharp := scheduledBalancedAcceptedStateMeasure_mass_ge_one_sixteenth
+      q I hsigma2
+    exact (by norm_num : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      ENNReal.ofReal (1 / 16 : ℝ)).trans (by
+        simpa [K, delta, pi] using hsharp)
+  let _ : IsProbabilityMeasure
+      (scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+        q I sigma2 pi) :=
+    scheduledBalancedAccuracyGaussianAcceptedTargetLaw_isProbabilityMeasure_of_lower
+      q I hsigma2 pi haccepted
+  exact Measure.isProbabilityMeasure_map (by fun_prop)
+
+theorem initialScaledScheduled_leUpTo_contractedAcceptedTarget
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    let sigma2 := initialVariance q
+    let sigma := (truncatedGaussianProbability q I sigma2
+      (initialVariance_pos q) : Measure (AmbientSpace q.n))
+    let pi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2
+    let contract : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+      accuracyScaleFactor q • x
+    let good := (scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+      q I sigma2 pi).map contract
+    MeasureLeUpTo (sigma.map contract) good
+      (scheduledBalancedStationaryTargetError q) := by
+  dsimp only
+  have htv := scheduledBalancedAccuracyGaussianAcceptedTargetLaw_tv
+    q I (initialVariance_pos q)
+  let _ : IsProbabilityMeasure
+      ((scheduledBalancedAccuracyGaussianAcceptedTargetLaw q I
+        (initialVariance q)
+        (ellGaussianProb
+          (figureOneScheduledPhaseBody q I (initialVariance q))
+          (figureOneScheduledProposalRadius q (initialVariance q))
+          (initialVariance q))).map
+            (fun x => accuracyScaleFactor q • x)) :=
+    initialContractedAcceptedTarget_isProbabilityMeasure_aux q I
+  exact MeasureLeUpTo.of_tvLe
+    ((htv.map (by fun_prop : Measurable fun x : AmbientSpace q.n =>
+      accuracyScaleFactor q • x)).symm)
+
+theorem initialContractedAcceptedTarget_isWarm_eight
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    let sigma2 := initialVariance q
+    let pi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2
+    let contract : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+      accuracyScaleFactor q • x
+    IsWarm 8
+      ((scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+        q I sigma2 pi).map contract) pi := by
+  dsimp only
+  exact map_scheduledBalancedAcceptedTarget_scale_isWarm_eight
+    q I (initialVariance_pos q)
+
+theorem initialContractedAcceptedTarget_isProbabilityMeasure
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    let sigma2 := initialVariance q
+    let pi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2
+    let contract : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+      accuracyScaleFactor q • x
+    IsProbabilityMeasure
+      ((scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+        q I sigma2 pi).map contract) := by
+  exact initialContractedAcceptedTarget_isProbabilityMeasure_aux q I
+
+/-- Exact good/bad decomposition of the scaled initial law.  The good part is
+a probability measure, is `8`-warm for phase zero, and the bad mass is only
+the already-budgeted stationary-target correction. -/
+theorem exists_initialScaledScheduled_good_bad
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    let sigma2 := initialVariance q
+    let sigma := (truncatedGaussianProbability q I sigma2
+      (initialVariance_pos q) : Measure (AmbientSpace q.n))
+    let pi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2
+    let contract : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+      accuracyScaleFactor q • x
+    let good := (scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+      q I sigma2 pi).map contract
+    ∃ bad : Measure (AmbientSpace q.n),
+      IsProbabilityMeasure good ∧
+      (sigma.map contract ≤ good + bad) ∧
+      IsWarm 8 good pi ∧
+      bad Set.univ ≤ scheduledBalancedStationaryTargetError q := by
+  dsimp only
+  have hmlu := initialScaledScheduled_leUpTo_contractedAcceptedTarget q I
+  obtain ⟨bad, hle, hbad⟩ := hmlu
+  exact ⟨bad,
+    initialContractedAcceptedTarget_isProbabilityMeasure q I,
+    hle, initialContractedAcceptedTarget_isWarm_eight q I, hbad⟩
+
 #print axioms initialScheduledSpeedy_restrictOff_isWarm
 #print axioms initialScheduledSpeedy_restrictOff_tvLe
+#print axioms exists_initialScaledScheduled_good_bad
 
 end ArlibCommunity.Algorithms.CV18
