@@ -133,6 +133,30 @@ theorem scheduledBalancedAccuracyLiveTrial_countedStronglyMeasurable
     q I oracle hsigma2 (proposalCap + 1) properStride).2 current |>.bind
       htail.2 htail.1
 
+/-- The counted execution law of one live trial varies measurably with its
+input state. -/
+theorem scheduledBalancedAccuracyLiveTrial_run_measurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (proposalCap properStride : ℕ) :
+    Measurable fun current =>
+      (scheduledBalancedAccuracyLiveTrial q sigma2 proposalCap properStride
+        current).run oracle.query := by
+  let source (current : AmbientSpace q.n) :=
+    cappedScheduledAccuracyProperBlock q sigma2 (proposalCap + 1)
+      properStride current
+  let tail (z : AmbientSpace q.n × Option (ℝ × AmbientSpace q.n)) :=
+    scheduledBalancedAccuracyRejectionTail q sigma2 z.2
+  have hsource := cappedScheduledAccuracyProperBlock_countedMeasurable
+    q I oracle hsigma2 (proposalCap + 1) properStride
+  have htail := scheduledBalancedAccuracyRejectionTail_countedMeasurable
+    q I oracle hsigma2
+  have h := MembershipOracleProgram.measurable_run_bind_param oracle.query
+    source tail hsource.1 hsource.2 (htail.1.comp measurable_snd)
+      (fun z => htail.2 z.2)
+  simpa only [source, tail, scheduledBalancedAccuracyLiveTrial,
+    scheduledBalancedAccuracyRejectionTail] using h
+
 /-- A live trial inherits exactly the local block budget plus the one-query
 balanced rejection decision. -/
 theorem scheduledBalancedAccuracyLiveTrial_queryBound
