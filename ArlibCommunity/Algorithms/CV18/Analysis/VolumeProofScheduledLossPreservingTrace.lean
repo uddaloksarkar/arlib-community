@@ -551,9 +551,140 @@ theorem dependentPhaseSampleProduct_scheduledBalancedTrace_eq
   rw [balancedCoolingChronologicalPhaseVariable_apply_succ q j
     (Finset.mem_range.mp hj) (some trace.1)]
 
+/-- Finite chronological coordinate support for a loss-preserving trace. -/
+def ScheduledBalancedCoolingTraceCoordinatesNonnegative (m : ℕ)
+    (trace : ScheduledBalancedCoolingTrace n) : Prop :=
+  BalancedCoolingHistoryHasNonnegativeCoordinates m (some trace.1)
+
+theorem measurableSet_scheduledBalancedCoolingTraceCoordinatesNonnegative
+    (m : ℕ) :
+    MeasurableSet {trace : ScheduledBalancedCoolingTrace n |
+      ScheduledBalancedCoolingTraceCoordinatesNonnegative m trace} := by
+  exact (measurableSet_balancedCoolingHistoryHasNonnegativeCoordinates m).preimage
+    (measurable_some.comp measurable_fst)
+
+theorem scheduledBalancedTracePhaseObservationLaw_ae_total_nonnegative
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase : ℕ)
+    (trace : ScheduledBalancedCoolingTrace q.n) :
+    ∀ᵐ result ∂scheduledBalancedTracePhaseObservationLaw
+        parameters q I phase trace,
+      ScheduledCollectedTotalNonnegative result := by
+  rcases trace with ⟨history, live⟩
+  cases live with
+  | false =>
+      unfold scheduledBalancedTracePhaseObservationLaw
+      apply (ae_dirac_iff measurableSet_scheduledCollectedTotalNonnegative).2
+      trivial
+  | true =>
+      unfold scheduledBalancedTracePhaseObservationLaw
+      simp only [if_true]
+      split_ifs
+      · exact scheduledBalancedCoolingRatioTransitionLaw_ae_ratio_nonnegative
+          parameters q I (scheduleValue_pos q phase)
+            (scheduleValue q (phase + 1)) history.2.2.2
+      · exact scheduledBalancedCoolingUniformTransitionLaw_ae_ratio_nonnegative
+          parameters q I (terminalVariance_pos' q) history.2.2.2
+
+theorem ScheduledBalancedCoolingTraceCoordinatesNonnegative.append
+    {trace : ScheduledBalancedCoolingTrace n}
+    (hcoordinates : ScheduledBalancedCoolingTraceCoordinatesNonnegative m trace)
+    {result : Option (ℝ × AmbientSpace n)}
+    (hresult : ScheduledCollectedTotalNonnegative result) :
+    ScheduledBalancedCoolingTraceCoordinatesNonnegative (m + 1)
+      (scheduledBalancedCoolingTraceAppend trace result) := by
+  rcases trace with ⟨history, live⟩
+  cases live with
+  | false =>
+      cases result <;>
+        simp only [ScheduledBalancedCoolingTraceCoordinatesNonnegative,
+          scheduledBalancedCoolingTraceAppend, Bool.false_eq_true, if_false]
+      all_goals
+        have hone : ScheduledCollectedTotalNonnegative
+            (some ((1 : ℝ), history.2.2.2)) := by
+          norm_num [ScheduledCollectedTotalNonnegative]
+        have h := hcoordinates.snocTerminal hone
+        rw [balancedCoolingHistorySnocTerminal_some] at h
+        exact h
+  | true =>
+      cases result with
+      | none =>
+          simp only [ScheduledBalancedCoolingTraceCoordinatesNonnegative,
+            scheduledBalancedCoolingTraceAppend, if_true]
+          have hzero : ScheduledCollectedTotalNonnegative
+              (some ((0 : ℝ), history.2.2.2)) := by
+            norm_num [ScheduledCollectedTotalNonnegative]
+          have h := hcoordinates.snocTerminal hzero
+          rw [balancedCoolingHistorySnocTerminal_some] at h
+          exact h
+      | some result =>
+          simp only [ScheduledBalancedCoolingTraceCoordinatesNonnegative,
+            scheduledBalancedCoolingTraceAppend, if_true]
+          have h := hcoordinates.snocTerminal hresult
+          rw [balancedCoolingHistorySnocTerminal_some] at h
+          exact h
+
+theorem scheduledBalancedTracePhaseKernel_ae_coordinatesNonnegative
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase m : ℕ)
+    (trace : ScheduledBalancedCoolingTrace q.n)
+    (hcoordinates : ScheduledBalancedCoolingTraceCoordinatesNonnegative m trace) :
+    ∀ᵐ next ∂scheduledBalancedTracePhaseKernel parameters q I phase trace,
+      ScheduledBalancedCoolingTraceCoordinatesNonnegative (m + 1) next := by
+  unfold scheduledBalancedTracePhaseKernel
+  apply (ae_map_iff
+    ((measurable_scheduledBalancedCoolingTraceAppend (n := q.n)).comp
+      (measurable_const.prodMk measurable_id)).aemeasurable
+    (measurableSet_scheduledBalancedCoolingTraceCoordinatesNonnegative _)).2
+  filter_upwards [
+    scheduledBalancedTracePhaseObservationLaw_ae_total_nonnegative
+      parameters q I phase trace] with result hresult
+  exact hcoordinates.append hresult
+
+theorem scheduledBalancedForwardTraceLaw_ae_coordinatesNonnegative
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) : ∀ phases,
+    ∀ᵐ trace ∂scheduledBalancedForwardTraceLaw parameters q I phases,
+      ScheduledBalancedCoolingTraceCoordinatesNonnegative phases trace := by
+  intro phases
+  induction phases with
+  | zero =>
+      unfold scheduledBalancedForwardTraceLaw iteratedKernelLaw
+      apply (ae_map_iff measurable_scheduledBalancedInitialTrace.aemeasurable
+        (measurableSet_scheduledBalancedCoolingTraceCoordinatesNonnegative 0)).2
+      filter_upwards with point
+      simp [ScheduledBalancedCoolingTraceCoordinatesNonnegative,
+        ScheduledBalancedCoolingTraceValid, scheduledBalancedInitialTrace,
+        BalancedCoolingHistoryHasNonnegativeCoordinates]
+  | succ phases ih =>
+      let prefixLaw :=
+        scheduledBalancedForwardTraceLaw parameters q I phases
+      let kernel := scheduledBalancedTracePhaseKernel parameters q I phases
+      let good : Set (ScheduledBalancedCoolingTrace q.n) :=
+        {trace |
+          ScheduledBalancedCoolingTraceCoordinatesNonnegative
+            (phases + 1) trace}
+      have hgood : MeasurableSet good :=
+        measurableSet_scheduledBalancedCoolingTraceCoordinatesNonnegative _
+      have hkernel : Measurable kernel :=
+        (scheduledBalancedTracePhaseKernel_measurable_and_probability
+          parameters q I phases).1
+      change ∀ᵐ trace ∂prefixLaw.bind kernel,
+        ScheduledBalancedCoolingTraceCoordinatesNonnegative
+          (phases + 1) trace
+      apply MeasureTheory.mem_ae_iff.mpr
+      change (prefixLaw.bind kernel) goodᶜ = 0
+      rw [Measure.bind_apply hgood.compl hkernel.aemeasurable]
+      apply lintegral_eq_zero_of_ae_eq_zero
+      filter_upwards [ih] with trace htrace
+      exact MeasureTheory.mem_ae_iff.mp <|
+        scheduledBalancedTracePhaseKernel_ae_coordinatesNonnegative
+          parameters q I phases phases trace htrace
+
 #print axioms map_scheduledBalancedTracePhaseKernel_project
 #print axioms map_scheduledBalancedForwardTraceLaw_project
 #print axioms scheduledBalancedTraceChronologicalPhaseVariable_append_eq
 #print axioms scheduledBalancedForwardTraceLaw_ae_valid
+#print axioms scheduledBalancedForwardTraceLaw_ae_coordinatesNonnegative
 
 end ArlibCommunity.Algorithms.CV18
