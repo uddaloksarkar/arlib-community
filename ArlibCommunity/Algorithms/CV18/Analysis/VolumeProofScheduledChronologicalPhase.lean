@@ -467,6 +467,103 @@ theorem scheduledBalancedForwardHistoryLaw_isProbabilityMeasure
     exact (scheduledBalancedForwardPhaseKernel_measurable_and_probability
       parameters q I i).2 history
 
+/-- Iterating measurable probability kernels from a Dirac state is itself a
+measurable probability-kernel-valued function of that state. -/
+theorem iteratedKernelLaw_dirac_measurable_and_probability
+    {S : Type*} [MeasurableSpace S]
+    (K : ℕ → S → Measure S)
+    (hK : ∀ phase, Measurable (K phase))
+    (hKprob : ∀ phase state, IsProbabilityMeasure (K phase state)) :
+    ∀ phases,
+      Measurable (fun state =>
+        iteratedKernelLaw K (Measure.dirac state) phases) ∧
+      ∀ state, IsProbabilityMeasure
+        (iteratedKernelLaw K (Measure.dirac state) phases) := by
+  intro phases
+  induction phases with
+  | zero =>
+      refine ⟨Measure.measurable_dirac, fun state => ?_⟩
+      change IsProbabilityMeasure (Measure.dirac state)
+      infer_instance
+  | succ phases ih =>
+      constructor
+      · rw [show (fun state =>
+            iteratedKernelLaw K (Measure.dirac state) (phases + 1)) =
+          fun state =>
+            (iteratedKernelLaw K (Measure.dirac state) phases).bind
+              (K phases) by
+          funext state
+          rfl]
+        exact (Measure.measurable_bind' (hK phases)).comp ih.1
+      · intro state
+        exact iteratedKernelLaw_isProbabilityMeasure K (Measure.dirac state)
+          inferInstance hK hKprob (phases + 1)
+
+/-- Fubini/linearity for a finite nonhomogeneous kernel iteration initialized
+by a measurable deterministic state. -/
+theorem bind_iteratedKernelLaw_dirac_eq_iteratedKernelLaw_map
+    {A S : Type*} [MeasurableSpace A] [MeasurableSpace S]
+    (K : ℕ → S → Measure S)
+    (hK : ∀ phase, Measurable (K phase))
+    (hKprob : ∀ phase state, IsProbabilityMeasure (K phase state))
+    (mu : Measure A) (initial : A → S) (hinitial : Measurable initial) :
+    ∀ phases,
+      mu.bind (fun a =>
+        iteratedKernelLaw K (Measure.dirac (initial a)) phases) =
+      iteratedKernelLaw K (mu.map initial) phases := by
+  intro phases
+  induction phases with
+  | zero =>
+      exact Measure.bind_dirac_eq_map mu hinitial
+  | succ phases ih =>
+      have hprefix : Measurable fun a =>
+          iteratedKernelLaw K (Measure.dirac (initial a)) phases :=
+        (iteratedKernelLaw_dirac_measurable_and_probability K hK hKprob
+          phases).1.comp hinitial
+      calc
+        mu.bind (fun a =>
+            iteratedKernelLaw K (Measure.dirac (initial a)) (phases + 1)) =
+          mu.bind (fun a =>
+            (iteratedKernelLaw K (Measure.dirac (initial a)) phases).bind
+              (K phases)) := rfl
+        _ = (mu.bind fun a =>
+            iteratedKernelLaw K (Measure.dirac (initial a)) phases).bind
+              (K phases) :=
+          (Measure.bind_bind hprefix.aemeasurable
+            (hK phases).aemeasurable).symm
+        _ = (iteratedKernelLaw K (mu.map initial) phases).bind
+              (K phases) := by rw [ih]
+        _ = iteratedKernelLaw K (mu.map initial) (phases + 1) := rfl
+
+/-- Scheduled chronological history law started from one fixed post-initial
+point, before averaging over the truncated-Gaussian initialization. -/
+noncomputable def scheduledBalancedForwardHistoryLawFromPoint
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phases : ℕ) (point : AmbientSpace q.n) :
+    Measure (Option (BalancedCoolingHistory q.n)) :=
+  iteratedKernelLaw (scheduledBalancedForwardPhaseKernel parameters q I)
+    (Measure.dirac (balancedCoolingInitialHistory point)) phases
+
+theorem scheduledBalancedForwardHistoryLaw_bind_fromPoint
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phases : ℕ) :
+    (truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+        (scheduledBalancedForwardHistoryLawFromPoint parameters q I phases) =
+      scheduledBalancedForwardHistoryLaw parameters q I phases := by
+  unfold scheduledBalancedForwardHistoryLawFromPoint
+    scheduledBalancedForwardHistoryLaw
+  exact bind_iteratedKernelLaw_dirac_eq_iteratedKernelLaw_map
+    (scheduledBalancedForwardPhaseKernel parameters q I)
+    (fun phase =>
+      (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+        parameters q I phase).1)
+    (fun phase history =>
+      (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+        parameters q I phase).2 history)
+    _ balancedCoolingInitialHistory measurable_balancedCoolingInitialHistory
+      phases
+
 theorem scheduledBalancedForwardPhaseKernel_ae_hasProduct
     (parameters : BalancedCoolingParameters) (q : VolumeParams)
     (I : VolumeInput q.n) (phase m : ℕ)
