@@ -424,6 +424,118 @@ noncomputable def scheduledBalancedStationaryTargetError
   96 * ENNReal.ofReal (figureOneScheduledCoreError q) +
     ENNReal.ofReal (figureOneScheduledRadialError q)
 
+/-- Uniform speedy-stationary mass of the homothetic KLS core at scheduled
+geometry.  The small-radius branch actually gives `1/2`; `7/16` is retained
+as the common constant with the paper-step branch. -/
+theorem figureOneScheduled_speedy_core_mass
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let K := figureOneScheduledPhaseBody q I sigma2
+    let delta := figureOneScheduledProposalRadius q sigma2
+    let pi := Arlib.MarkovChains.ellGaussianProb K delta sigma2
+    ENNReal.ofReal (7 / 16 : ℝ) ≤
+      pi (accuracyScaleFactor q • K) := by
+  dsimp only
+  let K := figureOneScheduledPhaseBody q I sigma2
+  let delta := figureOneScheduledProposalRadius q sigma2
+  let pi := Arlib.MarkovChains.ellGaussianProb K delta sigma2
+  have hn : 1 ≤ q.n := le_trans (by norm_num) q.dim_ok
+  have hdelta : 0 < delta := figureOneScheduledProposalRadius_pos q hsigma2
+  have hmass0 : Arlib.MarkovChains.ellGaussianMeasure K delta sigma2
+      Set.univ ≠ 0 := by
+    dsimp [K]
+    exact Arlib.MarkovChains.ellGaussianMeasure_univ_ne_zero
+      (figureOneScheduledPhaseBody_measurable q I sigma2)
+      (figureOneScheduledPhaseBody_convex q I sigma2)
+      (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+      (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+      hdelta sigma2
+  have hmasstop : Arlib.MarkovChains.ellGaussianMeasure K delta sigma2
+      Set.univ ≠ ⊤ := by
+    dsimp [K]
+    exact Arlib.MarkovChains.ellGaussianMeasure_ne_top_cv18
+      (figureOneScheduledPhaseBody_volume_ne_top q I sigma2) delta hsigma2
+  by_cases hsmall : figureOneScheduledPhaseRadius q sigma2 ≤ 1
+  · have hhalf :=
+      Arlib.MarkovChains.half_le_ellGaussianProb_standardCore_radius_cv18
+        hn (figureOneScheduledPhaseBody_measurable q I sigma2)
+        (figureOneScheduledPhaseBody_convex q I sigma2)
+        (figureOneScheduledPhaseInradius_pos q hsigma2)
+        (ball_scheduledPhaseInradius_subset q I sigma2) hdelta
+        (figureOneScheduledProposalRadius_le_inradiusStep q hsigma2 hsmall)
+        hsigma2 hmass0 hmasstop
+    calc
+      ENNReal.ofReal (7 / 16 : ℝ) ≤ ENNReal.ofReal (1 / 2 : ℝ) := by norm_num
+      _ ≤ pi (accuracyScaleFactor q • K) := by
+        simpa [pi, K, accuracyScaleFactor] using hhalf
+  · have hlarge : 1 ≤ figureOneScheduledPhaseRadius q sigma2 :=
+      le_of_not_ge hsmall
+    have hball : Metric.closedBall (0 : AmbientSpace q.n) 1 ⊆ K := by
+      intro x hx
+      refine ⟨unitBall_subset_truncatedBody q I ?_, ?_⟩
+      · simpa [unitBall] using hx
+      · exact hx.trans hlarge
+    let c : ℝ := 1 - 1 / (2 * (q.n : ℝ))
+    have hc0 : 0 < c := by
+      dsimp [c]
+      have hnR : (1 : ℝ) ≤ q.n := by exact_mod_cast hn
+      have : 1 / (2 * (q.n : ℝ)) ≤ 1 / 2 := by
+        rw [div_le_div_iff₀ (by positivity) (by norm_num)]
+        nlinarith
+      linarith
+    have hc1 : c < 1 := by
+      dsimp [c]
+      have hnR : (0 : ℝ) < q.n := by
+        exact_mod_cast (lt_of_lt_of_le Nat.zero_lt_one hn)
+      have : 0 < 1 / (2 * (q.n : ℝ)) := by positivity
+      linarith
+    have hcoreM : MeasurableSet (c • K) :=
+      ((isClosedMap_smul_of_ne_zero hc0.ne') K
+        (figureOneScheduledPhaseBody_isCompact q I sigma2).isClosed).measurableSet
+    have hsub : c • K ⊆ K := by
+      rintro _ ⟨x, hx, rfl⟩
+      exact (figureOneScheduledPhaseBody_convex q I sigma2).smul_mem_of_zero_mem
+        (hball (Metric.mem_closedBall_self zero_le_one)) hx ⟨hc0.le, hc1.le⟩
+    have hcoreVol0 : volume (c • K) ≠ 0 := by
+      rw [Arlib.volume_smul_euclidean hc0.le]
+      exact mul_ne_zero
+        (ENNReal.ofReal_ne_zero_iff.mpr (pow_pos hc0 q.n))
+        (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+    have hcoreVoltop : volume (c • K) ≠ ⊤ := by
+      rw [Arlib.volume_smul_euclidean hc0.le]
+      exact ENNReal.mul_ne_top ENNReal.ofReal_ne_top
+        (figureOneScheduledPhaseBody_volume_ne_top q I sigma2)
+    have hgaussCore0 :
+        (((volume : Measure (AmbientSpace q.n)).withDensity
+          (Arlib.MarkovChains.gaussianWeight sigma2)).restrict K)
+            (c • K) ≠ 0 := by
+      rw [Measure.restrict_apply hcoreM, Set.inter_eq_left.2 hsub]
+      exact Arlib.MarkovChains.withDensity_gaussianWeight_ne_zero _ hcoreVol0
+    have hgaussCoretop :
+        (((volume : Measure (AmbientSpace q.n)).withDensity
+          (Arlib.MarkovChains.gaussianWeight sigma2)).restrict K)
+            (c • K) ≠ ⊤ := by
+      rw [Measure.restrict_apply hcoreM, Set.inter_eq_left.2 hsub]
+      exact Arlib.MarkovChains.withDensity_gaussianWeight_ne_top hsigma2
+        hcoreM hcoreVoltop
+    have hpaper :=
+      Arlib.MarkovChains.standardCore_defect_and_speedyMass_cv18
+        hn (figureOneScheduledPhaseBody_convex q I sigma2)
+        (figureOneScheduledPhaseBody_isCompact q I sigma2).isClosed
+        (figureOneScheduledPhaseBody_volume_ne_top q I sigma2) hball
+        hdelta (Real.sqrt_pos.2 hsigma2)
+        (figureOneScheduledCoreError_pos q)
+        (figureOneScheduledCoreError_le_one_div_sixteen q)
+        (figureOneScheduledProposalRadius_le_coreStep q hsigma2)
+        (by simpa [c, K, div_eq_mul_inv, mul_comm,
+          Real.sq_sqrt hsigma2.le] using hgaussCore0)
+        (by simpa [c, K, div_eq_mul_inv, mul_comm,
+          Real.sq_sqrt hsigma2.le] using hgaussCoretop)
+        (by simpa [Real.sq_sqrt hsigma2.le] using hmass0)
+        (by simpa [Real.sq_sqrt hsigma2.le] using hmasstop)
+    simpa [pi, K, c, accuracyScaleFactor, Real.sq_sqrt hsigma2.le] using
+      hpaper.2
+
 set_option maxHeartbeats 1000000 in
 theorem scheduledBalancedAccuracyGaussianAcceptedTargetLaw_tv
     (q : VolumeParams) (I : VolumeInput q.n)
