@@ -1523,6 +1523,185 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
       congr 1
       norm_num
 
+/-! ## Paper-faithful scheduled Lemma 7.15 interface -/
+
+noncomputable def scheduledFigureOneActualRawMean
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (j : ℕ) : ℝ :=
+  ∫ history, balancedCoolingChronologicalPhaseVariable q j history
+    ∂scheduledBalancedForwardHistoryLaw parameters q I
+      (figureOneDependentPhaseCount q)
+
+noncomputable def scheduledFigureOneActualTruncatedPhase
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    ℕ → Option (BalancedCoolingHistory q.n) → ℝ :=
+  dependentTruncatedPhase (figureOneDependentAlpha q)
+    (scheduledFigureOneActualRawMean parameters q I)
+    (balancedCoolingChronologicalPhaseVariable q)
+
+noncomputable def scheduledFigureOneActualTruncatedMean
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (j : ℕ) : ℝ :=
+  ∫ history, scheduledFigureOneActualTruncatedPhase parameters q I j history
+    ∂scheduledBalancedForwardHistoryLaw parameters q I
+      (figureOneDependentPhaseCount q)
+
+noncomputable def scheduledFigureOneActualTruncatedSecond
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (j : ℕ) : ℝ :=
+  ∫ history,
+      scheduledFigureOneActualTruncatedPhase parameters q I j history ^ 2
+    ∂scheduledBalancedForwardHistoryLaw parameters q I
+      (figureOneDependentPhaseCount q)
+
+/-- Scheduled, law-correct form of the CV18 Lemma 7.15 assembly.  All
+integral identities and both interpreter transports are discharged here.
+The remaining quantitative hypotheses are precisely executable phase moment
+bounds, finite Lemma 7.17(c), and the two finite product estimates. -/
+theorem figureOneFinalScheduledBalancedBase_failure_le_of_lemma717bc
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (hpoint : ∀ point,
+      MembershipOracleProgram.runEstimate oracle.query
+          (scheduledBalancedFigureOnePointContinuation
+            figureOneFinalScheduledBalancedParameters q point) =
+        (scheduledBalancedForwardHistoryLawFromPoint
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q) point).map
+            (balancedFigureOneHistoryEstimate q))
+    (hW0 : ∀ j history,
+      0 ≤ balancedCoolingChronologicalPhaseVariable q j history)
+    (hWint : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      Integrable (balancedCoolingChronologicalPhaseVariable q j)
+        (scheduledBalancedForwardHistoryLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)))
+    (hmeanPos : ∀ j,
+      0 < scheduledFigureOneActualTruncatedMean
+        figureOneFinalScheduledBalancedParameters q I j)
+    (hrawMeanPos : ∀ j,
+      0 < scheduledFigureOneActualRawMean
+        figureOneFinalScheduledBalancedParameters q I j)
+    (hrawMean_le : ∀ j,
+      scheduledFigureOneActualRawMean
+          figureOneFinalScheduledBalancedParameters q I j ≤
+        2 * scheduledFigureOneActualTruncatedMean
+          figureOneFinalScheduledBalancedParameters q I j)
+    (hmeanSecond : ∀ j,
+      scheduledFigureOneActualTruncatedMean
+          figureOneFinalScheduledBalancedParameters q I j ^ 2 ≤
+        scheduledFigureOneActualTruncatedSecond
+          figureOneFinalScheduledBalancedParameters q I j)
+    (hrawSecond : ∀ j,
+      scheduledFigureOneActualRawMean
+          figureOneFinalScheduledBalancedParameters q I j ^ 2 ≤
+        2 * scheduledFigureOneActualTruncatedSecond
+          figureOneFinalScheduledBalancedParameters q I j)
+    (hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
+        (dependentTruncatedProduct (figureOneDependentAlpha q)
+          (scheduledFigureOneActualTruncatedMean
+            figureOneFinalScheduledBalancedParameters q I)
+          (scheduledFigureOneActualTruncatedPhase
+            figureOneFinalScheduledBalancedParameters q I) i)
+        (scheduledFigureOneActualTruncatedPhase
+          figureOneFinalScheduledBalancedParameters q I (i + 1))
+        (scheduledBalancedForwardHistoryLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)))
+    (hrelative : ∀ i, i ≤ figureOneDependentPhaseCount q →
+      (1 + 2 * figureOneDependentEpsilon q *
+          figureOneDependentAlpha q ^ 4 * i) *
+          dependentPhaseMeanProduct
+            (scheduledFigureOneActualTruncatedSecond
+              figureOneFinalScheduledBalancedParameters q I) i ≤
+        2 * dependentPhaseMeanProduct
+          (scheduledFigureOneActualTruncatedMean
+            figureOneFinalScheduledBalancedParameters q I) i ^ 2)
+    (htailSecond :
+      (1 + 2 * figureOneDependentEpsilon q *
+          figureOneDependentAlpha q ^ 4 *
+            figureOneDependentPhaseCount q) *
+          dependentPhaseMeanProduct
+            (scheduledFigureOneActualTruncatedSecond
+              figureOneFinalScheduledBalancedParameters q I)
+            (figureOneDependentPhaseCount q) ≤
+        (1 + q.eps ^ 2 / 16) *
+          dependentPhaseMeanProduct
+            (scheduledFigureOneActualTruncatedMean
+              figureOneFinalScheduledBalancedParameters q I)
+            (figureOneDependentPhaseCount q) ^ 2)
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ phase, figureOneIdealPhaseMean q I phase)
+      (dependentPhaseMeanProduct
+        (scheduledFigureOneActualTruncatedMean
+          figureOneFinalScheduledBalancedParameters q I)
+        (figureOneDependentPhaseCount q))) :
+    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  let parameters := figureOneFinalScheduledBalancedParameters
+  let mu := scheduledBalancedForwardHistoryLaw parameters q I
+    (figureOneDependentPhaseCount q)
+  let W := balancedCoolingChronologicalPhaseVariable q
+  let rawMean := scheduledFigureOneActualRawMean parameters q I
+  let V := scheduledFigureOneActualTruncatedPhase parameters q I
+  let mean := scheduledFigureOneActualTruncatedMean parameters q I
+  let second := scheduledFigureOneActualTruncatedSecond parameters q I
+  let continuation : AmbientSpace q.n → Measure ℝ := fun point =>
+    (scheduledBalancedFigureOnePointContinuation parameters q point).runEstimate
+      oracle.query
+  let _ : IsProbabilityMeasure mu :=
+    scheduledBalancedForwardHistoryLaw_isProbabilityMeasure parameters q I _
+  have hWmeas : ∀ j, Measurable (W j) := fun j =>
+    measurable_balancedCoolingChronologicalPhaseVariable q j
+  have hVmeas : ∀ j, Measurable (V j) := fun j =>
+    (hWmeas j).min measurable_const
+  have hV0 : ∀ j history, 0 ≤ V j history := by
+    intro j history
+    exact le_min (hW0 j history)
+      (mul_nonneg (figureOneDependentAlpha_pos q).le
+        (hrawMeanPos j).le)
+  have hVcap : ∀ j history,
+      V j history ≤ figureOneDependentAlpha q * rawMean j := fun j history =>
+    min_le_right _ _
+  have htail := measure_dependentPhaseSampleProduct_figureOne_le
+    q mu mean rawMean second V W
+      (fun j => (hmeanPos j).le) hmeanPos
+      (fun j => (hrawMeanPos j).le) hrawMeanPos hrawMean_le
+      (fun j => (sq_nonneg (mean j)).trans (hmeanSecond j))
+      hmeanSecond hrawSecond hVmeas hV0 hVcap
+      (fun _ => rfl) (fun _ => rfl) (fun _ _ _ _ => rfl)
+      (fun j _ _ => hWmeas j) (fun j _ _ => hW0 j)
+      hWint (fun _ _ _ => rfl) hind hrelative htailSecond
+  have hhistory :=
+    bind_scheduledBalancedFigureOnePointContinuation_eq_forwardHistory_map_of_pointwise
+      parameters q I oracle hpoint
+  have hlaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation =
+        mu.map fun history => initialGaussianIntegral q *
+          dependentPhaseSampleProduct W
+            (figureOneDependentPhaseCount q) history := by
+    rw [hhistory]
+    apply Measure.map_congr
+    filter_upwards [scheduledBalancedForwardHistoryLaw_ae_hasProduct
+      parameters q I (figureOneDependentPhaseCount q)] with history hproduct
+    exact balancedFigureOneHistoryEstimate_eq_sampleProduct
+      q history hproduct
+  have hX : Measurable
+      (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q)) := by
+    unfold dependentPhaseSampleProduct
+    exact (Finset.range (figureOneDependentPhaseCount q)).measurable_fun_prod
+      fun j _ => hWmeas (j + 1)
+  have hpost := figureOnePostInitialDirectFailureBoundFor_of_dependentProduct
+    q I continuation (figureOneRadialTruncationBound q I hrounded) mu
+      (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q))
+      hX hmeanApprox hlaw htail
+  exact figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
+    q I oracle hpost
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
@@ -1715,6 +1894,7 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms figureOneFinalScheduledBalancedBaseProgram_runEstimate_eq_initial_bind
 #print axioms figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_phaseIteration
 #print axioms figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
+#print axioms figureOneFinalScheduledBalancedBase_failure_le_of_lemma717bc
 
 end
 
