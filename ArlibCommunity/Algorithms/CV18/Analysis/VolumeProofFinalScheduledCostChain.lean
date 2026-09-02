@@ -907,6 +907,110 @@ theorem figureOneFinalScheduledCoolingProduct_cost_eq_retainedChain
           q I oracle phase (some point)
       rw [hretainedLaw]
 
+theorem optionSnd_balancedCoolingHistoryOutput_traceProject
+    (trace : ScheduledBalancedCoolingTrace n) :
+    optionSnd
+        (balancedCoolingHistoryOutput
+          (scheduledBalancedCoolingTraceProject trace)) =
+      scheduledBalancedTraceRetainedOption trace := by
+  rcases trace with ⟨history, live⟩
+  cases live <;> rfl
+
+/-- After averaging over the exact truncated-Gaussian initializer, the
+endpoint of the executable Gaussian cooling product is the retained marginal
+of the loss-preserving chronological trace. -/
+theorem map_bind_figureOneFinalScheduledCoolingProduct_optionSnd_eq_trace
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (((truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind fun point =>
+      (coolingProduct
+        (scheduledBalancedCoolingPrimitives
+          figureOneFinalScheduledBalancedParameters) q
+        (explicitVolumeCoolingSchedule q).variances point).runEstimate
+          oracle.query).map optionSnd) =
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+          (terminalPhaseSteps q)).map
+            scheduledBalancedTraceRetainedOption := by
+  let target : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q)
+  let coolingLaw (point : AmbientSpace q.n) :=
+    (coolingProduct
+      (scheduledBalancedCoolingPrimitives
+        figureOneFinalScheduledBalancedParameters) q
+      (explicitVolumeCoolingSchedule q).variances point).runEstimate oracle.query
+  let fromPoint := scheduledBalancedForwardHistoryLawFromPoint
+    figureOneFinalScheduledBalancedParameters q I (terminalPhaseSteps q)
+  have hcooling := scheduledExecutableCoolingProduct_measurable_and_strong
+    figureOneFinalScheduledBalancedParameters q I oracle
+      (explicitVolumeCoolingSchedule q).variances
+      (explicitVolumeCoolingSchedule q).positive
+  have hfromPoint : Measurable fromPoint := by
+    unfold fromPoint scheduledBalancedForwardHistoryLawFromPoint
+    exact (iteratedKernelLaw_dirac_measurable_and_probability
+      (scheduledBalancedForwardPhaseKernel
+        figureOneFinalScheduledBalancedParameters q I)
+      (fun phase =>
+        (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+          figureOneFinalScheduledBalancedParameters q I phase).1)
+      (fun phase history =>
+        (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+          figureOneFinalScheduledBalancedParameters q I phase).2 history)
+      (terminalPhaseSteps q)).1.comp measurable_balancedCoolingInitialHistory
+  have hpoint : ∀ point, (coolingLaw point).map optionSnd =
+      (fromPoint point).map
+        (optionSnd ∘ balancedCoolingHistoryOutput) := by
+    intro point
+    unfold coolingLaw
+    rw [scheduledExecutableFigureOneCoolingProduct_runEstimate_eq_history_map
+      figureOneFinalScheduledBalancedParameters q I oracle point]
+    rw [map_scheduledExecutableFigureOneCoolingHistory_output_eq_forward]
+    rw [Measure.map_map measurable_optionSnd
+      measurable_balancedCoolingHistoryOutput]
+  have hcoolingProb : ∀ point, IsProbabilityMeasure (coolingLaw point) := by
+    intro point
+    exact MembershipOracleProgram.runEstimate_isProbabilityMeasure oracle.query _
+      (hcooling.2 point).estimateMeasurable
+  calc
+    (target.bind coolingLaw).map optionSnd =
+        target.bind fun point => (coolingLaw point).map optionSnd :=
+      map_bind_eq_bind_map_of_measurable target hcooling.1 measurable_optionSnd
+    _ = target.bind fun point =>
+        (fromPoint point).map
+          (optionSnd ∘ balancedCoolingHistoryOutput) := by
+      apply Measure.bind_congr_right
+      filter_upwards with point
+      exact hpoint point
+    _ = (target.bind fromPoint).map
+          (optionSnd ∘ balancedCoolingHistoryOutput) :=
+      (map_bind_eq_bind_map_of_measurable target hfromPoint
+        (measurable_optionSnd.comp
+          measurable_balancedCoolingHistoryOutput)).symm
+    _ = (scheduledBalancedForwardHistoryLaw
+          figureOneFinalScheduledBalancedParameters q I
+            (terminalPhaseSteps q)).map
+          (optionSnd ∘ balancedCoolingHistoryOutput) := by
+      rw [scheduledBalancedForwardHistoryLaw_bind_fromPoint]
+    _ = ((scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+            (terminalPhaseSteps q)).map
+          scheduledBalancedCoolingTraceProject).map
+            (optionSnd ∘ balancedCoolingHistoryOutput) := by
+      rw [map_scheduledBalancedForwardTraceLaw_project]
+    _ = (scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+            (terminalPhaseSteps q)).map
+          ((optionSnd ∘ balancedCoolingHistoryOutput) ∘
+            scheduledBalancedCoolingTraceProject) := by
+      rw [Measure.map_map
+        (measurable_optionSnd.comp measurable_balancedCoolingHistoryOutput)
+        measurable_scheduledBalancedCoolingTraceProject]
+    _ = _ := by
+      apply Measure.map_congr
+      filter_upwards with trace
+      exact optionSnd_balancedCoolingHistoryOutput_traceProject trace
+
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_cost
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
 #print axioms lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
@@ -914,5 +1018,6 @@ theorem figureOneFinalScheduledCoolingProduct_cost_eq_retainedChain
 #print axioms figureOneFinalScheduledRetainedTerminalProgram_cost
 #print axioms lintegral_figureOneFinalScheduledRetainedFullCostProgram_eq
 #print axioms figureOneFinalScheduledCoolingProduct_cost_eq_retainedChain
+#print axioms map_bind_figureOneFinalScheduledCoolingProduct_optionSnd_eq_trace
 
 end ArlibCommunity.Algorithms.CV18
