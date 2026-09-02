@@ -73,6 +73,25 @@ theorem figureOneGloballyCappedBalancedBaseValueProgram_failure_le
       norm_num
     _ ≤ ENNReal.ofReal (1 / 4 : ℝ) := ENNReal.ofReal_le_ofReal (by norm_num)
 
+theorem figureOneGloballyCappedBalancedBaseValueProgram_accuracy_of_baseFailure
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (hcost : FigureOneBalancedExpectedQueryCost q I oracle)
+    (hbase : (figureOneGlobalBalancedBaseProgram q).runEstimate oracle.query
+      (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ)) :
+    3 / 4 ≤ outcomeProbability
+      (volumeAlgorithmLaw figureOneGloballyCappedBalancedBaseValueProgram
+        q I oracle) (accurateOutcome q I) := by
+  let μ := (figureOneGloballyCappedBalancedBaseValueProgram q).runEstimate
+    oracle.query
+  have hstrong :=
+    figureOneGloballyCappedBalancedBaseValueProgram_stronglyMeasurable q I oracle
+  let _ : IsProbabilityMeasure μ :=
+    MembershipOracleProgram.runEstimate_isProbabilityMeasure oracle.query _
+      hstrong.estimateMeasurable
+  apply outcomeProbability_ge_three_quarters_of_failure_le μ q I
+  exact figureOneGloballyCappedBalancedBaseValueProgram_failure_le
+    q I oracle hcost hbase
+
 theorem figureOneGloballyCappedBalancedBaseValueProgram_accuracy_of_mappedLaw
     (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
     (hrounded : WellRounded q I)
@@ -92,17 +111,45 @@ theorem figureOneGloballyCappedBalancedBaseValueProgram_accuracy_of_mappedLaw
     3 / 4 ≤ outcomeProbability
       (volumeAlgorithmLaw figureOneGloballyCappedBalancedBaseValueProgram
         q I oracle) (accurateOutcome q I) := by
-  let μ := (figureOneGloballyCappedBalancedBaseValueProgram q).runEstimate
-    oracle.query
-  have hstrong :=
-    figureOneGloballyCappedBalancedBaseValueProgram_stronglyMeasurable q I oracle
-  let _ : IsProbabilityMeasure μ :=
-    MembershipOracleProgram.runEstimate_isProbabilityMeasure oracle.query _
-      hstrong.estimateMeasurable
-  apply outcomeProbability_ge_three_quarters_of_failure_le μ q I
-  exact figureOneGloballyCappedBalancedBaseValueProgram_failure_le q I oracle
-    hcost (balancedFigureOneBase_failure_le_of_mappedLaw
+  exact figureOneGloballyCappedBalancedBaseValueProgram_accuracy_of_baseFailure
+    q I oracle hcost (balancedFigureOneBase_failure_le_of_mappedLaw
       figureOneGlobalBalancedParameters q I oracle hrounded htransfer)
+
+theorem volumeTheorem_balanced_of_baseFailure_and_expectedCost
+    (hbase : ∀ (q : VolumeParams) (I : VolumeInput q.n)
+      (oracle : MembershipOracle I), WellRounded q I →
+      (figureOneGlobalBalancedBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ))
+    (hcost : ∀ (q : VolumeParams) (I : VolumeInput q.n)
+      (oracle : MembershipOracle I),
+      FigureOneBalancedExpectedQueryCost q I oracle) :
+    ∃ C : ℝ, 0 < C ∧
+      ∀ (q : VolumeParams) (I : VolumeInput q.n)
+        (oracle : MembershipOracle I),
+        WellRounded q I →
+          1 - q.p ≤ outcomeProbability
+            (volumeAlgorithmLaw
+              (amplifyOracleProgram
+                figureOneGloballyCappedBalancedBaseValueProgram)
+              q I oracle) (accurateOutcome q I) ∧
+          ∃ calls,
+            (amplifyOracleProgram
+              figureOneGloballyCappedBalancedBaseValueProgram q).QueryBound calls ∧
+            calls ≤ Nat.ceil (C * volumeComplexityRate q) := by
+  let C₀ := 64 * figureOneGlobalExpectedCostConstant
+  obtain ⟨C, hC, hamp⟩ := oracleProgram_proof_amplification C₀ (by
+    dsimp [C₀]
+    positivity [figureOneGlobalExpectedCostConstant_pos])
+  refine ⟨C, hC, ?_⟩
+  intro q I oracle hrounded
+  exact hamp figureOneGloballyCappedBalancedBaseValueProgram q I oracle
+    (figureOneGloballyCappedBalancedBaseValueProgram_accuracy_of_baseFailure
+      q I oracle (hcost q I oracle) (hbase q I oracle hrounded))
+    (figureOneGloballyCappedBalancedBaseValueProgram_stronglyMeasurable
+      q I oracle)
+    ⟨figureOneGlobalQueryBudget q,
+      figureOneGloballyCappedBalancedBaseValueProgram_queryBound q,
+      by simp [figureOneGlobalQueryBudget, C₀]⟩
 
 /-- Final Theorem-1.1 assembly for the globally capped balanced implementation.
 The two quantified premises are exactly the remaining walk-law and global
@@ -139,21 +186,11 @@ theorem volumeTheorem_balanced_of_mappedLaw_and_expectedCost
             (amplifyOracleProgram
               figureOneGloballyCappedBalancedBaseValueProgram q).QueryBound calls ∧
             calls ≤ Nat.ceil (C * volumeComplexityRate q) := by
-  let C₀ := 64 * figureOneGlobalExpectedCostConstant
-  obtain ⟨C, hC, hamp⟩ := oracleProgram_proof_amplification C₀ (by
-    dsimp [C₀]
-    positivity [figureOneGlobalExpectedCostConstant_pos])
-  refine ⟨C, hC, ?_⟩
+  apply volumeTheorem_balanced_of_baseFailure_and_expectedCost
+    (hcost := hcost)
   intro q I oracle hrounded
-  have hresult := hamp figureOneGloballyCappedBalancedBaseValueProgram
-    q I oracle
-    (figureOneGloballyCappedBalancedBaseValueProgram_accuracy_of_mappedLaw
-      q I oracle hrounded (hcost q I oracle) (htransfer q I hrounded))
-    (figureOneGloballyCappedBalancedBaseValueProgram_stronglyMeasurable
-      q I oracle)
-    ⟨figureOneGlobalQueryBudget q,
-      figureOneGloballyCappedBalancedBaseValueProgram_queryBound q,
-      by simp [figureOneGlobalQueryBudget, C₀]⟩
-  simpa [C₀] using hresult
+  exact balancedFigureOneBase_failure_le_of_mappedLaw
+    figureOneGlobalBalancedParameters q I oracle hrounded
+      (htransfer q I hrounded)
 
 end ArlibCommunity.Algorithms.CV18
