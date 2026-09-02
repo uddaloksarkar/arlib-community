@@ -480,6 +480,76 @@ theorem figureOneWarmShadowScheduledWork_cast_le
       have hrate := (volumeScheduledBaseComplexityRate_pos q).le
       nlinarith
 
+/-- The apparently large local cap has the paper's essential cancellation:
+after multiplication by one corrected block-error budget, its ceiling costs
+only an absolute constant times the scheduled stride. -/
+theorem figureOneFinalScheduledLocalCapCeil_mul_blockError_le
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let attempts := figureOneSafeRetryCount q - 1
+    let e := figureOneCorrectedBlockMixingError q attempts
+    let stride := figureOneFinalScheduledBalancedParameters.properStride q sigma2
+    (Nat.ceil (figureOneFinalScheduledLocalCapRequirement q sigma2) : ℝ) * e ≤
+      385 * stride := by
+  dsimp only
+  let attempts := figureOneSafeRetryCount q - 1
+  let e := figureOneCorrectedBlockMixingError q attempts
+  let stride := figureOneFinalScheduledBalancedParameters.properStride q sigma2
+  let requirement := figureOneFinalScheduledLocalCapRequirement q sigma2
+  have he : 0 < e := by
+    simpa [e, attempts] using figureOneCorrectedBlockMixingError_pos q attempts
+  have heone : e ≤ 1 := by
+    simpa [e, attempts] using figureOneCorrectedBlockMixingError_le_one q attempts
+  have hstrideNat : 0 < stride := by
+    simpa [stride] using figureOneScheduledCorrectedProperStride_pos q sigma2
+      (figureOneSafeRetryCount q - 1)
+  have hstride : (1 : ℝ) ≤ stride := by exact_mod_cast hstrideNat
+  have hM := speedyAdjacentWarmConstant_le_twelve q
+  have hreq0 : 0 ≤ requirement := by
+    dsimp only [requirement, figureOneFinalScheduledLocalCapRequirement]
+    positivity [speedyAdjacentWarmConstant_pos q]
+  have hceil := Nat.ceil_lt_add_one hreq0
+  have hmul : (Nat.ceil requirement : ℝ) * e < (requirement + 1) * e :=
+    mul_lt_mul_of_pos_right hceil he
+  have hcancel : requirement * e =
+      32 * speedyAdjacentWarmConstant q * (stride : ℝ) := by
+    dsimp only [requirement, figureOneFinalScheduledLocalCapRequirement,
+      stride, e, attempts]
+    rw [div_mul_cancel₀ _ (figureOneCorrectedBlockMixingError_pos q _).ne']
+    simp only [figureOneFinalScheduledBalancedParameters_properStride]
+    ring
+  dsimp only [requirement, e, attempts, stride] at hmul hcancel ⊢
+  rw [add_mul, hcancel] at hmul
+  nlinarith
+
+/-- Including the global-budget prefix and the two endpoint queries, one
+block-error charge splits into the global budget times that small error plus
+`387` scheduled strides. -/
+theorem figureOneFinalScheduledProposalCap_add_two_mul_blockError_le
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let attempts := figureOneSafeRetryCount q - 1
+    let e := figureOneCorrectedBlockMixingError q attempts
+    let stride := figureOneFinalScheduledBalancedParameters.properStride q sigma2
+    ((figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 + 2 : ℕ) : ℝ) * e ≤
+      (figureOneFinalScheduledQueryBudget q : ℝ) * e + 387 * stride := by
+  dsimp only
+  let attempts := figureOneSafeRetryCount q - 1
+  let e := figureOneCorrectedBlockMixingError q attempts
+  let stride := figureOneFinalScheduledBalancedParameters.properStride q sigma2
+  have hceil := figureOneFinalScheduledLocalCapCeil_mul_blockError_le q hsigma2
+  have he : 0 < e := by
+    simpa [e, attempts] using figureOneCorrectedBlockMixingError_pos q attempts
+  have heone : e ≤ 1 := by
+    simpa [e, attempts] using figureOneCorrectedBlockMixingError_le_one q attempts
+  have hstrideNat : 0 < stride := by
+    simpa [stride] using figureOneScheduledCorrectedProperStride_pos q sigma2
+      (figureOneSafeRetryCount q - 1)
+  have hstride : (1 : ℝ) ≤ stride := by exact_mod_cast hstrideNat
+  simp only [figureOneFinalScheduledBalancedParameters_proposalCap,
+    figureOneFinalScheduledLocalProposalCap]
+  push_cast
+  dsimp only [e, attempts, stride] at hceil ⊢
+  nlinarith
+
 #print axioms figureOneSafeRetryCount_cast_le_correctedMixingLog
 #print axioms figureOneScheduledMixingDenominator_inv_sq_le
 #print axioms figureOneScheduledCorrectedProperStride_cast_le
@@ -487,5 +557,7 @@ theorem figureOneWarmShadowScheduledWork_cast_le
 #print axioms figureOneSafeRetryCount_mul_scheduledProperWork_cast_le_sharp
 #print axioms figureOneSafeRetryCount_mul_scheduledProperWork_cast_le
 #print axioms figureOneWarmShadowScheduledWork_cast_le
+#print axioms figureOneFinalScheduledLocalCapCeil_mul_blockError_le
+#print axioms figureOneFinalScheduledProposalCap_add_two_mul_blockError_le
 
 end ArlibCommunity.Algorithms.CV18
