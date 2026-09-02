@@ -602,4 +602,117 @@ theorem balancedRejectedStationary_isWarm
     _ ≤ ((2 : ENNReal)⁻¹)⁻¹ * pi A := by gcongr
     _ = 2 * pi A := by norm_num
 
+/-- The normalized stationary rejection branch can be remixed with the
+uniform warmness constant `2`, independently of its actual mass. -/
+theorem mixesWithin_balancedRejectedStationary_cv18
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {mixError : ℝ} (hmixError0 : 0 < mixError)
+    (hmixError1 : mixError ≤ 1)
+    {t : ℕ} (ht : 4 * ((Real.log 2 + 2 * Real.log (1 / mixError)) /
+      (figureOneProposalRadius q sigma2 * Real.log 2 /
+        (640 * Real.sqrt sigma2 * Real.sqrt q.n)) ^ 2) + 1 ≤ (t : ℝ)) :
+    let K := accuracyPhaseTruncatedBody q I sigma2
+    let delta := figureOneProposalRadius q sigma2
+    let pi := Arlib.MarkovChains.ellGaussianProb K delta sigma2
+    let rejected := balancedRejectedStateMeasure q I sigma2 pi
+    Arlib.MarkovChains.MixesWithin
+      (Arlib.MarkovChains.lazy
+        (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2))
+      pi (Arlib.condOn rejected Set.univ) t (ENNReal.ofReal mixError) := by
+  dsimp only
+  let K := accuracyPhaseTruncatedBody q I sigma2
+  let delta := figureOneProposalRadius q sigma2
+  let pi := Arlib.MarkovChains.ellGaussianProb K delta sigma2
+  let rejected := balancedRejectedStateMeasure q I sigma2 pi
+  have hdelta : 0 < delta := figureOneProposalRadius_pos q hsigma2
+  have hmass0 : Arlib.MarkovChains.ellGaussianMeasure K delta sigma2
+      Set.univ ≠ 0 :=
+    Arlib.MarkovChains.ellGaussianMeasure_univ_ne_zero
+      (accuracyPhaseTruncatedBody_measurable q I sigma2)
+      (accuracyPhaseTruncatedBody_convex q I sigma2)
+      (accuracyPhaseTruncatedBody_isCompact q I sigma2).isBounded
+      (accuracyPhaseTruncatedBody_volume_ne_zero q I hsigma2) hdelta sigma2
+  have hmasstop : Arlib.MarkovChains.ellGaussianMeasure K delta sigma2
+      Set.univ ≠ ⊤ :=
+    Arlib.MarkovChains.ellGaussianMeasure_ne_top_cv18
+      (accuracyPhaseTruncatedBody_volume_ne_top q I sigma2) delta hsigma2
+  let _ : IsProbabilityMeasure pi :=
+    Arlib.MarkovChains.isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
+  have hrejectedLower : (2 : ENNReal)⁻¹ ≤ rejected Set.univ := by
+    simpa [rejected] using
+      balancedRejectedStateMeasure_mass_ge_half q I hsigma2 pi
+  have hrejected0 : rejected Set.univ ≠ 0 := ne_of_gt <|
+    (by norm_num : 0 < (2 : ENNReal)⁻¹).trans_le hrejectedLower
+  have hrejectedTop : rejected Set.univ ≠ ⊤ := by
+    have hle : rejected ≤ pi := by
+      simpa [rejected] using
+        balancedRejectedStateMeasure_le q I sigma2 pi
+    exact ne_top_of_le_ne_top (measure_ne_top pi Set.univ) <|
+      Measure.le_iff'.mp hle Set.univ
+  let _ : IsProbabilityMeasure (Arlib.condOn rejected Set.univ) :=
+    Arlib.isProbabilityMeasure_condOn rejected hrejected0 hrejectedTop
+  exact mixesWithin_accuracyPhaseTruncatedBody_figureOne_cv18
+    q I hsigma2 (M := 2) (eps := mixError) (by norm_num)
+    (by simpa [K, delta, pi, rejected] using
+      balancedRejectedStationary_isWarm q I hsigma2)
+    hmixError0 hmixError1 ht
+
+/-- The normalized stationary accepted branch can seed the next sample with
+the uniform warmness constant `16`. -/
+theorem mixesWithin_balancedAcceptedStationary_cv18
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {mixError : ℝ} (hmixError0 : 0 < mixError)
+    (hmixError1 : mixError ≤ 1)
+    {t : ℕ} (ht : 4 * ((Real.log 16 + 2 * Real.log (1 / mixError)) /
+      (figureOneProposalRadius q sigma2 * Real.log 2 /
+        (640 * Real.sqrt sigma2 * Real.sqrt q.n)) ^ 2) + 1 ≤ (t : ℝ)) :
+    let K := accuracyPhaseTruncatedBody q I sigma2
+    let delta := figureOneProposalRadius q sigma2
+    let pi := Arlib.MarkovChains.ellGaussianProb K delta sigma2
+    let accepted := balancedAcceptedStateMeasure q I sigma2 pi
+    Arlib.MarkovChains.MixesWithin
+      (Arlib.MarkovChains.lazy
+        (Arlib.MarkovChains.speedyMetropolisGaussian K delta sigma2))
+      pi (Arlib.condOn accepted Set.univ) t (ENNReal.ofReal mixError) := by
+  dsimp only
+  let K := accuracyPhaseTruncatedBody q I sigma2
+  let delta := figureOneProposalRadius q sigma2
+  let pi := Arlib.MarkovChains.ellGaussianProb K delta sigma2
+  let accepted := balancedAcceptedStateMeasure q I sigma2 pi
+  have hdelta : 0 < delta := figureOneProposalRadius_pos q hsigma2
+  have hmass0 : Arlib.MarkovChains.ellGaussianMeasure K delta sigma2
+      Set.univ ≠ 0 :=
+    Arlib.MarkovChains.ellGaussianMeasure_univ_ne_zero
+      (accuracyPhaseTruncatedBody_measurable q I sigma2)
+      (accuracyPhaseTruncatedBody_convex q I sigma2)
+      (accuracyPhaseTruncatedBody_isCompact q I sigma2).isBounded
+      (accuracyPhaseTruncatedBody_volume_ne_zero q I hsigma2) hdelta sigma2
+  have hmasstop : Arlib.MarkovChains.ellGaussianMeasure K delta sigma2
+      Set.univ ≠ ⊤ :=
+    Arlib.MarkovChains.ellGaussianMeasure_ne_top_cv18
+      (accuracyPhaseTruncatedBody_volume_ne_top q I sigma2) delta hsigma2
+  let _ : IsProbabilityMeasure pi :=
+    Arlib.MarkovChains.isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
+  have hacceptedLower : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      accepted Set.univ := by
+    simpa [accepted] using balancedAcceptedStateMeasure_mass_ge q I hsigma2
+  have haccepted0 : accepted Set.univ ≠ 0 := ne_of_gt <|
+    (by norm_num : 0 < ENNReal.ofReal (7 / 128 : ℝ)).trans_le
+      hacceptedLower
+  have hacceptedTop : accepted Set.univ ≠ ⊤ := by
+    have hle : accepted ≤ (2 : ENNReal)⁻¹ • pi := by
+      simpa [accepted] using
+        balancedAcceptedStateMeasure_le_half_smul q I hsigma2 pi
+    exact ne_top_of_le_ne_top (by simp) <|
+      Measure.le_iff'.mp hle Set.univ
+  let _ : IsProbabilityMeasure (Arlib.condOn accepted Set.univ) :=
+    Arlib.isProbabilityMeasure_condOn accepted haccepted0 hacceptedTop
+  exact mixesWithin_accuracyPhaseTruncatedBody_figureOne_cv18
+    q I hsigma2 (M := 16) (eps := mixError) (by norm_num)
+    (by simpa [K, delta, pi, accepted] using
+      balancedAcceptedStationary_isWarm q I hsigma2)
+    hmixError0 hmixError1 ht
+
 end ArlibCommunity.Algorithms.CV18
