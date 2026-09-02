@@ -378,15 +378,12 @@ theorem total_figureOneWalkSteps_cast_le (q : VolumeParams) :
 
 /-- The concrete Figure-1 base run obeys the exact unrestricted polylogarithmic
 query rate. -/
-theorem figureOne_base_query_cost :
-    ∃ C : ℝ, 0 < C ∧ ∀ q : VolumeParams,
-      1 + (figureOneCoolingQueryBudget q
-              (explicitVolumeCoolingSchedule q).variances +
-            figureOneSampleCount q *
-              figureOneWalkSteps q (terminalVariance q)) ≤
-        Nat.ceil (C * volumeBaseComplexityRate q) := by
-  refine ⟨10 ^ 25, by positivity, ?_⟩
-  intro q
+theorem figureOne_base_query_cost_explicit (q : VolumeParams) :
+    1 + (figureOneCoolingQueryBudget q
+            (explicitVolumeCoolingSchedule q).variances +
+          figureOneSampleCount q *
+            figureOneWalkSteps q (terminalVariance q)) ≤
+      Nat.ceil (10 ^ 25 * volumeBaseComplexityRate q) := by
   let n : ℝ := q.n
   let M : ℝ := max 1 q.roundness
   let L : ℝ := protectedLog (n / q.eps)
@@ -634,5 +631,14 @@ theorem figureOne_base_query_cost :
     rw [hrate]
     exact hleft.trans <| mul_le_mul_of_nonneg_right hconstant (le_trans zero_le_one hR)
   exact_mod_cast le_trans hreal (Nat.le_ceil (10 ^ 25 * volumeBaseComplexityRate q))
+
+theorem figureOne_base_query_cost :
+    ∃ C : ℝ, 0 < C ∧ ∀ q : VolumeParams,
+      1 + (figureOneCoolingQueryBudget q
+              (explicitVolumeCoolingSchedule q).variances +
+            figureOneSampleCount q *
+              figureOneWalkSteps q (terminalVariance q)) ≤
+        Nat.ceil (C * volumeBaseComplexityRate q) := by
+  exact ⟨10 ^ 25, by positivity, figureOne_base_query_cost_explicit⟩
 
 end ArlibCommunity.Algorithms.CV18
