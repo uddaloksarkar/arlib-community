@@ -248,7 +248,86 @@ theorem scheduledBalancedRejectedStateMeasure_mass_le
         ← ENNReal.ofReal_sub (1 : ℝ) (by norm_num : (0 : ℝ) ≤ 7 / 128)]
       norm_num
 
+theorem scheduledBalancedAcceptedStateMeasure_le_half_smul
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (mu : Measure (AmbientSpace q.n)) :
+    scheduledBalancedAcceptedStateMeasure q I sigma2 mu ≤
+      (2 : ENNReal)⁻¹ • mu := by
+  rw [scheduledBalancedAcceptedStateMeasure_eq_half_smul]
+  apply Measure.le_iff.mpr
+  intro A hA
+  rw [Measure.smul_apply, smul_eq_mul, withDensity_apply _ hA]
+  calc
+    (2 : ENNReal)⁻¹ *
+        ∫⁻ x in A, scheduledAccuracyGaussianRejectionAcceptance
+          q I sigma2 x ∂mu ≤
+      (2 : ENNReal)⁻¹ * ∫⁻ _x in A, (1 : ENNReal) ∂mu := by
+        gcongr
+        exact scheduledAccuracyGaussianRejectionAcceptance_le_one
+          q I hsigma2 _
+    _ = (2 : ENNReal)⁻¹ * mu A := by rw [setLIntegral_one]
+
+theorem scheduledBalancedRejectedStateMeasure_le
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (sigma2 : ℝ) (mu : Measure (AmbientSpace q.n)) :
+    scheduledBalancedRejectedStateMeasure q I sigma2 mu ≤ mu := by
+  unfold scheduledBalancedRejectedStateMeasure
+  apply Measure.le_iff.mpr
+  intro A hA
+  rw [withDensity_apply _ hA]
+  calc
+    (∫⁻ x in A, 1 - scheduledBalancedAccuracyGaussianAcceptance
+        q I sigma2 x ∂mu) ≤ ∫⁻ _x in A, (1 : ENNReal) ∂mu :=
+      lintegral_mono fun _ => tsub_le_self
+    _ = mu A := by rw [setLIntegral_one]
+
+theorem scheduledBalancedAcceptedTargetSubmeasure_eq_mass_smul
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (pi : Measure (AmbientSpace q.n)) [IsProbabilityMeasure pi]
+    (hacceptedLower : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      scheduledBalancedAcceptedStateMeasure q I sigma2 pi Set.univ) :
+    let accepted := scheduledBalancedAcceptedStateMeasure q I sigma2 pi
+    let acceptedTarget := accepted.map
+      (fun x => (accuracyScaleFactor q)⁻¹ • x)
+    acceptedTarget = accepted Set.univ •
+      scheduledBalancedAccuracyGaussianAcceptedTargetLaw q I sigma2 pi := by
+  dsimp only
+  let accepted := scheduledBalancedAcceptedStateMeasure q I sigma2 pi
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    (accuracyScaleFactor q)⁻¹ • x
+  let acceptedTarget := accepted.map scale
+  have hscale : Measurable scale := by
+    dsimp only [scale]
+    exact (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹).smul measurable_id
+  have haccepted0 : accepted Set.univ ≠ 0 := ne_of_gt <|
+    (by norm_num : 0 < ENNReal.ofReal (7 / 128 : ℝ)).trans_le
+      (by simpa [accepted] using hacceptedLower)
+  have hacceptedTop : accepted Set.univ ≠ ⊤ := by
+    have hle := scheduledBalancedAcceptedStateMeasure_le_half_smul
+      q I hsigma2 pi
+    exact ne_top_of_le_ne_top (by simp) <|
+      Measure.le_iff'.mp hle Set.univ
+  have htargetMass : acceptedTarget Set.univ = accepted Set.univ := by
+    dsimp only [acceptedTarget]
+    rw [Measure.map_apply hscale MeasurableSet.univ, Set.preimage_univ]
+  have htarget0 : acceptedTarget Set.univ ≠ 0 := by
+    rw [htargetMass]
+    exact haccepted0
+  have htargetTop : acceptedTarget Set.univ ≠ ⊤ := by
+    rw [htargetMass]
+    exact hacceptedTop
+  have hnormalize := measure_eq_mass_smul_condOn_univ acceptedTarget
+    htarget0 htargetTop
+  change acceptedTarget = accepted Set.univ •
+    Arlib.condOn acceptedTarget Set.univ
+  rw [← htargetMass]
+  exact hnormalize
+
 #print axioms scheduledBalancedAcceptedStateMeasure_mass_ge
+#print axioms scheduledBalancedAcceptedTargetSubmeasure_eq_mass_smul
 #print axioms scheduledBalancedRejectedStateMeasure_mass_ge_half
 #print axioms scheduledBalancedRejectedStateMeasure_mass_le
 
