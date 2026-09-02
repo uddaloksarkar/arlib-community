@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledPhaseCost
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCostComposition
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledHistoryAppend
 
 /-! # A retained-state interpreter for final scheduled cost accounting -/
 
@@ -725,11 +726,193 @@ theorem lintegral_figureOneFinalScheduledRetainedFullCostProgram_eq
   intro state
   exact figureOneFinalScheduledRetainedTerminalProgram_cost q I oracle state
 
+private theorem scheduledVarianceSegment_pos
+    (q : VolumeParams) (offset steps : ℕ) :
+    ∀ sigma2 ∈ scheduledVarianceSegment q offset steps, 0 < sigma2 := by
+  intro sigma2 hsigma2
+  rw [scheduledVarianceSegment, List.mem_ofFn'] at hsigma2
+  obtain ⟨i, rfl⟩ := hsigma2
+  exact scheduleValue_pos q _
+
+@[simp] theorem figureOneFinalScheduledRetainedGaussianChain_none
+    (q : VolumeParams) : ∀ phase steps,
+    figureOneFinalScheduledRetainedGaussianChain q phase steps none =
+      .pure none := by
+  intro phase steps
+  induction steps generalizing phase with
+  | zero => rfl
+  | succ steps ih =>
+      simp only [figureOneFinalScheduledRetainedGaussianChain,
+        figureOneFinalScheduledRetainedGaussianPhaseProgram]
+      exact ih (phase + 1)
+
+/-- Erasing all Gaussian ratio/product coordinates preserves the complete
+expected query cost, pointwise in the initial point. -/
+theorem figureOneFinalScheduledCoolingProduct_cost_eq_retainedChain
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ∀ phase steps (point : AmbientSpace q.n),
+    countedQueryCost
+        ((coolingProduct
+          (scheduledBalancedCoolingPrimitives
+            figureOneFinalScheduledBalancedParameters) q
+          (scheduledVarianceSegment q phase steps) point).run oracle.query) =
+      countedQueryCost
+        ((figureOneFinalScheduledRetainedGaussianChain q phase steps
+          (some point)).run oracle.query) := by
+  intro phase steps
+  induction steps generalizing phase with
+  | zero =>
+      intro point
+      simp only [scheduledVarianceSegment_zero, coolingProduct,
+        figureOneFinalScheduledRetainedGaussianChain]
+      rw [MembershipOracleProgram.countedQueryCost_pure,
+        MembershipOracleProgram.countedQueryCost_pure]
+  | succ steps ih =>
+      intro point
+      let parameters := figureOneFinalScheduledBalancedParameters
+      let sigma2 := scheduleValue q phase
+      let tau2 := scheduleValue q (phase + 1)
+      let rest := (scheduledVarianceSegment q (phase + 1) steps).tail
+      let ratioProgram := scheduledBalancedCoolingRatioEstimate parameters q
+        sigma2 tau2 point
+      let tailCooling (nextPoint : AmbientSpace q.n) :=
+        coolingProduct (scheduledBalancedCoolingPrimitives parameters) q
+          (scheduledVarianceSegment q (phase + 1) steps) nextPoint
+      let retainedPhase :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram q phase (some point)
+      let retainedTail :=
+        figureOneFinalScheduledRetainedGaussianChain q (phase + 1) steps
+      let multiply (ratio : ℝ) (tail : Option (ℝ × AmbientSpace q.n)) :=
+        balancedCoolingProductCons ratio tail
+      let actualNext : Option (ℝ × AmbientSpace q.n) →
+          MembershipOracleProgram q.n (Option (ℝ × AmbientSpace q.n))
+        | none => .pure none
+        | some value =>
+            (tailCooling value.2).bind fun tail =>
+              .pure (multiply value.1 tail)
+      have hratio := scheduledBalancedCoolingRatioEstimate_countedMeasurable
+        parameters q I oracle (scheduleValue_pos q phase) tau2
+      have htail := scheduledBalancedCoolingProduct_countedMeasurable
+        parameters q I oracle (scheduledVarianceSegment q (phase + 1) steps)
+          (scheduledVarianceSegment_pos q (phase + 1) steps)
+      have hmultiply : Measurable fun z :
+          (ℝ × AmbientSpace q.n) × Option (ℝ × AmbientSpace q.n) =>
+          multiply z.1.1 z.2 := by
+        exact measurable_balancedCoolingProductCons.comp
+          ((measurable_fst.comp measurable_fst).prodMk measurable_snd)
+      have hsome := MembershipOracleProgram.countedMeasurable_bind_pure
+        oracle.query (fun value : ℝ × AmbientSpace q.n =>
+          tailCooling value.2)
+        (fun z : (ℝ × AmbientSpace q.n) ×
+          Option (ℝ × AmbientSpace q.n) => multiply z.1.1 z.2)
+        (htail.1.comp measurable_snd) (fun value => htail.2 value.2)
+          hmultiply
+      have hactualNextRun : Measurable fun result =>
+          (actualNext result).run oracle.query := by
+        convert Measurable.optionElim
+          (Measure.dirac ((none : Option (ℝ × AmbientSpace q.n)), 0))
+          hsome.1 using 1
+        funext result
+        cases result <;> rfl
+      have hactualNext : ∀ result,
+          (actualNext result).CountedStronglyMeasurable oracle.query := by
+        intro result
+        cases result with
+        | none => trivial
+        | some value => exact hsome.2 value
+      have hretainedPhase :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle phase
+      have hretainedTail :=
+        figureOneFinalScheduledRetainedGaussianChain_countedMeasurable
+          q I oracle (phase + 1) steps
+      have hactualForm :
+          coolingProduct (scheduledBalancedCoolingPrimitives parameters) q
+              (scheduledVarianceSegment q phase (steps + 1)) point =
+            ratioProgram.bind actualNext := by
+        rw [scheduledVarianceSegment_succ]
+        rw [scheduledVarianceSegment_eq_cons_head_tail q (phase + 1) steps]
+        rw [coolingProduct]
+        dsimp only [ratioProgram, actualNext, tailCooling, multiply,
+          parameters, sigma2, tau2]
+        congr 1
+        funext result
+        cases result with
+        | none => rfl
+        | some value =>
+            rw [← scheduledVarianceSegment_eq_cons_head_tail
+              q (phase + 1) steps]
+            rcases value with ⟨ratio, nextPoint⟩
+            simp only
+            congr 1
+            funext tail
+            cases tail with
+            | none => rfl
+            | some value =>
+                rcases value with ⟨product, lastPoint⟩
+                rfl
+      have hretainedForm :
+          figureOneFinalScheduledRetainedGaussianChain q phase (steps + 1)
+              (some point) = retainedPhase.bind retainedTail := by
+        rfl
+      rw [hactualForm, hretainedForm]
+      rw [MembershipOracleProgram.countedQueryCost_bind_eq_add oracle.query
+        ratioProgram actualNext (hratio.2 point) hactualNext hactualNextRun]
+      rw [MembershipOracleProgram.countedQueryCost_bind_eq_add oracle.query
+        retainedPhase retainedTail (hretainedPhase.2 (some point))
+          hretainedTail.2 hretainedTail.1]
+      have hsource : countedQueryCost (ratioProgram.run oracle.query) =
+          countedQueryCost (retainedPhase.run oracle.query) := by
+        rw [scheduledBalancedCoolingRatioEstimate_countedQueryCost_eq
+          parameters q I oracle (scheduleValue_pos q phase) tau2 point]
+        symm
+        exact figureOneFinalScheduledRetainedGaussianPhaseProgram_cost
+          q I oracle phase (some point)
+      rw [hsource]
+      congr 1
+      let futureCost : Option (AmbientSpace q.n) → ENNReal := fun state =>
+        countedQueryCost ((retainedTail state).run oracle.query)
+      have hfuture : Measurable futureCost :=
+        (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+          hretainedTail.1
+      have hnextCost : ∀ result,
+          countedQueryCost ((actualNext result).run oracle.query) =
+            futureCost (optionSnd result) := by
+        intro result
+        cases result with
+        | none =>
+            simp only [actualNext, futureCost, optionSnd]
+            rw [show retainedTail none =
+                (MembershipOracleProgram.pure none :
+                  MembershipOracleProgram q.n (Option (AmbientSpace q.n))) from
+              figureOneFinalScheduledRetainedGaussianChain_none q
+                (phase + 1) steps]
+            rw [MembershipOracleProgram.countedQueryCost_pure,
+              MembershipOracleProgram.countedQueryCost_pure]
+        | some value =>
+            unfold actualNext
+            rw [MembershipOracleProgram.countedQueryCost_bind_pure_eq
+              oracle.query (tailCooling value.2) (multiply value.1)]
+            · exact ih (phase + 1) value.2
+            · exact (measurable_balancedCoolingProductCons (n := q.n)).comp
+                (measurable_const.prodMk measurable_id)
+            · exact htail.2 value.2
+      rw [lintegral_congr hnextCost]
+      rw [scheduledBalancedCoolingRatioEstimate_runEstimate_eq_transitionLaw
+        parameters q I oracle (scheduleValue_pos q phase) tau2 point]
+      rw [lintegral_optionSnd_scheduledRatioTransition_eq_retainedKernel
+        q I phase point futureCost hfuture]
+      have hretainedLaw :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
+          q I oracle phase (some point)
+      rw [hretainedLaw]
+
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_cost
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
 #print axioms lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
 #print axioms bind_figureOneFinalScheduledRetainedGaussianChain_runEstimate_eq_trace
 #print axioms figureOneFinalScheduledRetainedTerminalProgram_cost
 #print axioms lintegral_figureOneFinalScheduledRetainedFullCostProgram_eq
+#print axioms figureOneFinalScheduledCoolingProduct_cost_eq_retainedChain
 
 end ArlibCommunity.Algorithms.CV18
