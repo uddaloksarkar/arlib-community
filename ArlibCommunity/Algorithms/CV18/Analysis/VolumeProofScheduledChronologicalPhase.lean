@@ -246,6 +246,112 @@ theorem scheduledBalancedTransitionCollectLaw_measurable_and_probability
             infer_instance
         | some target => exact ih.2 _ _
 
+/-- Measure-level scheduled Gaussian phase, expressed through the endpoint
+transition recursion used by the coupling argument. -/
+noncomputable def scheduledBalancedCoolingRatioTransitionLaw
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (sigma2 tau2 : ℝ)
+    (current : AmbientSpace q.n) :
+    Measure (Option (ℝ × AmbientSpace q.n)) :=
+  (scheduledBalancedTransitionCollectLaw q I sigma2
+      (gaussianRatioWeight sigma2 tau2)
+      (parameters.proposalCap q sigma2)
+      (parameters.properStride q sigma2)
+      (parameters.retryLimit q sigma2)
+      (figureOnePhaseSampleCount q sigma2) 0
+      (accuracyScaleFactor q • current)).map
+    (balancedCoolingAverage (figureOnePhaseSampleCount q sigma2))
+
+theorem scheduledBalancedCoolingRatioTransitionLaw_measurable_and_probability
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (tau2 : ℝ) :
+    Measurable
+      (scheduledBalancedCoolingRatioTransitionLaw parameters q I sigma2 tau2) ∧
+    ∀ current, IsProbabilityMeasure
+      (scheduledBalancedCoolingRatioTransitionLaw parameters q I sigma2 tau2
+        current) := by
+  let cap := parameters.proposalCap q sigma2
+  let stride := parameters.properStride q sigma2
+  let retries := parameters.retryLimit q sigma2
+  let samples := figureOnePhaseSampleCount q sigma2
+  let weight : AmbientSpace q.n → ℝ := gaussianRatioWeight sigma2 tau2
+  have hcollect :=
+    scheduledBalancedTransitionCollectLaw_measurable_and_probability
+      q I hsigma2 (measurable_gaussianRatioWeight sigma2 tau2)
+        cap stride retries samples
+  have hscale : Measurable fun current : AmbientSpace q.n =>
+      accuracyScaleFactor q • current :=
+    (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      accuracyScaleFactor q).smul measurable_id
+  have hsource : Measurable fun current =>
+      scheduledBalancedTransitionCollectLaw q I sigma2 weight cap stride retries
+        samples 0 (accuracyScaleFactor q • current) :=
+    hcollect.1.comp (measurable_const.prodMk hscale)
+  have havg := measurable_balancedCoolingAverage (n := q.n) samples
+  constructor
+  · unfold scheduledBalancedCoolingRatioTransitionLaw
+    exact (Measure.measurable_map _ havg).comp hsource
+  · intro current
+    unfold scheduledBalancedCoolingRatioTransitionLaw
+    let _ : IsProbabilityMeasure
+        (scheduledBalancedTransitionCollectLaw q I sigma2 weight cap stride
+          retries samples 0 (accuracyScaleFactor q • current)) :=
+      hcollect.2 0 (accuracyScaleFactor q • current)
+    exact Measure.isProbabilityMeasure_map havg.aemeasurable
+
+/-- Scheduled terminal phase at the measure level. -/
+noncomputable def scheduledBalancedCoolingUniformTransitionLaw
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (sigma2 : ℝ)
+    (current : AmbientSpace q.n) :
+    Measure (Option (ℝ × AmbientSpace q.n)) :=
+  (scheduledBalancedTransitionCollectLaw q I sigma2
+      (uniformRatioWeight sigma2)
+      (parameters.proposalCap q sigma2)
+      (parameters.properStride q sigma2)
+      (parameters.retryLimit q sigma2)
+      (figureOneSampleCount q) 0
+      (accuracyScaleFactor q • current)).map
+    (balancedCoolingAverage (figureOneSampleCount q))
+
+theorem scheduledBalancedCoolingUniformTransitionLaw_measurable_and_probability
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    Measurable
+      (scheduledBalancedCoolingUniformTransitionLaw parameters q I sigma2) ∧
+    ∀ current, IsProbabilityMeasure
+      (scheduledBalancedCoolingUniformTransitionLaw parameters q I sigma2
+        current) := by
+  let cap := parameters.proposalCap q sigma2
+  let stride := parameters.properStride q sigma2
+  let retries := parameters.retryLimit q sigma2
+  let samples := figureOneSampleCount q
+  let weight : AmbientSpace q.n → ℝ := uniformRatioWeight sigma2
+  have hcollect :=
+    scheduledBalancedTransitionCollectLaw_measurable_and_probability
+      q I hsigma2 (measurable_uniformRatioWeight sigma2)
+        cap stride retries samples
+  have hscale : Measurable fun current : AmbientSpace q.n =>
+      accuracyScaleFactor q • current :=
+    (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      accuracyScaleFactor q).smul measurable_id
+  have hsource : Measurable fun current =>
+      scheduledBalancedTransitionCollectLaw q I sigma2 weight cap stride retries
+        samples 0 (accuracyScaleFactor q • current) :=
+    hcollect.1.comp (measurable_const.prodMk hscale)
+  have havg := measurable_balancedCoolingAverage (n := q.n) samples
+  constructor
+  · unfold scheduledBalancedCoolingUniformTransitionLaw
+    exact (Measure.measurable_map _ havg).comp hsource
+  · intro current
+    unfold scheduledBalancedCoolingUniformTransitionLaw
+    let _ : IsProbabilityMeasure
+        (scheduledBalancedTransitionCollectLaw q I sigma2 weight cap stride
+          retries samples 0 (accuracyScaleFactor q • current)) :=
+      hcollect.2 0 (accuracyScaleFactor q • current)
+    exact Measure.isProbabilityMeasure_map havg.aemeasurable
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
