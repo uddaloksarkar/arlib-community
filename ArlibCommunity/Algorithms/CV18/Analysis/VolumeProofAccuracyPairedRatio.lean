@@ -687,6 +687,51 @@ theorem varianceReal_accuracyImportanceWeight_sub_acceptedMean_le_of_relativeSec
     varianceReal_accuracyImportanceWeight_sub_acceptedMean_le_of_centeredSecondMoment
       q I hsigma2 hweight hmem hR hcentered
 
+/-- Relative-moment specialization of the centered accepted-mean bias. -/
+theorem accuracyStationaryAcceptedMean_bias_le_of_relativeSecondMoment_sharp
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (hmem : MemLp weight 2
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n)))
+    {factor : ℝ} (hfactorOne : 1 < factor)
+    (hmean : 0 < ∫ x, weight x
+      ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n)))
+    (hrelative :
+      (∫ x, weight x ^ 2
+          ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+            Measure (AmbientSpace q.n))) /
+        (∫ x, weight x
+          ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+            Measure (AmbientSpace q.n))) ^ 2 ≤ factor) :
+    let mean := ∫ x, weight x
+      ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n))
+    |accuracyStationaryAcceptedMean q I sigma2 weight - mean| ≤
+      67 * accuracyAcceptedBiasScale q *
+        (Real.sqrt (factor - 1) * mean) := by
+  dsimp only
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  let mean := ∫ x, weight x ∂nu
+  let R := Real.sqrt (factor - 1) * mean
+  let _ : IsProbabilityMeasure nu := by dsimp [nu]; infer_instance
+  have hR : 0 < R := by
+    exact mul_pos (Real.sqrt_pos.2 (sub_pos.mpr hfactorOne))
+      (by simpa [mean, nu] using hmean)
+  have hcentered : (∫ x, (weight x - mean) ^ 2 ∂nu) ≤ R ^ 2 := by
+    have hvar := integral_sub_mean_sq_le_of_relativeSecondMoment
+      (mu := nu) hmem (by simpa [nu] using hmean)
+      (by simpa [nu] using hrelative)
+    have hsqrt : (Real.sqrt (factor - 1)) ^ 2 = factor - 1 :=
+      Real.sq_sqrt (sub_nonneg.mpr hfactorOne.le)
+    simpa [R, mean, hsqrt, mul_pow] using hvar
+  simpa [R, mean, nu] using
+    accuracyStationaryAcceptedMean_bias_le_centered_secondMoment
+      q I hsigma2 hweight hmem hR hcentered
+
 /-- Final sharp local variance package: target relative second moment plus
 the proved KLS bias controls the centered paired numerator at speedy
 stationarity. -/

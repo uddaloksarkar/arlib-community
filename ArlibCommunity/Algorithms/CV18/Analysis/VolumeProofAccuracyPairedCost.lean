@@ -177,6 +177,20 @@ theorem accuracyPairedTerminalSampleCount_pos (q : VolumeParams) :
   exact Nat.mul_pos (figureOneWalkSteps_pos q (terminalVariance_pos' q))
     (figureOneSampleCount_pos q)
 
+/-- Postprocessing of a paired Gaussian-phase sum. -/
+noncomputable def accuracyPairedRatioOutput {n : ℕ} :
+    Option ((ℝ × ℝ) × AmbientSpace n) → Option (ℝ × AmbientSpace n)
+  | none => none
+  | some (totals, last) =>
+      if totals.2 = 0 then none else some (totals.1 / totals.2, last)
+
+/-- Postprocessing of the terminal paired sum. -/
+noncomputable def accuracyPairedUniformOutput {n : ℕ} :
+    Option ((ℝ × ℝ) × AmbientSpace n) → Option ℝ
+  | none => none
+  | some (totals, _) =>
+      if totals.2 = 0 then none else some (totals.1 / totals.2)
+
 /-- Paired self-normalized ratio estimator for one Gaussian transition. -/
 noncomputable def accuracyPairedRatioEstimate (q : VolumeParams)
     (sigma2 tau2 : ℝ) (current : AmbientSpace q.n) :
@@ -186,10 +200,7 @@ noncomputable def accuracyPairedRatioEstimate (q : VolumeParams)
   (cappedAccuracyProperCollectPairs q sigma2
       (gaussianRatioWeight sigma2 tau2)
       (proposalCap + samples) 1 samples current).bind fun result =>
-    .pure <| match result with
-      | none => none
-      | some (totals, last) =>
-          if totals.2 = 0 then none else some (totals.1 / totals.2, last)
+    .pure (accuracyPairedRatioOutput result)
 
 /-- Paired self-normalized terminal Gaussian-to-uniform estimator. -/
 noncomputable def accuracyPairedUniformRatioEstimate (q : VolumeParams)
@@ -200,10 +211,7 @@ noncomputable def accuracyPairedUniformRatioEstimate (q : VolumeParams)
   (cappedAccuracyProperCollectPairs q sigma2
       (uniformRatioWeight sigma2)
       (proposalCap + samples) 1 samples current).bind fun result =>
-    .pure <| match result with
-      | none => none
-      | some (totals, _) =>
-          if totals.2 = 0 then none else some (totals.1 / totals.2)
+    .pure (accuracyPairedUniformOutput result)
 
 /-- Concrete CV18 primitive package whose empirical ratios are taken from
 shared numerator-denominator speedy trajectories. -/
