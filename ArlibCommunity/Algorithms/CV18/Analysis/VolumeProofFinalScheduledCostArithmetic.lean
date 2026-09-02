@@ -586,6 +586,87 @@ theorem figureOneCorrectedTargetBudget_eq_safeRetryCount_nsmul_blockBudget
     exact_mod_cast hN.ne'
   field_simp [hN0]
 
+/-- `ENNReal` form of the local-cap cancellation, ready for use in the
+expected-cost integral. -/
+theorem figureOneFinalScheduledProposalCap_add_two_mul_blockBudget_le
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let attempts := figureOneSafeRetryCount q - 1
+    let block := figureOneCorrectedBlockBudget q attempts
+    let stride := figureOneFinalScheduledBalancedParameters.properStride q sigma2
+    ((figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 + 2 : ℕ) :
+        ENNReal) * block ≤
+      (figureOneFinalScheduledQueryBudget q : ENNReal) * block +
+        387 * (stride : ENNReal) := by
+  dsimp only
+  let attempts := figureOneSafeRetryCount q - 1
+  let e := figureOneCorrectedBlockMixingError q attempts
+  have he : 0 < e := figureOneCorrectedBlockMixingError_pos q attempts
+  have hreal :=
+    figureOneFinalScheduledProposalCap_add_two_mul_blockError_le q hsigma2
+  have hblockTop : figureOneCorrectedBlockBudget q attempts ≠ ∞ := by
+    simp [figureOneCorrectedBlockBudget]
+  have hleftTop :
+      ((figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 + 2 :
+        ℕ) : ENNReal) * figureOneCorrectedBlockBudget q attempts ≠ ∞ :=
+    ENNReal.mul_ne_top (by simp) hblockTop
+  have hbudgetTop :
+      (figureOneFinalScheduledQueryBudget q : ENNReal) *
+        figureOneCorrectedBlockBudget q attempts ≠ ∞ :=
+    ENNReal.mul_ne_top (by simp) hblockTop
+  have hstrideTop :
+      387 * (figureOneFinalScheduledBalancedParameters.properStride q sigma2 :
+        ENNReal) ≠ ∞ := ENNReal.mul_ne_top (by norm_num) (by simp)
+  apply (ENNReal.toReal_le_toReal hleftTop
+    (ENNReal.add_ne_top.2 ⟨hbudgetTop, hstrideTop⟩)).mp
+  simp only [figureOneCorrectedBlockBudget]
+  have hbudgetTop' :
+      (figureOneFinalScheduledQueryBudget q : ENNReal) *
+        ENNReal.ofReal (figureOneCorrectedBlockMixingError q attempts) ≠ ∞ :=
+    ENNReal.mul_ne_top (by simp) (by simp)
+  rw [ENNReal.toReal_mul, ENNReal.toReal_natCast,
+    ENNReal.toReal_ofReal he.le,
+    ENNReal.toReal_add hbudgetTop' hstrideTop,
+    ENNReal.toReal_mul, ENNReal.toReal_natCast,
+    ENNReal.toReal_ofReal he.le,
+    ENNReal.toReal_mul, ENNReal.toReal_ofNat,
+    ENNReal.toReal_natCast]
+  simpa only [attempts, e] using hreal
+
+/-- Charging the complete scheduled stationary-target replacement at a
+phase start costs only the retry factor times the cap-cancelled block bound.
+In particular, this term has no inverse transition-error factor. -/
+theorem figureOneFinalScheduledProposalCap_mul_stationaryTargetError_le
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let attempts := figureOneSafeRetryCount q - 1
+    let block := figureOneCorrectedBlockBudget q attempts
+    let stride := figureOneFinalScheduledBalancedParameters.properStride q sigma2
+    ((figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 + 2 : ℕ) :
+        ENNReal) * scheduledBalancedStationaryTargetError q ≤
+      figureOneSafeRetryCount q •
+        ((figureOneFinalScheduledQueryBudget q : ENNReal) * block +
+          387 * (stride : ENNReal)) := by
+  dsimp only
+  calc
+    _ ≤ ((figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 + 2 :
+          ℕ) : ENNReal) * figureOneCorrectedTargetBudget q := by
+      gcongr
+      exact scheduledBalancedStationaryTargetError_le_targetBudget q
+    _ = figureOneSafeRetryCount q •
+        (((figureOneFinalScheduledBalancedParameters.proposalCap q sigma2 + 2 :
+            ℕ) : ENNReal) *
+          figureOneCorrectedBlockBudget q (figureOneSafeRetryCount q - 1)) := by
+      rw [figureOneCorrectedTargetBudget_eq_safeRetryCount_nsmul_blockBudget]
+      simp only [nsmul_eq_mul]
+      ring
+    _ ≤ figureOneSafeRetryCount q •
+        ((figureOneFinalScheduledQueryBudget q : ENNReal) *
+            figureOneCorrectedBlockBudget q (figureOneSafeRetryCount q - 1) +
+          387 * (figureOneFinalScheduledBalancedParameters.properStride q sigma2 :
+            ENNReal)) := by
+      gcongr
+      exact figureOneFinalScheduledProposalCap_add_two_mul_blockBudget_le
+        q hsigma2
+
 #print axioms figureOneSafeRetryCount_cast_le_correctedMixingLog
 #print axioms figureOneScheduledMixingDenominator_inv_sq_le
 #print axioms figureOneScheduledCorrectedProperStride_cast_le
@@ -597,5 +678,9 @@ theorem figureOneCorrectedTargetBudget_eq_safeRetryCount_nsmul_blockBudget
 #print axioms figureOneFinalScheduledProposalCap_add_two_mul_blockError_le
 #print axioms
   figureOneCorrectedTargetBudget_eq_safeRetryCount_nsmul_blockBudget
+#print axioms
+  figureOneFinalScheduledProposalCap_add_two_mul_blockBudget_le
+#print axioms
+  figureOneFinalScheduledProposalCap_mul_stationaryTargetError_le
 
 end ArlibCommunity.Algorithms.CV18
