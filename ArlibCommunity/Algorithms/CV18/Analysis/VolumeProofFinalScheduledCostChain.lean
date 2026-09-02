@@ -554,10 +554,118 @@ theorem figureOneFinalScheduledRetainedTerminalProgram_cost
               (figureOneFinalScheduledBalancedParameters.retryLimit q
                 (terminalVariance q)) (figureOneSampleCount q)).2 _)
 
+/-- Retained-state cost interpreter for all Gaussian phases followed by the
+terminal uniform phase. -/
+noncomputable def figureOneFinalScheduledRetainedFullCostProgram
+    (q : VolumeParams) (state : Option (AmbientSpace q.n)) :
+    MembershipOracleProgram q.n (Option (AmbientSpace q.n)) :=
+  (figureOneFinalScheduledRetainedGaussianChain q 0
+    (terminalPhaseSteps q) state).bind
+      (figureOneFinalScheduledRetainedTerminalProgram q)
+
+theorem figureOneFinalScheduledRetainedFullCostProgram_countedMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (Measurable fun state =>
+      (figureOneFinalScheduledRetainedFullCostProgram q state).run oracle.query) ∧
+    ∀ state,
+      (figureOneFinalScheduledRetainedFullCostProgram q state).CountedStronglyMeasurable
+        oracle.query := by
+  have hgaussian :=
+    figureOneFinalScheduledRetainedGaussianChain_countedMeasurable
+      q I oracle 0 (terminalPhaseSteps q)
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable q I oracle
+  unfold figureOneFinalScheduledRetainedFullCostProgram
+  constructor
+  · exact MembershipOracleProgram.measurable_run_bind_param oracle.query
+      (figureOneFinalScheduledRetainedGaussianChain q 0 (terminalPhaseSteps q))
+      (fun z => figureOneFinalScheduledRetainedTerminalProgram q z.2)
+      hgaussian.1 hgaussian.2 (hterminal.1.comp measurable_snd)
+        (fun z => hterminal.2 z.2)
+  · intro state
+    exact (hgaussian.2 state).bind hterminal.2 hterminal.1
+
+/-- Exact whole-run expected cost of the retained interpreter: the recursive
+sum of all Gaussian phase costs plus the terminal phase cost. -/
+theorem lintegral_figureOneFinalScheduledRetainedFullCostProgram_eq
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (∫⁻ state, countedQueryCost
+        ((figureOneFinalScheduledRetainedFullCostProgram q state).run
+          oracle.query)
+      ∂((scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I 0).map
+          scheduledBalancedTraceRetainedOption)) =
+      figureOneFinalScheduledGaussianPhaseCostTail q I oracle 0
+          (terminalPhaseSteps q) +
+        figureOneFinalScheduledTerminalExpectedCost q I oracle := by
+  let mu0 := (scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I 0).map
+      scheduledBalancedTraceRetainedOption
+  let gaussian := figureOneFinalScheduledRetainedGaussianChain q 0
+    (terminalPhaseSteps q)
+  let terminal := figureOneFinalScheduledRetainedTerminalProgram q
+  have hgaussian :=
+    figureOneFinalScheduledRetainedGaussianChain_countedMeasurable
+      q I oracle 0 (terminalPhaseSteps q)
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable q I oracle
+  have hgaussianCost : Measurable fun state =>
+      countedQueryCost ((gaussian state).run oracle.query) :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+      hgaussian.1
+  have hterminalCost : Measurable fun state =>
+      countedQueryCost ((terminal state).run oracle.query) :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+      hterminal.1
+  have hpoint : ∀ state,
+      countedQueryCost (((gaussian state).bind terminal).run oracle.query) =
+        countedQueryCost ((gaussian state).run oracle.query) +
+          ∫⁻ next, countedQueryCost ((terminal next).run oracle.query)
+            ∂((gaussian state).runEstimate oracle.query) := by
+    intro state
+    exact MembershipOracleProgram.countedQueryCost_bind_eq_add oracle.query
+      (gaussian state) terminal (hgaussian.2 state) hterminal.2 hterminal.1
+  unfold figureOneFinalScheduledRetainedFullCostProgram
+  change (∫⁻ state, countedQueryCost
+      (((gaussian state).bind terminal).run oracle.query) ∂mu0) = _
+  rw [lintegral_congr hpoint, lintegral_add_left hgaussianCost]
+  have hgaussianEstimate : Measurable fun state =>
+      (gaussian state).runEstimate oracle.query := by
+    rw [show (fun state => (gaussian state).runEstimate oracle.query) =
+        fun state => ((gaussian state).run oracle.query).map Prod.fst by
+      funext state
+      exact (gaussian state).runEstimate_eq_map_fst_run oracle.query
+        (hgaussian.2 state).executionMeasurable]
+    exact measurable_measure_map_param_variable hgaussian.1
+      (fun state => MembershipOracleProgram.run_isProbabilityMeasure
+        oracle.query (gaussian state) (hgaussian.2 state).executionMeasurable)
+      (measurable_fst.comp measurable_snd)
+  rw [← Measure.lintegral_bind hgaussianEstimate.aemeasurable
+    hterminalCost.aemeasurable]
+  rw [lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
+    q I oracle 0 (terminalPhaseSteps q) (by omega)]
+  have hout :=
+    bind_figureOneFinalScheduledRetainedGaussianChain_runEstimate_eq_trace
+      q I oracle 0 (terminalPhaseSteps q) (by omega)
+  have hout' : mu0.bind (fun state =>
+      (gaussian state).runEstimate oracle.query) =
+        (scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+            (terminalPhaseSteps q)).map
+              scheduledBalancedTraceRetainedOption := by
+    simpa only [mu0, gaussian, zero_add] using hout
+  rw [hout']
+  congr 1
+  unfold figureOneFinalScheduledTerminalExpectedCost
+  apply lintegral_congr
+  intro state
+  exact figureOneFinalScheduledRetainedTerminalProgram_cost q I oracle state
+
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_cost
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
 #print axioms lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
 #print axioms bind_figureOneFinalScheduledRetainedGaussianChain_runEstimate_eq_trace
 #print axioms figureOneFinalScheduledRetainedTerminalProgram_cost
+#print axioms lintegral_figureOneFinalScheduledRetainedFullCostProgram_eq
 
 end ArlibCommunity.Algorithms.CV18
