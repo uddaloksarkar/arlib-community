@@ -1,4 +1,5 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledChronologicalPhase
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledConcreteTransition
 
 open MeasureTheory ProbabilityTheory
 
@@ -332,7 +333,121 @@ theorem figureOneFinalScheduledForwardHistoryLaw_ae_phaseVariable_nonnegative
         (j - 1) (by omega) (some history)]
       exact hhistory.2 (j - 1) (by omega)
 
+/-- Cap-aware, schedule-instantiated form of CV18 Lemma 7.17(c) for one
+complete phase.  All transition-level analytic, retry, and local-cap premises
+are discharged; the sole probabilistic input is the paper's warmness of the
+retained phase-start marginal relative to the scheduled speedy law. -/
+theorem approxIndepFun_figureOneFinalScheduledCompletePhase_of_warm
+    {H : Type*} [MeasurableSpace H]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (samples : ℕ)
+    (history : Measure H) [IsProbabilityMeasure history]
+    (state : H → AmbientSpace q.n) (hstate : Measurable state)
+    (hbaseWarm : Arlib.IsWarm
+      (ENNReal.ofReal (8 * speedyAdjacentWarmConstant q))
+      (history.map state)
+      (Arlib.MarkovChains.ellGaussianProb
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2))
+    (pastProduct : H → ℝ)
+    (nextEstimator : Option (ℝ × AmbientSpace q.n) → ℝ)
+    (hpastProduct : Measurable pastProduct)
+    (hnextEstimator : Measurable nextEstimator) :
+    ApproxIndepFun (figureOneDependentEpsilon q)
+      (pastProduct ∘ Prod.fst) (nextEstimator ∘ Prod.snd)
+      (sequentialPairLaw history
+        ((fun current =>
+          scheduledBalancedTransitionCollectLaw q I sigma2 weight
+            (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+            (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+            (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)
+            (samples + 1) 0 current) ∘ state)) := by
+  let target : Measure (Option (AmbientSpace q.n)) :=
+    (truncatedGaussianProbability q I sigma2 hsigma2 :
+      Measure (AmbientSpace q.n)).map some
+  let _ : IsProbabilityMeasure target :=
+    Measure.isProbabilityMeasure_map measurable_some.aemeasurable
+  let _ : IsProbabilityMeasure (history.map state) :=
+    Measure.isProbabilityMeasure_map hstate.aemeasurable
+  let delta := figureOneCorrectedTransitionBudget q
+  have hdelta : delta ≠ ⊤ := by
+    simp [delta, figureOneCorrectedTransitionBudget]
+  have hfirst : ∀ mu : Measure (AmbientSpace q.n),
+      IsProbabilityMeasure mu → Arlib.IsWarm 2 mu (history.map state) →
+      MeasureLeUpTo
+        (mu.bind (scheduledBalancedAccuracyTransitionLawAux q I sigma2
+          (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+          (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+          (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)))
+        target delta := by
+    intro mu hmu hwarm
+    let _ : IsProbabilityMeasure mu := hmu
+    let transition := scheduledBalancedAccuracyTransitionLawAux q I sigma2
+      (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+      (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+      (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)
+    have htransition :=
+      scheduledBalancedAccuracyTransitionLawAux_measurable_and_probability
+        q I hsigma2
+          (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+          (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+          (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)
+    let _ : IsProbabilityMeasure (mu.bind transition) :=
+      MeasureTheory.isProbabilityMeasure_bind htransition.1.aemeasurable
+        (ae_of_all _ htransition.2)
+    exact MeasureLeUpTo.of_tvLe <|
+      bind_figureOneFinalScheduledBalancedTransition_tvLe
+        q I hsigma2 (history.map state) hbaseWarm mu hmu hwarm
+  have hbudget : (delta + delta).toReal ≤
+      3 * (figureOneDependentMaxSampleCount q : ℝ) *
+        (figureOneDependentPhaseCount q : ℝ) *
+          figureOnePerSampleMixingError q := by
+    have hk : (1 : ℝ) ≤ figureOneDependentMaxSampleCount q := by
+      exact_mod_cast figureOneDependentMaxSampleCount_pos q
+    have hm : (1 : ℝ) ≤ figureOneDependentPhaseCount q := by
+      exact_mod_cast figureOneDependentPhaseCount_pos q
+    have hnu := figureOnePerSampleMixingError_pos q
+    rw [ENNReal.toReal_add hdelta hdelta]
+    simp only [delta, figureOneCorrectedTransitionBudget,
+      ENNReal.toReal_ofReal hnu.le]
+    have hkm : (1 : ℝ) ≤
+        figureOneDependentMaxSampleCount q *
+          figureOneDependentPhaseCount q := by
+      calc
+        (1 : ℝ) = 1 * 1 := by ring
+        _ ≤ figureOneDependentMaxSampleCount q *
+            figureOneDependentPhaseCount q :=
+          mul_le_mul hk hm (by positivity) (by positivity)
+    have hcoef : (2 : ℝ) ≤
+        3 * figureOneDependentMaxSampleCount q *
+          figureOneDependentPhaseCount q := by nlinarith
+    calc
+      figureOnePerSampleMixingError q +
+          figureOnePerSampleMixingError q =
+        2 * figureOnePerSampleMixingError q := by ring
+      _ ≤ (3 * figureOneDependentMaxSampleCount q *
+          figureOneDependentPhaseCount q) *
+            figureOnePerSampleMixingError q :=
+        mul_le_mul_of_nonneg_right hcoef hnu.le
+      _ = _ := by ring
+  have hresult :=
+    approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
+      q I hsigma2 hweight
+      (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+      (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+      (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)
+      samples history state hstate target hdelta hfirst pastProduct
+      nextEstimator hpastProduct hnextEstimator
+      (figureOneDependentMaxSampleCount q)
+      (figureOneDependentPhaseCount q)
+      (figureOnePerSampleMixingError q) hbudget
+  rw [figureOne_lemma717c_budget q] at hresult
+  exact hresult
+
 #print axioms scheduledBalancedTransitionCollectLaw_ae_total_nonnegative
 #print axioms figureOneFinalScheduledForwardHistoryLaw_ae_phaseVariable_nonnegative
+#print axioms approxIndepFun_figureOneFinalScheduledCompletePhase_of_warm
 
 end ArlibCommunity.Algorithms.CV18
