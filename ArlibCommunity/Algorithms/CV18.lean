@@ -32,6 +32,9 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependence
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependenceMarkov
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependenceBalanced
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofDependentProduct
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofDirectWalkBridge
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedRetryHistory
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofDependentSchedule
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFreshPhaseStart
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofStrongInitialWarmStart
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofGlobalQueryCap
