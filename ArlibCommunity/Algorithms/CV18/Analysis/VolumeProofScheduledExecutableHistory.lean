@@ -112,6 +112,23 @@ theorem scheduledBalancedCoolingUniformLaw_eq_transitionLaw
     q I hsigma2 (measurable_uniformRatioWeight sigma2)]
   rw [scheduledBalancedAccuracyTransitionCollectLaw_eq_chronological]
 
+theorem scheduledBalancedCoolingUniformCollectorLawWithState_measurable_and_probability
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    Measurable
+      (scheduledBalancedCoolingUniformCollectorLawWithState parameters q I sigma2) ∧
+    ∀ current, IsProbabilityMeasure
+      (scheduledBalancedCoolingUniformCollectorLawWithState parameters q I sigma2 current) := by
+  have heq :
+      scheduledBalancedCoolingUniformCollectorLawWithState parameters q I sigma2 =
+        scheduledBalancedCoolingUniformTransitionLaw parameters q I sigma2 := by
+    funext current
+    exact scheduledBalancedCoolingUniformLaw_eq_transitionLaw
+      parameters q I hsigma2 current
+  rw [heq]
+  exact scheduledBalancedCoolingUniformTransitionLaw_measurable_and_probability
+    parameters q I hsigma2
+
 theorem scheduledBalancedCoolingUniformEstimateWithState_runEstimate_eq_transitionLaw
     (parameters : BalancedCoolingParameters) (q : VolumeParams)
     (I : VolumeInput q.n) (oracle : MembershipOracle I)
@@ -155,11 +172,48 @@ theorem scheduledBalancedCoolingUniformEstimateWithState_runEstimate_eq_transiti
   unfold scheduledBalancedCoolingUniformTransitionLaw
   rw [scheduledBalancedAccuracyTransitionCollectLaw_eq_chronological]
 
+theorem scheduledBalancedCoolingUniformEstimateWithState_measurable_strong_and_law
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    Measurable (fun current =>
+      (scheduledBalancedCoolingUniformEstimateWithState parameters q sigma2 current).runEstimate
+        oracle.query) ∧
+    (∀ current,
+      (scheduledBalancedCoolingUniformEstimateWithState parameters q sigma2 current).StronglyMeasurable
+        oracle.query) ∧
+    ∀ current,
+      (scheduledBalancedCoolingUniformEstimateWithState parameters q sigma2 current).runEstimate
+          oracle.query =
+        scheduledBalancedCoolingUniformCollectorLawWithState parameters q I sigma2 current := by
+  have hlaw := scheduledBalancedCoolingUniformCollectorLawWithState_measurable_and_probability
+    parameters q I hsigma2
+  have hrun : ∀ current,
+      (scheduledBalancedCoolingUniformEstimateWithState parameters q sigma2 current).runEstimate
+          oracle.query =
+        scheduledBalancedCoolingUniformCollectorLawWithState parameters q I sigma2 current := by
+    intro current
+    calc
+      _ = scheduledBalancedCoolingUniformTransitionLaw parameters q I sigma2 current :=
+        scheduledBalancedCoolingUniformEstimateWithState_runEstimate_eq_transitionLaw
+          parameters q I oracle hsigma2 current
+      _ = _ := (scheduledBalancedCoolingUniformLaw_eq_transitionLaw
+        parameters q I hsigma2 current).symm
+  constructor
+  · simpa only [hrun] using hlaw.1
+  constructor
+  · intro current
+    exact (scheduledBalancedCoolingUniformEstimateWithState_countedMeasurable
+      parameters q I oracle hsigma2).2 current |>.stronglyMeasurable
+  · exact hrun
+
 #print axioms scheduledBalancedAccuracyTransitionCollectLaw_eq_chronological
 #print axioms scheduledBalancedCoolingRatioLaw_eq_transitionLaw
 #print axioms scheduledBalancedCoolingRatioLaw_measurable_and_probability
 #print axioms scheduledBalancedCoolingUniformLaw_eq_transitionLaw
+#print axioms scheduledBalancedCoolingUniformCollectorLawWithState_measurable_and_probability
 #print axioms scheduledBalancedCoolingRatioEstimate_runEstimate_eq_transitionLaw
 #print axioms scheduledBalancedCoolingUniformEstimateWithState_runEstimate_eq_transitionLaw
+#print axioms scheduledBalancedCoolingUniformEstimateWithState_measurable_strong_and_law
 
 end ArlibCommunity.Algorithms.CV18
