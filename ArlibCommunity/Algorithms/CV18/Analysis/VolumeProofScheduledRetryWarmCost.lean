@@ -3,6 +3,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCappedDominan
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledBranchMass
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledRetryCounted
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofExpectedQueryCostBounds
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLocalCapPrefix
 
 /-! # Cap-independent cost of one scheduled retry trial -/
 
@@ -132,6 +133,36 @@ theorem scheduledBalancedAccuracyLiveTrial_countedStronglyMeasurable
     q I oracle hsigma2 (proposalCap + 1) properStride).2 current |>.bind
       htail.2 htail.1
 
+/-- A live trial inherits exactly the local block budget plus the one-query
+balanced rejection decision. -/
+theorem scheduledBalancedAccuracyLiveTrial_queryBound
+    (q : VolumeParams) (sigma2 : ℝ) (proposalCap properStride : ℕ)
+    (current : AmbientSpace q.n) :
+    (scheduledBalancedAccuracyLiveTrial q sigma2 proposalCap properStride
+      current).QueryBound (proposalCap + 2) := by
+  unfold scheduledBalancedAccuracyLiveTrial
+  let tail : Option (ℝ × AmbientSpace q.n) →
+      MembershipOracleProgram q.n (Option (Bool × AmbientSpace q.n))
+    | none => .pure none
+    | some (_, mixed) =>
+        (scheduledBalancedAccuracyGaussianRejectionAttempt q sigma2 mixed).bind
+          fun result => .pure (some (result.1, mixed))
+  have htail : ∀ block, (tail block).QueryBound 1 := by
+    intro block
+    cases block with
+    | none =>
+        exact (MembershipOracleProgram.QueryBound.pure
+          (none : Option (Bool × AmbientSpace q.n)) 0).mono (by omega)
+    | some value =>
+        rcases value with ⟨ignored, mixed⟩
+        exact (scheduledBalancedAccuracyGaussianRejectionAttempt_queryBound
+          q sigma2 mixed).bind (fun result =>
+            MembershipOracleProgram.QueryBound.pure
+              (some (result.1, mixed)) 0)
+  have h := (cappedScheduledAccuracyProperBlock_queryBound q sigma2
+    (proposalCap + 1) properStride current).bind htail
+  simpa only [tail, Nat.add_assoc] using h
+
 /-- Pointwise, adding the balanced rejection decision costs at most one query
 beyond the cap-independent proper-block cost. -/
 theorem scheduledBalancedAccuracyLiveTrial_countedQueryCost_le
@@ -228,6 +259,61 @@ theorem lintegral_scheduledBalancedAccuracyLiveTrial_countedQueryCost_le_of_isWa
       exact lintegral_cappedScheduledAccuracyProperBlock_countedQueryCost_le_of_isWarm_submeasure
         q I oracle hsigma2 hwarm (proposalCap + 1) properStride
     _ = (properStride : ENNReal) * (M * 2) + 2 * mu Set.univ := by ring
+
+/-- One-trial expected cost for a law split into a warm good submeasure and
+an arbitrary error submeasure.  The error is charged only at the structural
+local budget; the warm part retains the cap-independent proper-clock bound. -/
+theorem lintegral_scheduledBalancedAccuracyLiveTrial_countedQueryCost_le_of_le_warm_add
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {M error : ENNReal}
+    {mu good bad : Measure (AmbientSpace q.n)}
+    (hle : mu ≤ good + bad)
+    (hwarm : _root_.Arlib.IsWarm M good
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2))
+    (hbad : bad Set.univ ≤ error)
+    (proposalCap properStride : ℕ) :
+    ∫⁻ current, countedQueryCost
+        ((scheduledBalancedAccuracyLiveTrial q sigma2 proposalCap properStride
+          current).run oracle.query) ∂mu ≤
+      ((properStride : ENNReal) * (M * 2) + 2 * good Set.univ) +
+        (proposalCap + 2 : ℕ) * error := by
+  let cost : AmbientSpace q.n → ENNReal := fun current => countedQueryCost
+    ((scheduledBalancedAccuracyLiveTrial q sigma2 proposalCap properStride
+      current).run oracle.query)
+  have hgood : ∫⁻ current, cost current ∂good ≤
+      (properStride : ENNReal) * (M * 2) + 2 * good Set.univ := by
+    simpa only [cost] using
+      lintegral_scheduledBalancedAccuracyLiveTrial_countedQueryCost_le_of_isWarm
+        q I oracle hsigma2 hwarm proposalCap properStride
+  have hpoint : ∀ current, cost current ≤ (proposalCap : ENNReal) + 2 := by
+    intro current
+    dsimp only [cost]
+    simpa only [countedQueryCost, Nat.cast_add, Nat.cast_ofNat] using
+      (scheduledBalancedAccuracyLiveTrial_queryBound q sigma2 proposalCap
+        properStride current).lintegral_queryCount_le
+        (scheduledBalancedAccuracyLiveTrial_countedStronglyMeasurable
+          q I oracle hsigma2 proposalCap properStride current)
+  have hbadCost : ∫⁻ current, cost current ∂bad ≤
+      ((proposalCap : ENNReal) + 2) * error := by
+    calc
+      (∫⁻ current, cost current ∂bad) ≤
+          ∫⁻ _current, ((proposalCap : ENNReal) + 2) ∂bad :=
+        lintegral_mono fun current => hpoint current
+      _ = ((proposalCap : ENNReal) + 2) * bad Set.univ := by
+        rw [lintegral_const]
+      _ ≤ ((proposalCap : ENNReal) + 2) * error := by
+        gcongr
+  calc
+    (∫⁻ current, cost current ∂mu) ≤
+        ∫⁻ current, cost current ∂(good + bad) :=
+      lintegral_mono' hle le_rfl
+    _ = (∫⁻ current, cost current ∂good) +
+        ∫⁻ current, cost current ∂bad := lintegral_add_measure _ _ _
+    _ ≤ ((properStride : ENNReal) * (M * 2) + 2 * good Set.univ) +
+        (proposalCap + 2 : ℕ) * error := by
+      simpa only [Nat.cast_add, Nat.cast_ofNat] using add_le_add hgood hbadCost
 
 /-- Acceptance filtering can only remove mass from a scheduled endpoint law. -/
 theorem scheduledBalancedAcceptedStateMeasure_le
