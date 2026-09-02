@@ -29,15 +29,17 @@ noncomputable def figureOneDependentMaxSampleCount (q : VolumeParams) : ℕ :=
   max (figureOneFixedSampleCount q) (figureOneSampleCount q)
 
 /-- The truncation level used when Lemma 7.15 is instantiated at final
-relative error `q.eps / 2`.  The large absolute constant leaves a clean
-`9/64` total probability budget. -/
+relative error `5 * q.eps / 8`.  The large absolute constant leaves a clean
+probability budget below `3/16`. -/
 noncomputable def figureOneDependentAlpha (q : VolumeParams) : ℝ :=
   1024 * (figureOneDependentPhaseCount q : ℝ) / q.eps ^ 2
 
 /-- Dependence coefficient consumed by the recursive moment estimates in
 Lemma 7.15. -/
 noncomputable def figureOneDependentEpsilon (q : VolumeParams) : ℝ :=
-  1 / (16 * figureOneDependentAlpha q ^ 3)
+  q.eps ^ 2 /
+    (4096 * figureOneDependentAlpha q ^ 4 *
+      (figureOneDependentPhaseCount q : ℝ))
 
 /-- Per-sample mixing accuracy sufficient for Lemma 7.17(c).  With at most
 `k` samples in each of `m` phases, `3 k m nu` is exactly the dependence
@@ -81,10 +83,10 @@ theorem figureOneDependentPhaseCount_div_alpha (q : VolumeParams) :
   field_simp [hm, he]
 
 theorem figureOneDependent_tail_probability_real (q : VolumeParams) :
-    ((q.eps ^ 2 / 32 +
+    ((q.eps ^ 2 / 16 +
           2 * ((figureOneDependentPhaseCount q : ℝ) /
             figureOneDependentAlpha q)) /
-        (q.eps / 2) ^ 2) = 17 / 128 := by
+        (5 * q.eps / 8) ^ 2) = 33 / 200 := by
   rw [figureOneDependentPhaseCount_div_alpha]
   field_simp [q.heps.1.ne']
   ring
@@ -98,9 +100,18 @@ theorem figureOneDependentEpsilon_nonneg (q : VolumeParams) :
 theorem figureOneDependent_smallness (q : VolumeParams) :
     4 * figureOneDependentEpsilon q * figureOneDependentAlpha q ^ 3 ≤ 1 := by
   have ha := figureOneDependentAlpha_pos q
+  have hm : (0 : ℝ) < figureOneDependentPhaseCount q := by
+    exact_mod_cast figureOneDependentPhaseCount_pos q
+  have he2 : q.eps ^ 2 ≤ 1 := by nlinarith [q.heps.1, q.heps.2]
+  have hm1 : (1 : ℝ) ≤ figureOneDependentPhaseCount q := by
+    exact_mod_cast figureOneDependentPhaseCount_pos q
+  have ham : (1 : ℝ) ≤
+      figureOneDependentAlpha q * figureOneDependentPhaseCount q := by
+    simpa only [one_mul] using
+      mul_le_mul (figureOneDependentAlpha_one_le q) hm1 zero_le_one ha.le
   rw [figureOneDependentEpsilon]
-  field_simp [ha.ne']
-  norm_num
+  field_simp [ha.ne', hm.ne']
+  nlinarith
 
 theorem figureOnePerSampleMixingError_pos (q : VolumeParams) :
     0 < figureOnePerSampleMixingError q := by
@@ -110,7 +121,10 @@ theorem figureOnePerSampleMixingError_pos (q : VolumeParams) :
     exact_mod_cast figureOneDependentMaxSampleCount_pos q
   have hm : (0 : ℝ) < figureOneDependentPhaseCount q := by
     exact_mod_cast figureOneDependentPhaseCount_pos q
-  positivity
+  exact div_pos
+    (div_pos (sq_pos_of_pos q.heps.1)
+      (mul_pos (mul_pos (by norm_num) (pow_pos ha 4)) hm))
+    (mul_pos (mul_pos (by norm_num) hk) hm)
 
 /-- The exact parameter identity needed to feed the output of Lemma 7.17(c)
 into the `ApproxIndepFun` premise of Lemma 7.15. -/
@@ -137,14 +151,24 @@ theorem figureOneDependent_coefficient (q : VolumeParams) {i : ℕ}
   have hmR' : (i + 1 : ℝ) ≤ figureOneDependentPhaseCount q := by
     exact_mod_cast hmR
   have he2 : q.eps ^ 2 ≤ 1 := by nlinarith [q.heps.1, q.heps.2]
-  have hmAlpha : (figureOneDependentPhaseCount q : ℝ) ≤
-      figureOneDependentAlpha q := by
-    rw [figureOneDependentAlpha, le_div_iff₀ (sq_pos_of_pos q.heps.1)]
-    have hm0 : (0 : ℝ) ≤ figureOneDependentPhaseCount q := by positivity
-    nlinarith
+  have hm0 : (0 : ℝ) < figureOneDependentPhaseCount q := by
+    exact_mod_cast figureOneDependentPhaseCount_pos q
+  have hleft : q.eps ^ 2 * (i + 1 : ℝ) ≤
+      figureOneDependentPhaseCount q := by
+    calc
+      q.eps ^ 2 * (i + 1 : ℝ) ≤ 1 * (i + 1 : ℝ) :=
+        mul_le_mul_of_nonneg_right he2 (by positivity)
+      _ = (i + 1 : ℝ) := one_mul _
+      _ ≤ figureOneDependentPhaseCount q := hmR'
+  have ha2 : (1 : ℝ) ≤ figureOneDependentAlpha q ^ 2 :=
+    one_le_pow₀ (figureOneDependentAlpha_one_le q)
+  have hright : (figureOneDependentPhaseCount q : ℝ) ≤
+      figureOneDependentAlpha q ^ 2 * figureOneDependentPhaseCount q := by
+    simpa only [one_mul] using
+      mul_le_mul_of_nonneg_right ha2 hm0.le
   rw [figureOneDependentEpsilon]
-  field_simp [ha.ne']
-  nlinarith [hmR'.trans hmAlpha]
+  field_simp [ha.ne', hm0.ne']
+  nlinarith
 
 /-- The two Markov truncations in Lemma 7.15 cost at most
 `3 eps^2 / 1024` over all phases. -/
@@ -183,22 +207,21 @@ theorem figureOneDependent_truncation_probability (q : VolumeParams) :
         figureOneDependentPhaseCount_div_alpha]
       ring
 
-/-- With the schedule's empirical-moment excess `eps^2/32`, the full
-Chebyshev plus two-truncation right-hand side of Lemma 7.15 is below `9/64`.
-This leaves ample room inside the direct `3/16` post-initial budget. -/
+/-- With dependent-product excess `eps^2/16`, the full Chebyshev plus
+two-truncation right-hand side of Lemma 7.15 is below `11/64`. -/
 theorem figureOneDependent_lemma715_probability_budget (q : VolumeParams) :
     ENNReal.ofReal
-        ((q.eps ^ 2 / 32 +
+        ((q.eps ^ 2 / 16 +
             2 * ((figureOneDependentPhaseCount q : ℝ) /
               figureOneDependentAlpha q)) /
-          (q.eps / 2) ^ 2) +
+          (5 * q.eps / 8) ^ 2) +
         ∑ _ : Fin (figureOneDependentPhaseCount q),
           (ENNReal.ofReal (1 / figureOneDependentAlpha q) +
             ENNReal.ofReal (2 / figureOneDependentAlpha q)) ≤
-      ENNReal.ofReal (9 / 64 : ℝ) := by
+      ENNReal.ofReal (11 / 64 : ℝ) := by
   rw [figureOneDependent_tail_probability_real,
     figureOneDependent_truncation_probability]
-  rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 17 / 128)
+  rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 33 / 200)
     (by positivity : 0 ≤ 3 * q.eps ^ 2 / 1024)]
   apply ENNReal.ofReal_le_ofReal
   nlinarith [q.heps.1, q.heps.2]
@@ -244,17 +267,17 @@ theorem measure_dependentPhaseSampleProduct_figureOne_le
             figureOneDependentPhaseCount q) *
           dependentPhaseMeanProduct second
             (figureOneDependentPhaseCount q) ≤
-        (1 + q.eps ^ 2 / 32) *
+        (1 + q.eps ^ 2 / 16) *
           dependentPhaseMeanProduct mean
             (figureOneDependentPhaseCount q) ^ 2) :
-    mu {omega | (q.eps / 2) *
+    mu {omega | (5 * q.eps / 8) *
           dependentPhaseMeanProduct mean
             (figureOneDependentPhaseCount q) ≤
         |dependentPhaseSampleProduct W
             (figureOneDependentPhaseCount q) omega -
           dependentPhaseMeanProduct mean
             (figureOneDependentPhaseCount q)|} ≤
-      ENNReal.ofReal (9 / 64 : ℝ) := by
+      ENNReal.ofReal (11 / 64 : ℝ) := by
   refine (measure_dependentPhaseSampleProduct_relativeDeviation_le
     mu (figureOneDependentAlpha q) (figureOneDependentEpsilon q)
       mean rawMean second V W
@@ -266,12 +289,13 @@ theorem measure_dependentPhaseSampleProduct_figureOne_le
       hWmeas hW0 hWint hWmean hind hrelative
       (figureOneDependentPhaseCount q)
       (fun i hi => figureOneDependent_coefficient q hi)
-      (tailDelta := q.eps ^ 2 / 32) (relativeEps := q.eps / 2)
+      (tailDelta := q.eps ^ 2 / 16) (relativeEps := 5 * q.eps / 8)
       (div_nonneg (sq_nonneg q.eps) (by norm_num))
-      (div_pos q.heps.1 (by norm_num)) htailSecond).trans ?_
+      (div_pos (mul_pos (by norm_num) q.heps.1) (by norm_num))
+      htailSecond).trans ?_
   exact figureOneDependent_lemma715_probability_budget q
 
-/-- Deterministic accuracy transfer used after Lemma 7.15.  A half-epsilon
+/-- Deterministic accuracy transfer used after Lemma 7.15.  A `5 eps / 8`
 deviation from the telescoping phase mean, the already-proved initial
 Gaussian normalization estimate, and radial truncation imply final
 `q.eps`-relative accuracy for the original body. -/
@@ -282,7 +306,7 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
     (mu : Measure Omega) (X : Omega → ℝ) {mean : ℝ}
     (hmeanEq : mean = ∏ i, figureOneIdealPhaseMean q I i)
     {delta : ENNReal}
-    (htail : mu {omega | (q.eps / 2) * mean ≤
+    (htail : mu {omega | (5 * q.eps / 8) * mean ≤
       |X omega - mean|} ≤ delta) :
     mu {omega | initialGaussianIntegral q * X omega ∉
       accurateOutcome q I} ≤ delta := by
@@ -301,13 +325,13 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
       figureOneIdealMean_relativeApprox_truncatedVolume q I
   have hsubset :
       {omega | initialGaussianIntegral q * X omega ∉ accurateOutcome q I} ⊆
-        {omega | (q.eps / 2) * mean ≤ |X omega - mean|} := by
+        {omega | (5 * q.eps / 8) * mean ≤ |X omega - mean|} := by
     intro omega hbad
     by_contra hdev
-    have hdev' : |X omega - mean| < (q.eps / 2) * mean :=
+    have hdev' : |X omega - mean| < (5 * q.eps / 8) * mean :=
       lt_of_not_ge hdev
     have hscaled : |A * X omega - A * mean| <
-        (q.eps / 2) * (A * mean) := by
+        (5 * q.eps / 8) * (A * mean) := by
       rw [← mul_sub, abs_mul, abs_of_pos hA]
       nlinarith
     have hcenterBounds := hcenter
@@ -316,11 +340,11 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
       have hdiffLower := (abs_lt.mp hscaled).1
       have hbase : (1 - q.eps / 32) * target ≤ A * mean := hcenterBounds.1
       have hnonneg : 0 ≤ target := htarget.le
-      have hc : 0 ≤ 1 - q.eps / 2 := by linarith [q.heps.2]
+      have hc : 0 ≤ 1 - 5 * q.eps / 8 := by linarith [q.heps.2]
       have hbaseScaled := mul_le_mul_of_nonneg_left hbase hc
       have hcoefficient :
           (1 - 3 * q.eps / 4) * target ≤
-            (1 - q.eps / 2) * ((1 - q.eps / 32) * target) := by
+            (1 - 5 * q.eps / 8) * ((1 - q.eps / 32) * target) := by
         nlinarith [mul_nonneg q.heps.1.le hnonneg,
           mul_nonneg (sq_nonneg q.eps) hnonneg]
       nlinarith
@@ -328,10 +352,10 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
       have hdiffUpper := (abs_lt.mp hscaled).2
       have hbase : A * mean ≤ (1 + q.eps / 32) * target := hcenterBounds.2
       have hnonneg : 0 ≤ target := htarget.le
-      have hc : 0 ≤ 1 + q.eps / 2 := by linarith [q.heps.1]
+      have hc : 0 ≤ 1 + 5 * q.eps / 8 := by linarith [q.heps.1]
       have hbaseScaled := mul_le_mul_of_nonneg_left hbase hc
       have hcoefficient :
-          (1 + q.eps / 2) * ((1 + q.eps / 32) * target) ≤
+          (1 + 5 * q.eps / 8) * ((1 + q.eps / 32) * target) ≤
             (1 + 3 * q.eps / 4) * target := by
         nlinarith [mul_nonneg q.heps.1.le hnonneg,
           mul_nonneg q.heps.1.le
@@ -357,7 +381,7 @@ def FigureOnePostInitialDirectFailureBound
 
 /-- Smallest law-level bridge from the executable continuation to the
 paper's dependent-product experiment.  Once the continuation law is the map
-of a history probability space and Lemma 7.15 supplies its `9/64` deviation
+of a history probability space and Lemma 7.15 supplies its `11/64` deviation
 bound, the direct post-initial contract follows. -/
 theorem figureOnePostInitialDirectFailureBound_of_dependentProduct
     {Omega : Type*} [MeasurableSpace Omega]
@@ -372,8 +396,8 @@ theorem figureOnePostInitialDirectFailureBound_of_dependentProduct
           (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
           (figureOneContinuationLaw explicitVolumeCoolingSchedule q I oracle) =
         mu.map fun omega => initialGaussianIntegral q * X omega)
-    (htail : mu {omega | (q.eps / 2) * mean ≤
-      |X omega - mean|} ≤ ENNReal.ofReal (9 / 64 : ℝ)) :
+    (htail : mu {omega | (5 * q.eps / 8) * mean ≤
+      |X omega - mean|} ≤ ENNReal.ofReal (11 / 64 : ℝ)) :
     FigureOnePostInitialDirectFailureBound q I oracle := by
   have hscaled : Measurable fun omega => initialGaussianIntegral q * X omega :=
     measurable_const.mul hX
