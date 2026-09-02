@@ -349,4 +349,38 @@ theorem balancedFigureOneBaseVolumeCooling_queryPrefixEq
       exact balancedFigureOnePointContinuation_queryPrefixEq
         parameters₁ parameters₂ q budget hcap₁ hcap₂ hstride hretry point
 
+/-- Increase only the artificial local raw-proposal caps. -/
+noncomputable def BalancedCoolingParameters.addProposalCap
+    (parameters : BalancedCoolingParameters) (extra : ℕ) :
+    BalancedCoolingParameters where
+  proposalCap := fun q sigma2 => parameters.proposalCap q sigma2 + extra
+  properStride := parameters.properStride
+  retryLimit := parameters.retryLimit
+
+/-- The complete globally capped Figure-One base syntax is unchanged if all
+local proposal caps are increased arbitrarily. -/
+theorem figureOneGlobalBalancedBaseProgram_withQueryCap_addProposalCap
+    (q : VolumeParams) (extra : ℕ) :
+    (figureOneGlobalBalancedBaseProgram q).withQueryCap
+        (figureOneGlobalQueryBudget q) =
+      (baseVolumeCooling
+        (balancedCoolingPrimitives
+          (figureOneGlobalBalancedParameters.addProposalCap extra))
+        explicitVolumeCoolingSchedule q).withQueryCap
+          (figureOneGlobalQueryBudget q) := by
+  apply QueryPrefixEq.withQueryCap_eq
+  apply balancedFigureOneBaseVolumeCooling_queryPrefixEq
+  · intro sigma2
+    rfl
+  · intro sigma2
+    unfold BalancedCoolingParameters.addProposalCap
+    dsimp only
+    change figureOneGlobalQueryBudget q ≤
+      figureOneGlobalQueryBudget q + extra
+    omega
+  · intro sigma2
+    rfl
+  · intro sigma2
+    rfl
+
 end ArlibCommunity.Algorithms.CV18
