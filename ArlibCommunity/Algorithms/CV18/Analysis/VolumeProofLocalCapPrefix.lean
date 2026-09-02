@@ -16,6 +16,40 @@ globally capped proper collector.
 
 namespace ArlibCommunity.Algorithms.CV18
 
+/-- A syntax-level query bound is exactly strong enough for the outer cap to
+leave every execution branch intact. -/
+theorem MembershipOracleProgram.QueryBound.withQueryCap_eq
+    {n : ℕ} {Result : Type} {program : MembershipOracleProgram n Result}
+    {budget : ℕ} (h : program.QueryBound budget) :
+    program.withQueryCap budget =
+      program.bind fun result => .pure (some result) := by
+  induction h with
+  | pure result budget => rfl
+  | query point next budget hnext ih =>
+      simp only [MembershipOracleProgram.withQueryCap,
+        MembershipOracleProgram.bind]
+      congr 1
+      funext answer
+      exact ih answer
+  | randomNat law next budget hnext ih =>
+      simp only [MembershipOracleProgram.withQueryCap,
+        MembershipOracleProgram.bind]
+      congr 1
+      funext seed
+      exact ih seed
+  | randomPoint law hprob next budget hnext ih =>
+      simp only [MembershipOracleProgram.withQueryCap,
+        MembershipOracleProgram.bind]
+      congr 1
+      funext point
+      exact ih point
+  | randomReal law hprob next budget hnext ih =>
+      simp only [MembershipOracleProgram.withQueryCap,
+        MembershipOracleProgram.bind]
+      congr 1
+      funext value
+      exact ih value
+
 /-- An outer query cutoff cannot observe the precise value of a larger local
 raw-proposal cap. -/
 theorem cappedAccuracyProperCollectWeightsAux_withQueryCap_eq_of_lt
