@@ -8,6 +8,44 @@ open MeasureTheory ProbabilityTheory
 
 namespace ArlibCommunity.Algorithms.CV18
 
+private noncomputable def scheduledTracePhaseRepresentative
+    (q : VolumeParams) (j : ℕ) : ℕ :=
+  (j - 1) % figureOneDependentPhaseCount q + 1
+
+private theorem scheduledTracePhaseRepresentative_pos
+    (q : VolumeParams) (j : ℕ) :
+    1 ≤ scheduledTracePhaseRepresentative q j := by
+  simp [scheduledTracePhaseRepresentative]
+
+private theorem scheduledTracePhaseRepresentative_le
+    (q : VolumeParams) (j : ℕ) :
+    scheduledTracePhaseRepresentative q j ≤ figureOneDependentPhaseCount q := by
+  unfold scheduledTracePhaseRepresentative
+  have hmod := Nat.mod_lt (j - 1) (figureOneDependentPhaseCount_pos q)
+  omega
+
+private theorem figureOneChronologicalPhaseAt_representative
+    (q : VolumeParams) (j : ℕ) :
+    figureOneChronologicalPhaseAt q j =
+      figureOneChronologicalPhaseAt q
+        (scheduledTracePhaseRepresentative q j) := by
+  unfold figureOneChronologicalPhaseAt scheduledTracePhaseRepresentative
+  congr 1
+  apply Fin.ext
+  simp only [Nat.add_sub_cancel]
+  rw [Nat.mod_eq_of_lt (Nat.mod_lt _ (figureOneDependentPhaseCount_pos q))]
+
+private theorem scheduledBalancedTracePhaseVariable_representative
+    (q : VolumeParams) (j : ℕ) :
+    scheduledBalancedTracePhaseVariable q j =
+      scheduledBalancedTracePhaseVariable q
+        (scheduledTracePhaseRepresentative q j) := by
+  funext trace
+  unfold scheduledBalancedTracePhaseVariable
+    scheduledBalancedTraceChronologicalPhaseVariable
+    balancedCoolingChronologicalPhaseVariable
+  rw [figureOneChronologicalPhaseAt_representative q j]
+
 /-- The exact finite-schedule interpreter theorem removes `hpoint` from the
 loss-preserving trace capstone.  The remaining premises are precisely the
 finite Lemma 7.15/7.17 moment and dependence estimates. -/
@@ -19,15 +57,17 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_trace_moments
         (scheduledBalancedForwardTraceLaw
           figureOneFinalScheduledBalancedParameters q I
           (figureOneDependentPhaseCount q)))
-    (hmeanPos : ∀ j, 0 < scheduledFigureOneTraceTruncatedMean q I j)
-    (hrawMeanPos : ∀ j, 0 < scheduledFigureOneTraceRawMean q I j)
-    (hrawMean_le : ∀ j,
+    (hmeanPos : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      0 < scheduledFigureOneTraceTruncatedMean q I j)
+    (hrawMeanPos : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      0 < scheduledFigureOneTraceRawMean q I j)
+    (hrawMean_le : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
       scheduledFigureOneTraceRawMean q I j ≤
         2 * scheduledFigureOneTraceTruncatedMean q I j)
-    (hmeanSecond : ∀ j,
+    (hmeanSecond : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
       scheduledFigureOneTraceTruncatedMean q I j ^ 2 ≤
         scheduledFigureOneTraceTruncatedSecond q I j)
-    (hrawSecond : ∀ j,
+    (hrawSecond : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
       scheduledFigureOneTraceRawMean q I j ^ 2 ≤
         2 * scheduledFigureOneTraceTruncatedSecond q I j)
     (hind : ∀ i, i < figureOneDependentPhaseCount q →
@@ -64,12 +104,65 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_trace_moments
         (figureOneDependentPhaseCount q))) :
     (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
         (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
-  exact figureOneFinalScheduledBalancedBase_failure_le_of_trace_lemma717bc
+  have hrawRepresentative : ∀ j,
+      scheduledFigureOneTraceRawMean q I j =
+        scheduledFigureOneTraceRawMean q I
+          (scheduledTracePhaseRepresentative q j) := by
+    intro j
+    unfold scheduledFigureOneTraceRawMean
+    rw [scheduledBalancedTracePhaseVariable_representative q j]
+  have hphaseRepresentative : ∀ j,
+      scheduledFigureOneTraceTruncatedPhase q I j =
+        scheduledFigureOneTraceTruncatedPhase q I
+          (scheduledTracePhaseRepresentative q j) := by
+    intro j
+    funext trace
+    unfold scheduledFigureOneTraceTruncatedPhase dependentTruncatedPhase
+    rw [hrawRepresentative j,
+      scheduledBalancedTracePhaseVariable_representative q j]
+  have hmeanRepresentative : ∀ j,
+      scheduledFigureOneTraceTruncatedMean q I j =
+        scheduledFigureOneTraceTruncatedMean q I
+          (scheduledTracePhaseRepresentative q j) := by
+    intro j
+    unfold scheduledFigureOneTraceTruncatedMean
+    rw [hphaseRepresentative j]
+  have hsecondRepresentative : ∀ j,
+      scheduledFigureOneTraceTruncatedSecond q I j =
+        scheduledFigureOneTraceTruncatedSecond q I
+          (scheduledTracePhaseRepresentative q j) := by
+    intro j
+    unfold scheduledFigureOneTraceTruncatedSecond
+    rw [hphaseRepresentative j]
+  apply figureOneFinalScheduledBalancedBase_failure_le_of_trace_lemma717bc
     q I oracle hrounded
       (scheduledBalancedFigureOnePointContinuation_runEstimate_eq_forwardHistory_map
         figureOneFinalScheduledBalancedParameters q I oracle)
-      hWint hmeanPos hrawMeanPos hrawMean_le hmeanSecond hrawSecond hind
-      hrelative htailSecond hmeanApprox
+      hWint
+  · intro j
+    rw [hmeanRepresentative j]
+    exact hmeanPos _ (scheduledTracePhaseRepresentative_pos q j)
+      (scheduledTracePhaseRepresentative_le q j)
+  · intro j
+    rw [hrawRepresentative j]
+    exact hrawMeanPos _ (scheduledTracePhaseRepresentative_pos q j)
+      (scheduledTracePhaseRepresentative_le q j)
+  · intro j
+    rw [hrawRepresentative j, hmeanRepresentative j]
+    exact hrawMean_le _ (scheduledTracePhaseRepresentative_pos q j)
+      (scheduledTracePhaseRepresentative_le q j)
+  · intro j
+    rw [hmeanRepresentative j, hsecondRepresentative j]
+    exact hmeanSecond _ (scheduledTracePhaseRepresentative_pos q j)
+      (scheduledTracePhaseRepresentative_le q j)
+  · intro j
+    rw [hrawRepresentative j, hsecondRepresentative j]
+    exact hrawSecond _ (scheduledTracePhaseRepresentative_pos q j)
+      (scheduledTracePhaseRepresentative_le q j)
+  · exact hind
+  · exact hrelative
+  · exact htailSecond
+  · exact hmeanApprox
 
 #print axioms figureOneFinalScheduledBalancedBase_failure_le_of_trace_moments
 
