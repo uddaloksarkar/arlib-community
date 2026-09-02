@@ -58,6 +58,32 @@ theorem measurable_scheduledBalancedAccuracyGaussianAcceptance
   exact (measurable_scheduledAccuracyGaussianRejectionAcceptance
     q I sigma2).const_mul _
 
+theorem scheduledBalancedAccuracyGaussianAcceptance_le_half
+    (q : VolumeParams) (I : VolumeInput q.n) {sigma2 : ℝ}
+    (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    scheduledBalancedAccuracyGaussianAcceptance q I sigma2 current ≤
+      (2 : ENNReal)⁻¹ := by
+  unfold scheduledBalancedAccuracyGaussianAcceptance
+  calc
+    (2 : ENNReal)⁻¹ *
+        scheduledAccuracyGaussianRejectionAcceptance q I sigma2 current ≤
+        (2 : ENNReal)⁻¹ * 1 := mul_le_mul le_rfl
+          (scheduledAccuracyGaussianRejectionAcceptance_le_one
+            q I hsigma2 current) bot_le bot_le
+    _ = (2 : ENNReal)⁻¹ := mul_one _
+
+theorem oracle_and_radii_iff_mem_scheduledPhaseBody
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (x : AmbientSpace q.n) :
+    oracle.query x = true ∧
+        ‖x‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖x‖ ≤ figureOneScheduledPhaseRadius q sigma2 ↔
+      x ∈ figureOneScheduledPhaseBody q I sigma2 := by
+  rw [oracle.correct]
+  simp only [figureOneScheduledPhaseBody, truncatedBody, Set.mem_inter_iff,
+    Metric.mem_closedBall, dist_zero_right]
+  tauto
+
 noncomputable def scheduledBalancedAccuracyGaussianRejectionLaw
     (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
     (current : AmbientSpace q.n) : Measure (Bool × AmbientSpace q.n) :=
@@ -88,6 +114,119 @@ theorem measurable_scheduledBalancedAccuracyGaussianRejectionLaw
   have hacc := measurable_scheduledBalancedAccuracyGaussianAcceptance
     q I sigma2
   exact (hacc.mul htrue).add ((measurable_const.sub hacc).mul hfalse)
+
+theorem runEstimate_scheduledBalancedAccuracyGaussianRejectionAttempt
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    (scheduledBalancedAccuracyGaussianRejectionAttempt q sigma2 current).runEstimate
+        oracle.query =
+      scheduledBalancedAccuracyGaussianRejectionLaw q I sigma2 current := by
+  let c := accuracyScaleFactor q
+  let target : AmbientSpace q.n := c⁻¹ • current
+  let accept := scheduledBalancedAccuracyGaussianAcceptance q I sigma2 current
+  have haccept : accept ≤ 1 :=
+    (scheduledBalancedAccuracyGaussianAcceptance_le_half
+      q I hsigma2 current).trans (by norm_num)
+  have hacceptTop : accept ≠ ⊤ :=
+    ne_top_of_le_ne_top ENNReal.one_ne_top haccept
+  have hacceptReal0 : 0 ≤ accept.toReal := ENNReal.toReal_nonneg
+  have hacceptReal1 : accept.toReal ≤ 1 :=
+    ENNReal.toReal_mono ENNReal.one_ne_top haccept
+  by_cases ht : target ∈ figureOneScheduledPhaseBody q I sigma2
+  · have heligible := (oracle_and_radii_iff_mem_scheduledPhaseBody
+      q I oracle sigma2 target).mpr ht
+    have hcond : ∀ coin : ℝ,
+        (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ figureOneScheduledPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target) =
+        (coin ≤ accept.toReal) := by
+      intro coin
+      have hacceptEq :
+          scheduledBalancedAccuracyGaussianAcceptance q I sigma2 current =
+            (2 : ENNReal)⁻¹ *
+              Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target := by
+        unfold scheduledBalancedAccuracyGaussianAcceptance
+          scheduledAccuracyGaussianRejectionAcceptance
+        rw [Set.indicator_of_mem ht]
+      rw [← hacceptEq]
+      apply propext
+      simpa only [heligible.1, heligible.2.1, heligible.2.2, true_and] using
+        (ENNReal.ofReal_le_iff_le_toReal hacceptTop :
+          ENNReal.ofReal coin ≤ accept ↔ coin ≤ accept.toReal)
+    simp only [scheduledBalancedAccuracyGaussianRejectionAttempt,
+      MembershipOracleProgram.runEstimate]
+    dsimp only [c, target] at hcond
+    simp_rw [hcond]
+    have hout : Measurable fun coin : ℝ =>
+        if coin ≤ accept.toReal then (true, target) else (false, target) :=
+      Measurable.ite measurableSet_Iic measurable_const measurable_const
+    have hbind :
+        (uniformUnitIntervalMeasure.bind fun value =>
+          MembershipOracleProgram.runEstimate oracle.query
+            (if value ≤ accept.toReal then
+              MembershipOracleProgram.pure (true, target)
+            else MembershipOracleProgram.pure (false, target))) =
+          uniformUnitIntervalMeasure.bind fun value =>
+            Measure.dirac (if value ≤ accept.toReal then
+              (true, target) else (false, target)) := by
+      apply Measure.bind_congr_right
+      filter_upwards with value
+      split <;> simp [MembershipOracleProgram.runEstimate]
+    rw [hbind, Measure.bind_dirac_eq_map uniformUnitIntervalMeasure hout]
+    rw [uniformUnitInterval_map_threshold hacceptReal0 hacceptReal1
+      (true, target) (false, target)]
+    unfold scheduledBalancedAccuracyGaussianRejectionLaw
+    dsimp only
+    rw [ENNReal.ofReal_toReal hacceptTop]
+    have hcompTop : 1 - accept ≠ ∞ :=
+      ne_top_of_le_ne_top ENNReal.one_ne_top
+        (tsub_le_self : 1 - accept ≤ 1)
+    have hcomp : ENNReal.ofReal (1 - accept.toReal) = 1 - accept := by
+      rw [← ENNReal.toReal_one,
+        ← ENNReal.toReal_sub_of_le haccept ENNReal.one_ne_top,
+        ENNReal.ofReal_toReal hcompTop]
+    rw [hcomp]
+  · have hineligible : ¬ (oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ figureOneScheduledPhaseRadius q sigma2) := by
+      rwa [oracle_and_radii_iff_mem_scheduledPhaseBody]
+    have haccept0 : accept = 0 := by
+      unfold accept scheduledBalancedAccuracyGaussianAcceptance
+        scheduledAccuracyGaussianRejectionAcceptance
+      rw [Set.indicator_of_notMem ht, mul_zero]
+    simp only [scheduledBalancedAccuracyGaussianRejectionAttempt,
+      MembershipOracleProgram.runEstimate]
+    have hfalse : ∀ coin : ℝ,
+        ¬ (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ figureOneScheduledPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            Arlib.MarkovChains.gaussianScaleAcceptance sigma2 c target) := by
+      intro coin h
+      exact hineligible ⟨h.1, h.2.1, h.2.2.1⟩
+    dsimp only [c, target] at hfalse
+    simp_rw [hfalse, if_false]
+    simp only [MembershipOracleProgram.runEstimate]
+    rw [Measure.bind_const, measure_univ, one_smul]
+    unfold scheduledBalancedAccuracyGaussianRejectionLaw
+    dsimp only
+    rw [show scheduledBalancedAccuracyGaussianAcceptance q I sigma2 current = 0
+      from haccept0]
+    simp
+
+theorem scheduledBalancedAccuracyGaussianRejectionLaw_isProbabilityMeasure
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (current : AmbientSpace q.n) :
+    IsProbabilityMeasure
+      (scheduledBalancedAccuracyGaussianRejectionLaw q I sigma2 current) := by
+  constructor
+  simp only [scheduledBalancedAccuracyGaussianRejectionLaw,
+    Measure.add_apply, Measure.smul_apply, measure_univ, smul_eq_mul, mul_one]
+  rw [add_comm, tsub_add_cancel_of_le]
+  exact (scheduledBalancedAccuracyGaussianAcceptance_le_half
+    q I hsigma2 current).trans (by norm_num)
 
 noncomputable def scheduledBalancedAccuracyGaussianRejectionKernel
     (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
@@ -505,6 +644,7 @@ theorem scheduledBalancedStationaryTargetError_le_targetBudget
       figureOneScheduledTargetError_le q
 
 #print axioms scheduledBalancedAccuracyGaussianAcceptedTargetLaw_tv
+#print axioms runEstimate_scheduledBalancedAccuracyGaussianRejectionAttempt
 #print axioms scheduledBalancedStationaryTargetError_le_targetBudget
 
 end ArlibCommunity.Algorithms.CV18
