@@ -466,8 +466,94 @@ theorem scheduledBalancedCoolingTrace_product_eq_project
       balancedCoolingHistoryProduct] using hvalid.2.2 rfl
   | true => rfl
 
+theorem scheduledBalancedTracePhaseKernel_ae_valid
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase m : ℕ)
+    (trace : ScheduledBalancedCoolingTrace q.n)
+    (hvalid : ScheduledBalancedCoolingTraceValid m trace) :
+    ∀ᵐ next ∂scheduledBalancedTracePhaseKernel parameters q I phase trace,
+      ScheduledBalancedCoolingTraceValid (m + 1) next := by
+  unfold scheduledBalancedTracePhaseKernel
+  apply (ae_map_iff
+    ((measurable_scheduledBalancedCoolingTraceAppend (n := q.n)).comp
+      (measurable_const.prodMk measurable_id)).aemeasurable
+    (measurableSet_scheduledBalancedCoolingTraceValid _)).2
+  filter_upwards with result
+  exact hvalid.append result
+
+theorem scheduledBalancedForwardTraceLaw_isProbabilityMeasure
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phases : ℕ) :
+    IsProbabilityMeasure
+      (scheduledBalancedForwardTraceLaw parameters q I phases) := by
+  unfold scheduledBalancedForwardTraceLaw
+  apply iteratedKernelLaw_isProbabilityMeasure
+  · exact Measure.isProbabilityMeasure_map
+      measurable_scheduledBalancedInitialTrace.aemeasurable
+  · intro phase
+    exact (scheduledBalancedTracePhaseKernel_measurable_and_probability
+      parameters q I phase).1
+  · intro phase trace
+    exact (scheduledBalancedTracePhaseKernel_measurable_and_probability
+      parameters q I phase).2 trace
+
+/-- Every finite loss-preserving trace has exact chronological length and
+product, and its stored product is zero after failure. -/
+theorem scheduledBalancedForwardTraceLaw_ae_valid
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) : ∀ phases,
+    ∀ᵐ trace ∂scheduledBalancedForwardTraceLaw parameters q I phases,
+      ScheduledBalancedCoolingTraceValid phases trace := by
+  intro phases
+  induction phases with
+  | zero =>
+      unfold scheduledBalancedForwardTraceLaw iteratedKernelLaw
+      apply (ae_map_iff measurable_scheduledBalancedInitialTrace.aemeasurable
+        (measurableSet_scheduledBalancedCoolingTraceValid 0)).2
+      filter_upwards with point
+      simp [scheduledBalancedInitialTrace, ScheduledBalancedCoolingTraceValid]
+  | succ phases ih =>
+      let prefixLaw :=
+        scheduledBalancedForwardTraceLaw parameters q I phases
+      let kernel := scheduledBalancedTracePhaseKernel parameters q I phases
+      let good : Set (ScheduledBalancedCoolingTrace q.n) :=
+        {trace | ScheduledBalancedCoolingTraceValid (phases + 1) trace}
+      have hgood : MeasurableSet good :=
+        measurableSet_scheduledBalancedCoolingTraceValid _
+      have hkernel : Measurable kernel :=
+        (scheduledBalancedTracePhaseKernel_measurable_and_probability
+          parameters q I phases).1
+      change ∀ᵐ trace ∂prefixLaw.bind kernel,
+        ScheduledBalancedCoolingTraceValid (phases + 1) trace
+      apply MeasureTheory.mem_ae_iff.mpr
+      change (prefixLaw.bind kernel) goodᶜ = 0
+      rw [Measure.bind_apply hgood.compl hkernel.aemeasurable]
+      apply lintegral_eq_zero_of_ae_eq_zero
+      filter_upwards [ih] with trace htrace
+      exact MeasureTheory.mem_ae_iff.mp <|
+        scheduledBalancedTracePhaseKernel_ae_valid
+          parameters q I phases phases trace htrace
+
+/-- On every valid completed trace, the stored product is exactly the product
+of its chronological trace coordinates. -/
+theorem dependentPhaseSampleProduct_scheduledBalancedTrace_eq
+    (q : VolumeParams) (trace : ScheduledBalancedCoolingTrace q.n)
+    (hvalid : ScheduledBalancedCoolingTraceValid
+      (figureOneDependentPhaseCount q) trace) :
+    dependentPhaseSampleProduct
+        (scheduledBalancedTraceChronologicalPhaseVariable q)
+        (figureOneDependentPhaseCount q) trace = trace.1.2.2.1 := by
+  unfold dependentPhaseSampleProduct
+  rw [hvalid.2.1]
+  apply Finset.prod_congr rfl
+  intro j hj
+  unfold scheduledBalancedTraceChronologicalPhaseVariable
+  rw [balancedCoolingChronologicalPhaseVariable_apply_succ q j
+    (Finset.mem_range.mp hj) (some trace.1)]
+
 #print axioms map_scheduledBalancedTracePhaseKernel_project
 #print axioms map_scheduledBalancedForwardTraceLaw_project
 #print axioms scheduledBalancedTraceChronologicalPhaseVariable_append_eq
+#print axioms scheduledBalancedForwardTraceLaw_ae_valid
 
 end ArlibCommunity.Algorithms.CV18
