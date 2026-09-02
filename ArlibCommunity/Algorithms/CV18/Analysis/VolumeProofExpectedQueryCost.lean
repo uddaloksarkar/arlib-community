@@ -73,4 +73,39 @@ theorem MembershipOracleProgram.countedQueryCost_bind
   intro first
   exact lintegral_countedContinuation_queryCount oracle next hnext first
 
+/-- When the source has a fixed query count, the bind law separates that
+constant from the expected continuation cost. -/
+theorem MembershipOracleProgram.FixedQueryCount.countedQueryCost_bind
+    {n : ℕ} {A B : Type} [MeasurableSpace A] [MeasurableSpace B]
+    {program : MembershipOracleProgram n A} {count : ℕ}
+    (hcount : program.FixedQueryCount count)
+    (oracle : AmbientSpace n → Bool)
+    (next : A → MembershipOracleProgram n B)
+    (hstrong : program.StronglyMeasurable oracle)
+    (hprogram : program.CountedStronglyMeasurable oracle)
+    (hnext : ∀ result, (next result).CountedStronglyMeasurable oracle)
+    (hnextRun : Measurable fun result => (next result).run oracle) :
+    countedQueryCost ((program.bind next).run oracle) =
+      (count : ENNReal) +
+        ∫⁻ result, countedQueryCost ((next result).run oracle)
+          ∂(program.runEstimate oracle) := by
+  rw [MembershipOracleProgram.countedQueryCost_bind oracle program next
+    hprogram hnext hnextRun,
+    hcount.run_eq_map_runEstimate oracle hstrong]
+  have hcost : Measurable fun result =>
+      countedQueryCost ((next result).run oracle) :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp hnextRun
+  rw [lintegral_map]
+  · change (∫⁻ result, (count : ENNReal) +
+        countedQueryCost ((next result).run oracle)
+          ∂(program.runEstimate oracle)) = _
+    rw [lintegral_add_left measurable_const]
+    let _ : IsProbabilityMeasure (program.runEstimate oracle) :=
+      MembershipOracleProgram.runEstimate_isProbabilityMeasure oracle program
+        hstrong.estimateMeasurable
+    simp only [lintegral_const, measure_univ, mul_one]
+  · exact measurable_countedQueryCost_integrand.add
+      (hcost.comp measurable_fst)
+  · fun_prop
+
 end ArlibCommunity.Algorithms.CV18
