@@ -835,6 +835,102 @@ theorem iteratedKernelLaw_figureOneIdealChronologicalPhaseKernel
       exact Measure.bind_dirac_eq_map _
         (measurable_figureOneIdealChronologicalState q (phases + 1))
 
+/-- Scalar output read from the chronological history component. -/
+noncomputable def scheduledChronologicalCommonOutput (q : VolumeParams) :
+    FigureOneIdealExperimentSpace q × Option (BalancedCoolingHistory q.n) → ℝ :=
+  balancedFigureOneHistoryEstimate q ∘ Prod.snd
+
+theorem measurable_scheduledChronologicalCommonOutput (q : VolumeParams) :
+    Measurable (scheduledChronologicalCommonOutput q) :=
+  (measurable_balancedFigureOneHistoryEstimate q).comp measurable_snd
+
+/-- After every ideal phase has been appended, the common-state output is
+exactly the ideal chronological product. -/
+theorem figureOneIdealChronologicalIteration_map_output
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    (iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
+        (scheduledChronologicalCommonInitial q I)
+        (figureOneDependentPhaseCount q)).map
+          (scheduledChronologicalCommonOutput q) =
+      (figureOneIdealExperimentLaw q I).map
+        (fun samples => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (figureOneChronologicalIdealCoordinate q)
+            (figureOneDependentPhaseCount q) samples) := by
+  let phases := figureOneDependentPhaseCount q
+  let source := (truncatedGaussianProbability q I (initialVariance q)
+    (initialVariance_pos q) : Measure (AmbientSpace q.n))
+  let initialHistory := source.map balancedCoolingInitialHistory
+  let idealOutput : FigureOneIdealExperimentSpace q → ℝ := fun samples =>
+    initialGaussianIntegral q * dependentPhaseSampleProduct
+      (figureOneChronologicalIdealCoordinate q) phases samples
+  have hidealOutput : Measurable idealOutput := by
+    dsimp only [idealOutput]
+    exact measurable_const.mul <|
+      (Finset.range phases).measurable_fun_prod fun j _ =>
+        figureOneChronologicalIdealCoordinate_measurable q (j + 1)
+  have hpointwise : ∀ samples point,
+      scheduledChronologicalCommonOutput q
+        (figureOneIdealChronologicalState q phases
+          (samples, balancedCoolingInitialHistory point)) =
+        idealOutput samples := by
+    intro samples point
+    obtain ⟨history, hstate, hcount, hproduct⟩ :=
+      figureOneIdealChronologicalState_product q samples
+        ((fun _ => 0), 0, 1, point) rfl rfl phases le_rfl
+    unfold scheduledChronologicalCommonOutput Function.comp
+    change balancedFigureOneHistoryEstimate q
+      (figureOneIdealChronologicalState q phases
+        (samples, some ((fun _ => 0), 0, 1, point))).2 = idealOutput samples
+    rw [hstate]
+    simp only [balancedFigureOneHistoryEstimate]
+    exact congrArg (initialGaussianIntegral q * ·) hproduct
+  rw [iteratedKernelLaw_figureOneIdealChronologicalPhaseKernel]
+  rw [Measure.map_map (measurable_scheduledChronologicalCommonOutput q)
+    (measurable_figureOneIdealChronologicalState q phases)]
+  have heq :
+      scheduledChronologicalCommonOutput q ∘
+          figureOneIdealChronologicalState q phases =ᵐ[
+            scheduledChronologicalCommonInitial q I]
+        idealOutput ∘ Prod.fst := by
+    unfold scheduledChronologicalCommonInitial
+    have hset : MeasurableSet {state :
+        FigureOneIdealExperimentSpace q × Option (BalancedCoolingHistory q.n) |
+        (scheduledChronologicalCommonOutput q ∘
+          figureOneIdealChronologicalState q phases) state =
+            (idealOutput ∘ Prod.fst) state} :=
+      measurableSet_eq_fun
+        ((measurable_scheduledChronologicalCommonOutput q).comp
+          (measurable_figureOneIdealChronologicalState q phases))
+        (hidealOutput.comp measurable_fst)
+    apply (Measure.ae_prod_iff_ae_ae hset).2
+    filter_upwards with samples
+    apply (ae_map_iff measurable_balancedCoolingInitialHistory.aemeasurable
+      (by
+        exact measurableSet_eq_fun
+          ((measurable_scheduledChronologicalCommonOutput q).comp
+            (measurable_figureOneIdealChronologicalState q phases) |>.comp <|
+              measurable_const.prodMk measurable_id)
+          (by fun_prop))).2
+    filter_upwards with point
+    exact hpointwise samples point
+  calc
+    (scheduledChronologicalCommonInitial q I).map
+        (scheduledChronologicalCommonOutput q ∘
+          figureOneIdealChronologicalState q phases) =
+        (scheduledChronologicalCommonInitial q I).map
+          (idealOutput ∘ Prod.fst) := Measure.map_congr heq
+    _ = ((scheduledChronologicalCommonInitial q I).map Prod.fst).map
+          idealOutput :=
+      (Measure.map_map hidealOutput measurable_fst).symm
+    _ = (figureOneIdealExperimentLaw q I).map idealOutput := by
+      unfold scheduledChronologicalCommonInitial
+      let _ : IsProbabilityMeasure initialHistory := by
+        dsimp only [initialHistory]
+        exact Measure.isProbabilityMeasure_map
+          measurable_balancedCoolingInitialHistory.aemeasurable
+      rw [Measure.map_fst_prod, measure_univ, one_smul]
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
