@@ -52,6 +52,22 @@ theorem scheduledBalancedCoolingRatioLaw_eq_transitionLaw
     q I hsigma2 (measurable_gaussianRatioWeight sigma2 tau2)]
   rw [scheduledBalancedAccuracyTransitionCollectLaw_eq_chronological]
 
+theorem scheduledBalancedCoolingRatioLaw_measurable_and_probability
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (tau2 : ℝ) :
+    Measurable (scheduledBalancedCoolingRatioLaw parameters q I sigma2 tau2) ∧
+    ∀ current, IsProbabilityMeasure
+      (scheduledBalancedCoolingRatioLaw parameters q I sigma2 tau2 current) := by
+  have heq : scheduledBalancedCoolingRatioLaw parameters q I sigma2 tau2 =
+      scheduledBalancedCoolingRatioTransitionLaw parameters q I sigma2 tau2 := by
+    funext current
+    exact scheduledBalancedCoolingRatioLaw_eq_transitionLaw
+      parameters q I hsigma2 tau2 current
+  rw [heq]
+  exact scheduledBalancedCoolingRatioTransitionLaw_measurable_and_probability
+    parameters q I hsigma2 tau2
+
 theorem scheduledBalancedCoolingRatioEstimate_runEstimate_eq_transitionLaw
     (parameters : BalancedCoolingParameters) (q : VolumeParams)
     (I : VolumeInput q.n) (oracle : MembershipOracle I)
@@ -141,6 +157,7 @@ theorem scheduledBalancedCoolingUniformEstimateWithState_runEstimate_eq_transiti
 
 #print axioms scheduledBalancedAccuracyTransitionCollectLaw_eq_chronological
 #print axioms scheduledBalancedCoolingRatioLaw_eq_transitionLaw
+#print axioms scheduledBalancedCoolingRatioLaw_measurable_and_probability
 #print axioms scheduledBalancedCoolingUniformLaw_eq_transitionLaw
 #print axioms scheduledBalancedCoolingRatioEstimate_runEstimate_eq_transitionLaw
 #print axioms scheduledBalancedCoolingUniformEstimateWithState_runEstimate_eq_transitionLaw
