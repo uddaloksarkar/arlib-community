@@ -327,7 +327,147 @@ theorem map_scheduledBalancedForwardTraceLaw_project
             hhistoryKernel.1).symm
         _ = _ := by rw [ih]
 
+/-! ## Structural trace invariants -/
+
+/-- Chronological phase coordinate on the loss-preserving trace. -/
+noncomputable def scheduledBalancedTraceChronologicalPhaseVariable
+    (q : VolumeParams) (j : ℕ) : ScheduledBalancedCoolingTrace q.n → ℝ :=
+  fun trace => balancedCoolingChronologicalPhaseVariable q j (some trace.1)
+
+theorem measurable_scheduledBalancedTraceChronologicalPhaseVariable
+    (q : VolumeParams) (j : ℕ) :
+    Measurable (scheduledBalancedTraceChronologicalPhaseVariable q j) :=
+  (measurable_balancedCoolingChronologicalPhaseVariable q j).comp
+    (measurable_some.comp measurable_fst)
+
+/-- A valid trace has the expected chronological length and stored product;
+once dead, that product is zero. -/
+def ScheduledBalancedCoolingTraceValid (m : ℕ)
+    (trace : ScheduledBalancedCoolingTrace n) : Prop :=
+  trace.1.2.1 = m ∧
+    trace.1.2.2.1 = ∏ j ∈ Finset.range m, trace.1.1 j ∧
+    (trace.2 = false → trace.1.2.2.1 = 0)
+
+theorem measurableSet_scheduledBalancedCoolingTraceValid (m : ℕ) :
+    MeasurableSet {trace : ScheduledBalancedCoolingTrace n |
+      ScheduledBalancedCoolingTraceValid m trace} := by
+  have hcount : Measurable fun trace : ScheduledBalancedCoolingTrace n =>
+      trace.1.2.1 := by fun_prop
+  have hproduct : Measurable fun trace : ScheduledBalancedCoolingTrace n =>
+      trace.1.2.2.1 := by fun_prop
+  have hsequence : Measurable fun trace : ScheduledBalancedCoolingTrace n =>
+      ∏ j ∈ Finset.range m, trace.1.1 j := by fun_prop
+  have hlive : MeasurableSet
+      {trace : ScheduledBalancedCoolingTrace n | trace.2 = true} :=
+    (measurable_snd : Measurable fun trace :
+      ScheduledBalancedCoolingTrace n => trace.2) (measurableSet_singleton true)
+  have hzero : MeasurableSet
+      {trace : ScheduledBalancedCoolingTrace n | trace.1.2.2.1 = 0} :=
+    measurableSet_eq_fun hproduct measurable_const
+  rw [show {trace : ScheduledBalancedCoolingTrace n |
+      ScheduledBalancedCoolingTraceValid m trace} =
+      {trace | trace.1.2.1 = m} ∩
+        ({trace | trace.1.2.2.1 = ∏ j ∈ Finset.range m, trace.1.1 j} ∩
+          ({trace | trace.2 = true} ∪ {trace | trace.1.2.2.1 = 0})) by
+    ext trace
+    rcases trace with ⟨history, live⟩
+    cases live <;> simp [ScheduledBalancedCoolingTraceValid, and_assoc]]
+  exact (measurableSet_eq_fun hcount measurable_const).inter <|
+    (measurableSet_eq_fun hproduct hsequence).inter (hlive.union hzero)
+
+theorem ScheduledBalancedCoolingTraceValid.append
+    {trace : ScheduledBalancedCoolingTrace n}
+    (hvalid : ScheduledBalancedCoolingTraceValid m trace)
+    (result : Option (ℝ × AmbientSpace n)) :
+    ScheduledBalancedCoolingTraceValid (m + 1)
+      (scheduledBalancedCoolingTraceAppend trace result) := by
+  rcases trace with ⟨history, live⟩
+  unfold ScheduledBalancedCoolingTraceValid at hvalid
+  change history.2.1 = m ∧
+    history.2.2.1 = ∏ j ∈ Finset.range m, history.1 j ∧
+      (live = false → history.2.2.1 = 0) at hvalid
+  have happend (ratio : ℝ) (point : AmbientSpace n) (nextLive : Bool)
+      (hdead : nextLive = false → history.2.2.1 * ratio = 0) :
+      ScheduledBalancedCoolingTraceValid (m + 1)
+        (balancedCoolingHistoryAppend history ratio point, nextLive) := by
+    unfold ScheduledBalancedCoolingTraceValid balancedCoolingHistoryAppend
+    constructor
+    · change history.2.1 + 1 = m + 1
+      omega
+    constructor
+    · simp only
+      rw [hvalid.1, prod_range_snoc_sequence, ← hvalid.2.1]
+    · exact hdead
+  cases live with
+  | false =>
+      cases result with
+      | none =>
+          simp only [scheduledBalancedCoolingTraceAppend, Bool.false_eq_true,
+            if_false]
+          exact happend 1 history.2.2.2 false fun _ => by
+            simpa using hvalid.2.2 rfl
+      | some result =>
+          simp only [scheduledBalancedCoolingTraceAppend, Bool.false_eq_true,
+            if_false]
+          exact happend 1 history.2.2.2 false fun _ => by
+            simpa using hvalid.2.2 rfl
+  | true =>
+      cases result with
+      | none =>
+          simp only [scheduledBalancedCoolingTraceAppend, if_true]
+          exact happend 0 history.2.2.2 false fun _ => by simp
+      | some result =>
+          simp only [scheduledBalancedCoolingTraceAppend, if_true]
+          exact happend result.1 result.2 true fun h => by simp at h
+
+/-- Appending a later phase does not alter any earlier chronological
+coordinate of a valid prefix. -/
+theorem scheduledBalancedTraceChronologicalPhaseVariable_append_eq
+    (q : VolumeParams) {m j : ℕ}
+    {trace : ScheduledBalancedCoolingTrace q.n}
+    (hvalid : ScheduledBalancedCoolingTraceValid m trace)
+    (hmphase : m ≤ figureOneDependentPhaseCount q)
+    (hj1 : 1 ≤ j) (hjm : j ≤ m)
+    (result : Option (ℝ × AmbientSpace q.n)) :
+    scheduledBalancedTraceChronologicalPhaseVariable q j
+        (scheduledBalancedCoolingTraceAppend trace result) =
+      scheduledBalancedTraceChronologicalPhaseVariable q j trace := by
+  rcases trace with ⟨history, live⟩
+  unfold ScheduledBalancedCoolingTraceValid at hvalid
+  change history.2.1 = m ∧
+    history.2.2.1 = ∏ k ∈ Finset.range m, history.1 k ∧
+      (live = false → history.2.2.1 = 0) at hvalid
+  have hjrepr : j = (j - 1) + 1 := by omega
+  have hne : j - 1 ≠ history.2.1 := by omega
+  rw [hjrepr]
+  unfold scheduledBalancedTraceChronologicalPhaseVariable
+  rw [balancedCoolingChronologicalPhaseVariable_apply_succ q (j - 1)
+    (by omega) (some (scheduledBalancedCoolingTraceAppend
+      (history, live) result).1)]
+  rw [balancedCoolingChronologicalPhaseVariable_apply_succ q (j - 1)
+    (by omega) (some history)]
+  cases live <;> cases result <;>
+    simp only [scheduledBalancedCoolingTraceAppend,
+      balancedCoolingHistoryAppend, Bool.false_eq_true, if_false, if_true]
+  all_goals
+    rw [if_neg hne]
+
+/-- The trace's stored product agrees pointwise with the public executable
+product after projection: dead traces have stored product zero. -/
+theorem scheduledBalancedCoolingTrace_product_eq_project
+    {trace : ScheduledBalancedCoolingTrace q.n}
+    (hvalid : ScheduledBalancedCoolingTraceValid m trace) :
+    trace.1.2.2.1 =
+      balancedCoolingHistoryProduct q
+        (scheduledBalancedCoolingTraceProject trace) := by
+  rcases trace with ⟨history, live⟩
+  cases live with
+  | false => simpa [scheduledBalancedCoolingTraceProject,
+      balancedCoolingHistoryProduct] using hvalid.2.2 rfl
+  | true => rfl
+
 #print axioms map_scheduledBalancedTracePhaseKernel_project
 #print axioms map_scheduledBalancedForwardTraceLaw_project
+#print axioms scheduledBalancedTraceChronologicalPhaseVariable_append_eq
 
 end ArlibCommunity.Algorithms.CV18
