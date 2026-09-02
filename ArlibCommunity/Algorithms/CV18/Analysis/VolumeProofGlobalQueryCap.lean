@@ -18,6 +18,217 @@ namespace ArlibCommunity.Algorithms.CV18
 open MeasureTheory
 open scoped ENNReal
 
+/-- Pointwise measurability for the result-and-query-count interpreter.  This
+is the counted analogue of `MembershipOracleProgram.StronglyMeasurable`. -/
+def MembershipOracleProgram.CountedStronglyMeasurable
+    {n : ℕ} {Result : Type} [MeasurableSpace Result]
+    (oracle : AmbientSpace n → Bool) :
+    MembershipOracleProgram n Result → Prop
+  | .pure _ => True
+  | .query point next => CountedStronglyMeasurable oracle (next (oracle point))
+  | .randomNat _ next =>
+      Measurable (fun seed => run oracle (next seed)) ∧
+        ∀ seed, CountedStronglyMeasurable oracle (next seed)
+  | .randomPoint _ _ next =>
+      Measurable (fun point => run oracle (next point)) ∧
+        ∀ point, CountedStronglyMeasurable oracle (next point)
+  | .randomReal _ _ next =>
+      Measurable (fun value => run oracle (next value)) ∧
+        ∀ value, CountedStronglyMeasurable oracle (next value)
+
+theorem MembershipOracleProgram.CountedStronglyMeasurable.executionMeasurable
+    {n : ℕ} {Result : Type} [MeasurableSpace Result]
+    {oracle : AmbientSpace n → Bool}
+    {program : MembershipOracleProgram n Result}
+    (h : program.CountedStronglyMeasurable oracle) :
+    program.ExecutionMeasurable oracle := by
+  induction program with
+  | pure => trivial
+  | query point next ih => exact ih (oracle point) h
+  | randomNat law next ih =>
+      exact ⟨h.1.aemeasurable,
+        Filter.Eventually.of_forall fun seed => ih seed (h.2 seed)⟩
+  | randomPoint law hprob next ih =>
+      exact ⟨h.1.aemeasurable,
+        Filter.Eventually.of_forall fun point => ih point (h.2 point)⟩
+  | randomReal law hprob next ih =>
+      exact ⟨h.1.aemeasurable,
+        Filter.Eventually.of_forall fun value => ih value (h.2 value)⟩
+
+/-- Counted continuation kernel: run the second program and add its query
+count to the count already accumulated by the first program. -/
+noncomputable def countedContinuation
+    {n : ℕ} {A B : Type} [MeasurableSpace A] [MeasurableSpace B]
+    (oracle : AmbientSpace n → Bool)
+    (next : A → MembershipOracleProgram n B) :
+    A × ℕ → Measure (B × ℕ) :=
+  fun first => ((next first.1).run oracle).map fun second =>
+    (second.1, first.2 + second.2)
+
+theorem measurable_countedContinuation
+    {n : ℕ} {A B : Type} [MeasurableSpace A] [MeasurableSpace B]
+    (oracle : AmbientSpace n → Bool)
+    (next : A → MembershipOracleProgram n B)
+    (hnextRun : Measurable fun result => (next result).run oracle)
+    (hnext : ∀ result, (next result).CountedStronglyMeasurable oracle) :
+    Measurable (countedContinuation oracle next) := by
+  apply measurable_measure_map_param_variable
+    (hnextRun.comp measurable_fst)
+  · intro first
+    exact MembershipOracleProgram.run_isProbabilityMeasure oracle _
+      (hnext first.1).executionMeasurable
+  · fun_prop
+
+def incrementQueryCost {A : Type} : A × ℕ → A × ℕ :=
+  fun outcome => (outcome.1, outcome.2 + 1)
+
+theorem measurable_incrementQueryCost {A : Type} [MeasurableSpace A] :
+    Measurable (incrementQueryCost (A := A)) := by
+  unfold incrementQueryCost
+  fun_prop
+
+/-- Incrementing the already accumulated cost commutes with running a
+counted continuation.  This is the algebraic fact needed at a `query` node in
+the bind law. -/
+theorem map_incrementQueryCost_bind_countedContinuation
+    {n : ℕ} {A B : Type} [MeasurableSpace A] [MeasurableSpace B]
+    (oracle : AmbientSpace n → Bool)
+    (mu : Measure (A × ℕ))
+    (next : A → MembershipOracleProgram n B)
+    (hnextRun : Measurable fun result => (next result).run oracle)
+    (hnext : ∀ result, (next result).CountedStronglyMeasurable oracle) :
+    (mu.bind (countedContinuation oracle next)).map incrementQueryCost =
+      (mu.map incrementQueryCost).bind (countedContinuation oracle next) := by
+  have hcont : Measurable (countedContinuation oracle next) :=
+    measurable_countedContinuation oracle next hnextRun hnext
+  have hinc : Measurable (incrementQueryCost (A := B)) :=
+    measurable_incrementQueryCost
+  have hincA : Measurable (incrementQueryCost (A := A)) :=
+    measurable_incrementQueryCost
+  ext S hS
+  rw [Measure.map_apply hinc hS,
+    Measure.bind_apply (hinc hS) hcont.aemeasurable,
+    Measure.bind_apply hS hcont.aemeasurable]
+  let f : A × ℕ → ℝ≥0∞ := fun first =>
+    countedContinuation oracle next first S
+  have hf : Measurable f := (Measure.measurable_coe hS).comp hcont
+  change (∫⁻ first, countedContinuation oracle next first
+      (incrementQueryCost ⁻¹' S) ∂mu) =
+    ∫⁻ first, f first ∂(mu.map incrementQueryCost)
+  rw [lintegral_map hf hincA]
+  dsimp only [f]
+  apply lintegral_congr
+  intro first
+  simp only [countedContinuation]
+  rw [Measure.map_apply (by fun_prop) (hinc hS),
+    Measure.map_apply (by fun_prop) hS]
+  congr 1
+  ext second
+  change (second.1, first.2 + second.2 + 1) ∈ S ↔
+    (second.1, first.2 + 1 + second.2) ∈ S
+  rw [show first.2 + second.2 + 1 = first.2 + 1 + second.2 by omega]
+
+/-- Exact Kleisli law for the result-and-query-count interpreter.  Counts from
+the first and second programs are added, even when the second program depends
+on the first result. -/
+theorem MembershipOracleProgram.run_bind_counted
+    {n : ℕ} {A B : Type} [MeasurableSpace A] [MeasurableSpace B]
+    (oracle : AmbientSpace n → Bool)
+    (program : MembershipOracleProgram n A)
+    (next : A → MembershipOracleProgram n B)
+    (hprogram : program.CountedStronglyMeasurable oracle)
+    (hnext : ∀ result, (next result).CountedStronglyMeasurable oracle)
+    (hnextRun : Measurable fun result => (next result).run oracle) :
+    (program.bind next).run oracle =
+      (program.run oracle).bind (countedContinuation oracle next) := by
+  have hcont : Measurable (countedContinuation oracle next) :=
+    measurable_countedContinuation oracle next hnextRun hnext
+  induction program with
+  | pure result =>
+      simp only [MembershipOracleProgram.bind, MembershipOracleProgram.run]
+      rw [Measure.dirac_bind hcont]
+      simp only [countedContinuation, zero_add]
+      rw [show (fun second : B × ℕ => (second.1, second.2)) = id by
+        funext second
+        exact Prod.eta second]
+      exact Measure.map_id.symm
+  | query point branch ih =>
+      simp only [MembershipOracleProgram.bind, MembershipOracleProgram.run]
+      rw [ih (oracle point) hprogram]
+      exact map_incrementQueryCost_bind_countedContinuation
+        oracle ((branch (oracle point)).run oracle) next hnextRun hnext
+  | randomNat law branch ih =>
+      simp only [MembershipOracleProgram.bind, MembershipOracleProgram.run]
+      rw [show (fun seed => ((branch seed).bind next).run oracle) =
+          (fun seed => ((branch seed).run oracle).bind
+            (countedContinuation oracle next)) by
+        funext seed
+        exact ih seed (hprogram.2 seed)]
+      exact (Measure.bind_bind hprogram.1.aemeasurable hcont.aemeasurable).symm
+  | randomPoint law hprob branch ih =>
+      simp only [MembershipOracleProgram.bind, MembershipOracleProgram.run]
+      rw [show (fun point => ((branch point).bind next).run oracle) =
+          (fun point => ((branch point).run oracle).bind
+            (countedContinuation oracle next)) by
+        funext point
+        exact ih point (hprogram.2 point)]
+      exact (Measure.bind_bind hprogram.1.aemeasurable hcont.aemeasurable).symm
+  | randomReal law hprob branch ih =>
+      simp only [MembershipOracleProgram.bind, MembershipOracleProgram.run]
+      rw [show (fun value => ((branch value).bind next).run oracle) =
+          (fun value => ((branch value).run oracle).bind
+            (countedContinuation oracle next)) by
+        funext value
+        exact ih value (hprogram.2 value)]
+      exact (Measure.bind_bind hprogram.1.aemeasurable hcont.aemeasurable).symm
+
+theorem MembershipOracleProgram.CountedStronglyMeasurable.bind
+    {n : ℕ} {A B : Type} [MeasurableSpace A] [MeasurableSpace B]
+    {oracle : AmbientSpace n → Bool}
+    {program : MembershipOracleProgram n A}
+    {next : A → MembershipOracleProgram n B}
+    (hprogram : program.CountedStronglyMeasurable oracle)
+    (hnext : ∀ result, (next result).CountedStronglyMeasurable oracle)
+    (hnextRun : Measurable fun result => (next result).run oracle) :
+    (program.bind next).CountedStronglyMeasurable oracle := by
+  have hcont : Measurable (countedContinuation oracle next) :=
+    measurable_countedContinuation oracle next hnextRun hnext
+  induction program with
+  | pure result =>
+      simpa [MembershipOracleProgram.bind] using hnext result
+  | query point branch ih =>
+      exact ih (oracle point) hprogram
+  | randomNat law branch ih =>
+      constructor
+      · rw [show (fun seed => ((branch seed).bind next).run oracle) =
+            (fun seed => ((branch seed).run oracle).bind
+              (countedContinuation oracle next)) by
+          funext seed
+          exact MembershipOracleProgram.run_bind_counted oracle
+            (branch seed) next (hprogram.2 seed) hnext hnextRun]
+        exact (Measure.measurable_bind' hcont).comp hprogram.1
+      · exact fun seed => ih seed (hprogram.2 seed)
+  | randomPoint law hprob branch ih =>
+      constructor
+      · rw [show (fun point => ((branch point).bind next).run oracle) =
+            (fun point => ((branch point).run oracle).bind
+              (countedContinuation oracle next)) by
+          funext point
+          exact MembershipOracleProgram.run_bind_counted oracle
+            (branch point) next (hprogram.2 point) hnext hnextRun]
+        exact (Measure.measurable_bind' hcont).comp hprogram.1
+      · exact fun point => ih point (hprogram.2 point)
+  | randomReal law hprob branch ih =>
+      constructor
+      · rw [show (fun value => ((branch value).bind next).run oracle) =
+            (fun value => ((branch value).run oracle).bind
+              (countedContinuation oracle next)) by
+          funext value
+          exact MembershipOracleProgram.run_bind_counted oracle
+            (branch value) next (hprogram.2 value) hnext hnextRun]
+        exact (Measure.measurable_bind' hcont).comp hprogram.1
+      · exact fun value => ih value (hprogram.2 value)
+
 /-- Run an oracle program with one shared membership-query budget.  Random
 draws do not consume budget.  A pure result at budget zero still succeeds;
 only an attempted query past the budget produces `none`. -/
@@ -97,6 +308,57 @@ theorem measure_map_bind_eq_bind_map_ae
   apply lintegral_congr_ae
   filter_upwards with x
   rw [Measure.map_apply hf hS]
+
+/-- Forgetting the interpreter-counted query total recovers the ordinary
+estimate law. -/
+theorem MembershipOracleProgram.runEstimate_eq_map_fst_run
+    {n : ℕ} {Result : Type} [MeasurableSpace Result]
+    (oracle : AmbientSpace n → Bool) :
+    ∀ (program : MembershipOracleProgram n Result),
+      program.ExecutionMeasurable oracle →
+      program.runEstimate oracle = (program.run oracle).map Prod.fst := by
+  intro program
+  induction program with
+  | pure result =>
+      intro _
+      simp only [MembershipOracleProgram.runEstimate,
+        MembershipOracleProgram.run]
+      rw [Measure.map_dirac' measurable_fst]
+  | query point next ih =>
+      intro hmeas
+      change (next (oracle point)).ExecutionMeasurable oracle at hmeas
+      simp only [MembershipOracleProgram.runEstimate,
+        MembershipOracleProgram.run]
+      rw [ih (oracle point) hmeas,
+        Measure.map_map measurable_fst (by fun_prop)]
+      rfl
+  | randomNat law next ih =>
+      intro hmeas
+      simp only [MembershipOracleProgram.ExecutionMeasurable] at hmeas
+      simp only [MembershipOracleProgram.runEstimate,
+        MembershipOracleProgram.run]
+      rw [measure_map_bind_eq_bind_map_ae law.toMeasure hmeas.1 measurable_fst]
+      apply Measure.bind_congr_right
+      filter_upwards [hmeas.2] with seed hseed
+      exact ih seed hseed
+  | randomPoint law hprob next ih =>
+      intro hmeas
+      simp only [MembershipOracleProgram.ExecutionMeasurable] at hmeas
+      simp only [MembershipOracleProgram.runEstimate,
+        MembershipOracleProgram.run]
+      rw [measure_map_bind_eq_bind_map_ae law hmeas.1 measurable_fst]
+      apply Measure.bind_congr_right
+      filter_upwards [hmeas.2] with point hpoint
+      exact ih point hpoint
+  | randomReal law hprob next ih =>
+      intro hmeas
+      simp only [MembershipOracleProgram.ExecutionMeasurable] at hmeas
+      simp only [MembershipOracleProgram.runEstimate,
+        MembershipOracleProgram.run]
+      rw [measure_map_bind_eq_bind_map_ae law hmeas.1 measurable_fst]
+      apply Measure.bind_congr_right
+      filter_upwards [hmeas.2] with value hvalue
+      exact ih value hvalue
 
 /-- Exact semantics of the global cutoff: execute the original program with
 its interpreter-counted cost, retain its result iff that cost is within the
