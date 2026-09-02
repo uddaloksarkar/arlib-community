@@ -9,7 +9,7 @@ import ArlibCommunity.Algorithms.HitAndRun.Analysis.Background.Arlib.Probability
 /-!
 # Sequential laws and CV18 approximate independence
 
-The paper's Lemma 7.18 is applied to a Markov experiment in which a previous
+The paper's Lemma 7.17 is applied to a Markov experiment in which a previous
 history `h` is drawn from `rho`, then the next block is drawn from `K h`.  This
 module exposes that joint law and reduces its strong-mixing coefficient to TV
 mixing from conditionally restricted previous laws.
@@ -115,7 +115,7 @@ theorem real_restrict_bind_eq_mul_condOn_bind
 
 /-- Conditioning a probability measure on an event of probability at least
 one half produces a `2`-warm measure.  This is the warm-start observation used
-in the proof of CV18 Lemma 7.18(b). -/
+in the proof of CV18 Lemma 7.17(b). -/
 theorem isWarm_condOn_two_of_half
     (rho : Measure H) [IsProbabilityMeasure rho]
     {A : Set H} (hA : MeasurableSet A)
@@ -136,7 +136,7 @@ theorem isWarm_condOn_two_of_half
         (by simp) (by simp)
     _ <= 2 * rho S := mul_le_mul hinv le_rfl (by simp) (by simp)
 
-/-- Sequential form of CV18 Lemma 7.18(b).  If conditioning on every
+/-- Sequential form of CV18 Lemma 7.17(b).  If conditioning on every
 half-mass previous event leaves the next-output law within `epsilon` of its
 unconditional law, then the complete previous history and next output are
 `epsilon`-independent. -/
@@ -197,7 +197,7 @@ theorem approxIndepFun_fst_snd_sequentialPairLaw_of_condOn_bind_tv
       simpa only [one_mul] using
         mul_le_mul_of_nonneg_right hp1 ENNReal.toReal_nonneg
 
-/-- CV18 Lemma 7.18(b) in the form used by the executable proof.  It is
+/-- CV18 Lemma 7.17(b) in the form used by the executable proof.  It is
 enough that every `2`-warm start is additively dominated by one common target
 law: conditioning on a half-mass history event gives such a start, and the
 two comparisons with the common target give the required conditional TV

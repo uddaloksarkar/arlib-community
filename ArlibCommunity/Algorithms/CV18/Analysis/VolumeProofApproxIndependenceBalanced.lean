@@ -10,7 +10,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedRetryApproxima
 
 This module turns the one-sided finite-retry approximation into the
 probability/total-variation form consumed by the Markov-history version of
-CV18 Lemma 7.18.  In particular, the normalized accepted branch is proved to
+CV18 Lemma 7.17.  In particular, the normalized accepted branch is proved to
 be a probability measure from the same explicit acceptance lower bound used
 by the retry analysis.
 -/
@@ -433,7 +433,7 @@ theorem approxIndepFun_balancedTransition_of_baseWarm_and_mixing
         hfirstError hretryError hacceptedLower hrejectedLower
         hfirstBlock hretryBlock)
 
-/-- Concrete adjacent-sample form of CV18 Lemma 7.18(a) for the executable
+/-- Concrete adjacent-sample form of CV18 Lemma 7.17(a) for the executable
 balanced transition.  Every half-mass conditioning is `2`-warm; a uniform
 first-block estimate for such starts and the stationary retry estimate place
 both conditional and unconditional next laws near the same accepted target.
