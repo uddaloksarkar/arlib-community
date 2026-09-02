@@ -346,8 +346,218 @@ theorem lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
       exact figureOneFinalScheduledRetainedGaussianPhaseProgram_cost
         q I oracle phase state
 
+/-- Averaging the retained Gaussian chain over its true phase-start marginal
+produces exactly the later chronological retained marginal. -/
+theorem bind_figureOneFinalScheduledRetainedGaussianChain_runEstimate_eq_trace
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ∀ phase steps, phase + steps ≤ terminalPhaseSteps q →
+    ((scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I phase).map
+        scheduledBalancedTraceRetainedOption).bind (fun state =>
+      (figureOneFinalScheduledRetainedGaussianChain q phase steps state).runEstimate
+        oracle.query) =
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I (phase + steps)).map
+          scheduledBalancedTraceRetainedOption := by
+  intro phase steps
+  induction steps generalizing phase with
+  | zero =>
+      intro _
+      simp only [figureOneFinalScheduledRetainedGaussianChain,
+        MembershipOracleProgram.runEstimate, add_zero]
+      simp
+  | succ steps ih =>
+      intro hbound
+      have hphaseLt : phase < terminalPhaseSteps q := by omega
+      let mu := (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I phase).map
+          scheduledBalancedTraceRetainedOption
+      let phaseProgram :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram q phase
+      let tailProgram :=
+        figureOneFinalScheduledRetainedGaussianChain q (phase + 1) steps
+      let retainedKernel := figureOneFinalScheduledCompleteRetainedKernel q I
+        (scheduleValue q phase)
+        (gaussianRatioWeight (scheduleValue q phase)
+          (scheduleValue q (phase + 1)))
+        (figureOnePhaseSampleCount q (scheduleValue q phase) - 1)
+      have hphase :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle phase
+      have htail := figureOneFinalScheduledRetainedGaussianChain_countedMeasurable
+        q I oracle (phase + 1) steps
+      have hphaseEstimate : Measurable fun state =>
+          (phaseProgram state).runEstimate oracle.query := by
+        rw [show (fun state => (phaseProgram state).runEstimate oracle.query) =
+            fun state => ((phaseProgram state).run oracle.query).map Prod.fst by
+          funext state
+          exact (phaseProgram state).runEstimate_eq_map_fst_run oracle.query
+            (hphase.2 state).executionMeasurable]
+        exact measurable_measure_map_param_variable hphase.1
+          (fun state => MembershipOracleProgram.run_isProbabilityMeasure
+            oracle.query (phaseProgram state)
+              (hphase.2 state).executionMeasurable)
+          (measurable_fst.comp measurable_snd)
+      have htailEstimate : Measurable fun state =>
+          (tailProgram state).runEstimate oracle.query := by
+        rw [show (fun state => (tailProgram state).runEstimate oracle.query) =
+            fun state => ((tailProgram state).run oracle.query).map Prod.fst by
+          funext state
+          exact (tailProgram state).runEstimate_eq_map_fst_run oracle.query
+            (htail.2 state).executionMeasurable]
+        exact measurable_measure_map_param_variable htail.1
+          (fun state => MembershipOracleProgram.run_isProbabilityMeasure
+            oracle.query (tailProgram state)
+              (htail.2 state).executionMeasurable)
+          (measurable_fst.comp measurable_snd)
+      have hrun : ∀ state,
+          ((phaseProgram state).bind tailProgram).runEstimate oracle.query =
+            ((phaseProgram state).runEstimate oracle.query).bind fun next =>
+              (tailProgram next).runEstimate oracle.query := by
+        intro state
+        exact MembershipOracleProgram.runEstimate_bind oracle.query
+          (phaseProgram state) tailProgram (hphase.2 state).stronglyMeasurable
+            (fun next => (htail.2 next).stronglyMeasurable) htailEstimate
+      simp only [figureOneFinalScheduledRetainedGaussianChain]
+      rw [show (fun state =>
+          (((phaseProgram state).bind tailProgram).runEstimate oracle.query)) =
+          fun state => ((phaseProgram state).runEstimate oracle.query).bind
+            (fun next => (tailProgram next).runEstimate oracle.query) by
+        funext state
+        exact hrun state]
+      have hphaseLaw : (fun state =>
+          (phaseProgram state).runEstimate oracle.query) = retainedKernel := by
+        funext state
+        exact figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
+          q I oracle phase state
+      change mu.bind (fun state =>
+          ((phaseProgram state).runEstimate oracle.query).bind
+            (fun next => (tailProgram next).runEstimate oracle.query)) = _
+      calc
+        _ = (mu.bind fun state =>
+              (phaseProgram state).runEstimate oracle.query).bind
+                (fun next => (tailProgram next).runEstimate oracle.query) :=
+          (Measure.bind_bind hphaseEstimate.aemeasurable
+            htailEstimate.aemeasurable).symm
+        _ = (mu.bind retainedKernel).bind
+                (fun next => (tailProgram next).runEstimate oracle.query) := by
+          rw [hphaseLaw]
+        _ = ((scheduledBalancedForwardTraceLaw
+              figureOneFinalScheduledBalancedParameters q I (phase + 1)).map
+                scheduledBalancedTraceRetainedOption).bind
+                  (fun next => (tailProgram next).runEstimate oracle.query) := by
+          rw [show mu.bind retainedKernel =
+              (scheduledBalancedForwardTraceLaw
+                figureOneFinalScheduledBalancedParameters q I (phase + 1)).map
+                  scheduledBalancedTraceRetainedOption from
+            figureOneFinalScheduledTraceRetained_succ q I phase hphaseLt]
+        _ = _ := by
+          simpa only [tailProgram, Nat.add_assoc, Nat.add_comm,
+            Nat.add_left_comm] using ih (phase + 1) (by omega)
+
+/-- Terminal uniform collector retaining only its endpoint. -/
+noncomputable def figureOneFinalScheduledRetainedTerminalProgram
+    (q : VolumeParams) : Option (AmbientSpace q.n) →
+      MembershipOracleProgram q.n (Option (AmbientSpace q.n))
+  | none => .pure none
+  | some point =>
+      (scheduledBalancedAccuracyRetryCollect q (terminalVariance q)
+        (uniformRatioWeight (terminalVariance q))
+        (figureOneFinalScheduledBalancedParameters.proposalCap q
+          (terminalVariance q))
+        (figureOneFinalScheduledBalancedParameters.properStride q
+          (terminalVariance q))
+        (figureOneFinalScheduledBalancedParameters.retryLimit q
+          (terminalVariance q))
+        (figureOneSampleCount q) (accuracyScaleFactor q • point)).bind
+          fun result => .pure (optionSnd result)
+
+theorem figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (Measurable fun state =>
+      (figureOneFinalScheduledRetainedTerminalProgram q state).run oracle.query) ∧
+    ∀ state,
+      (figureOneFinalScheduledRetainedTerminalProgram q state).CountedStronglyMeasurable
+        oracle.query := by
+  let collect (point : AmbientSpace q.n) :=
+    scheduledBalancedAccuracyRetryCollect q (terminalVariance q)
+      (uniformRatioWeight (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q))
+      (figureOneSampleCount q) (accuracyScaleFactor q • point)
+  have hbase := scheduledBalancedAccuracyRetryCollect_countedMeasurable
+    q I oracle (terminalVariance_pos' q)
+      (measurable_uniformRatioWeight (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q)) (figureOneSampleCount q)
+  have hscale : Measurable fun point : AmbientSpace q.n =>
+      accuracyScaleFactor q • point := by fun_prop
+  have hcollectMeas : Measurable fun point => (collect point).run oracle.query :=
+    hbase.1.comp hscale
+  have hcollect : ∀ point, (collect point).CountedStronglyMeasurable oracle.query :=
+    fun point => hbase.2 (accuracyScaleFactor q • point)
+  have hsome := MembershipOracleProgram.countedMeasurable_bind_pure
+    oracle.query collect (fun z : AmbientSpace q.n ×
+      Option (ℝ × AmbientSpace q.n) => optionSnd z.2)
+      hcollectMeas hcollect (measurable_optionSnd.comp measurable_snd)
+  constructor
+  · convert Measurable.optionElim
+      (Measure.dirac ((none : Option (AmbientSpace q.n)), 0)) hsome.1 using 1
+    funext state
+    cases state <;> rfl
+  · intro state
+    cases state with
+    | none => trivial
+    | some point => exact hsome.2 point
+
+theorem figureOneFinalScheduledRetainedTerminalProgram_cost
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (state : Option (AmbientSpace q.n)) :
+    countedQueryCost
+        ((figureOneFinalScheduledRetainedTerminalProgram q state).run
+          oracle.query) =
+      match state with
+      | none => 0
+      | some point => countedQueryCost
+          ((scheduledBalancedAccuracyRetryCollect q (terminalVariance q)
+            (uniformRatioWeight (terminalVariance q))
+            (figureOneFinalScheduledBalancedParameters.proposalCap q
+              (terminalVariance q))
+            (figureOneFinalScheduledBalancedParameters.properStride q
+              (terminalVariance q))
+            (figureOneFinalScheduledBalancedParameters.retryLimit q
+              (terminalVariance q))
+            (figureOneSampleCount q) (accuracyScaleFactor q • point)).run
+              oracle.query) := by
+  cases state with
+  | none =>
+      exact MembershipOracleProgram.countedQueryCost_pure oracle.query none
+  | some point =>
+      unfold figureOneFinalScheduledRetainedTerminalProgram
+      exact MembershipOracleProgram.countedQueryCost_bind_pure_eq
+        oracle.query _ optionSnd measurable_optionSnd
+          ((scheduledBalancedAccuracyRetryCollect_countedMeasurable
+            q I oracle (terminalVariance_pos' q)
+              (measurable_uniformRatioWeight (terminalVariance q))
+              (figureOneFinalScheduledBalancedParameters.proposalCap q
+                (terminalVariance q))
+              (figureOneFinalScheduledBalancedParameters.properStride q
+                (terminalVariance q))
+              (figureOneFinalScheduledBalancedParameters.retryLimit q
+                (terminalVariance q)) (figureOneSampleCount q)).2 _)
+
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_cost
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
 #print axioms lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
+#print axioms bind_figureOneFinalScheduledRetainedGaussianChain_runEstimate_eq_trace
+#print axioms figureOneFinalScheduledRetainedTerminalProgram_cost
 
 end ArlibCommunity.Algorithms.CV18
