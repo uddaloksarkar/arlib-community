@@ -1,5 +1,6 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledCounted
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofInitialCoupling
 
 /-! # Abort-on-failure initialization for the scheduled CV18 executable
 
@@ -115,6 +116,19 @@ theorem runEstimate_figureOneAbortInitialSample
         rw [congrFun hfun point]]
   rw [Measure.bind_dirac_eq_map _ (measurable_initialTruncatedOption q I)]
 
+/-- The live law of the aborting initializer is a submeasure of the ideal
+normalized initial Gaussian used by the CV18 warm-start proof. -/
+theorem initialGaussianSamplingMeasure_restrict_truncatedBody_le
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    (initialGaussianSamplingMeasure q).restrict (truncatedBody q I) ≤
+      (truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)) := by
+  rw [initialGaussianSamplingMeasure_restrict_truncatedBody q I]
+  intro E
+  rw [Measure.smul_apply, smul_eq_mul]
+  exact mul_le_of_le_one_left bot_le
+    (initialGaussianRestrictedMassCoefficient_le_one q I)
+
 /-- Scheduled primitives with paper-faithful aborting initialization. -/
 noncomputable def scheduledBalancedAbortCoolingPrimitives
     (parameters : BalancedCoolingParameters) : VolumeCoolingPrimitives where
@@ -133,5 +147,6 @@ noncomputable def figureOneFinalScheduledAbortBaseProgram
 
 #print axioms runEstimate_figureOneAbortInitialSample
 #print axioms figureOneAbortInitialSample_countedStronglyMeasurable
+#print axioms initialGaussianSamplingMeasure_restrict_truncatedBody_le
 
 end ArlibCommunity.Algorithms.CV18
