@@ -1113,6 +1113,190 @@ theorem figureOneFinalScheduledScalarTerminalTail_cost
           figureOneFinalScheduledBalancedParameters q I oracle
             (terminalVariance_pos' q)).2 lastPoint
 
+/-- Averaging the executable Gaussian cooling cost over the normalized initial
+law gives exactly the retained chronological Gaussian cost sum. -/
+theorem lintegral_figureOneFinalScheduledCoolingProduct_cost_eq_costTail
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (∫⁻ point, countedQueryCost
+        ((coolingProduct
+          (scheduledBalancedCoolingPrimitives
+            figureOneFinalScheduledBalancedParameters) q
+          (explicitVolumeCoolingSchedule q).variances point).run oracle.query)
+      ∂(truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q))) =
+      figureOneFinalScheduledGaussianPhaseCostTail q I oracle 0
+        (terminalPhaseSteps q) := by
+  let target : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q)
+  let retained := figureOneFinalScheduledRetainedGaussianChain q 0
+    (terminalPhaseSteps q)
+  have hretained := figureOneFinalScheduledRetainedGaussianChain_countedMeasurable
+    q I oracle 0 (terminalPhaseSteps q)
+  have hretainedCost : Measurable fun state =>
+      countedQueryCost ((retained state).run oracle.query) :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+      hretained.1
+  have hmu0 :
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I 0).map
+          scheduledBalancedTraceRetainedOption = target.map some := by
+    simpa only [scheduledBalancedForwardTraceLaw, iteratedKernelLaw, target] using
+      map_scheduledBalancedInitialTrace_retainedOption q I
+  calc
+    _ = ∫⁻ point, countedQueryCost ((retained (some point)).run oracle.query)
+          ∂target := by
+      apply lintegral_congr
+      intro point
+      rw [explicitScheduleVariances_eq_scheduledVarianceSegment]
+      exact figureOneFinalScheduledCoolingProduct_cost_eq_retainedChain
+        q I oracle 0 (terminalPhaseSteps q) point
+    _ = ∫⁻ state, countedQueryCost ((retained state).run oracle.query)
+          ∂target.map some := by
+      symm
+      simpa only [Function.comp_apply] using
+        lintegral_map hretainedCost measurable_some
+    _ = ∫⁻ state, countedQueryCost ((retained state).run oracle.query)
+          ∂((scheduledBalancedForwardTraceLaw
+            figureOneFinalScheduledBalancedParameters q I 0).map
+              scheduledBalancedTraceRetainedOption) := by rw [hmu0]
+    _ = _ := lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
+      q I oracle 0 (terminalPhaseSteps q) (by omega)
+
+/-- Averaging the terminal wrapper cost over the executable cooling endpoint
+law gives exactly the terminal retained-state cost. -/
+theorem lintegral_figureOneFinalScheduledTerminalTail_cost_eq
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (∫⁻ point,
+        (∫⁻ product, countedQueryCost
+            ((figureOneFinalScheduledScalarTerminalTail q product).run
+              oracle.query)
+          ∂(coolingProduct
+            (scheduledBalancedCoolingPrimitives
+              figureOneFinalScheduledBalancedParameters) q
+            (explicitVolumeCoolingSchedule q).variances point).runEstimate
+              oracle.query)
+      ∂(truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q))) =
+      figureOneFinalScheduledTerminalExpectedCost q I oracle := by
+  let target : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q)
+  let cooling (point : AmbientSpace q.n) :=
+    coolingProduct
+      (scheduledBalancedCoolingPrimitives
+        figureOneFinalScheduledBalancedParameters) q
+      (explicitVolumeCoolingSchedule q).variances point
+  let tail := figureOneFinalScheduledScalarTerminalTail q
+  let futureCost (state : Option (AmbientSpace q.n)) :=
+    countedQueryCost
+      ((figureOneFinalScheduledRetainedTerminalProgram q state).run oracle.query)
+  have hcooling := scheduledBalancedCoolingProduct_countedMeasurable
+    figureOneFinalScheduledBalancedParameters q I oracle
+      (explicitVolumeCoolingSchedule q).variances
+      (explicitVolumeCoolingSchedule q).positive
+  have htail := figureOneFinalScheduledScalarTerminalTail_countedMeasurable
+    q I oracle
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable q I oracle
+  have htailCost : Measurable fun product =>
+      countedQueryCost ((tail product).run oracle.query) :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+      htail.1
+  have hfutureCost : Measurable futureCost :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+      hterminal.1
+  have hcoolingEstimate : Measurable fun point =>
+      (cooling point).runEstimate oracle.query := by
+    rw [show (fun point => (cooling point).runEstimate oracle.query) =
+        fun point => ((cooling point).run oracle.query).map Prod.fst by
+      funext point
+      exact (cooling point).runEstimate_eq_map_fst_run oracle.query
+        (hcooling.2 point).executionMeasurable]
+    exact measurable_measure_map_param_variable hcooling.1
+      (fun point => MembershipOracleProgram.run_isProbabilityMeasure
+        oracle.query (cooling point) (hcooling.2 point).executionMeasurable)
+      (measurable_fst.comp measurable_snd)
+  calc
+    _ = ∫⁻ product, countedQueryCost ((tail product).run oracle.query)
+          ∂(target.bind fun point => (cooling point).runEstimate oracle.query) := by
+      symm
+      exact Measure.lintegral_bind hcoolingEstimate.aemeasurable
+        htailCost.aemeasurable
+    _ = ∫⁻ product, futureCost (optionSnd product)
+          ∂(target.bind fun point => (cooling point).runEstimate oracle.query) := by
+      apply lintegral_congr
+      intro product
+      exact figureOneFinalScheduledScalarTerminalTail_cost q I oracle product
+    _ = ∫⁻ state, futureCost state
+          ∂(target.bind fun point =>
+            (cooling point).runEstimate oracle.query).map optionSnd := by
+      symm
+      simpa only [Function.comp_apply] using
+        lintegral_map hfutureCost measurable_optionSnd
+    _ = ∫⁻ state, futureCost state
+          ∂(scheduledBalancedForwardTraceLaw
+            figureOneFinalScheduledBalancedParameters q I
+              (terminalPhaseSteps q)).map
+                scheduledBalancedTraceRetainedOption := by
+      rw [map_bind_figureOneFinalScheduledCoolingProduct_optionSnd_eq_trace
+        q I oracle]
+    _ = _ := by
+      unfold figureOneFinalScheduledTerminalExpectedCost futureCost
+      apply lintegral_congr
+      intro state
+      exact figureOneFinalScheduledRetainedTerminalProgram_cost q I oracle state
+
+/-- The complete executable post-initial continuation has exactly the retained
+chronological expected cost: all estimator/product coordinates are query-free. -/
+theorem lintegral_scheduledBalancedFigureOnePointContinuation_cost_eq
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (∫⁻ point, countedQueryCost
+        ((scheduledBalancedFigureOnePointContinuation
+          figureOneFinalScheduledBalancedParameters q point).run oracle.query)
+      ∂(truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q))) =
+      figureOneFinalScheduledGaussianPhaseCostTail q I oracle 0
+          (terminalPhaseSteps q) +
+        figureOneFinalScheduledTerminalExpectedCost q I oracle := by
+  let cooling (point : AmbientSpace q.n) :=
+    coolingProduct
+      (scheduledBalancedCoolingPrimitives
+        figureOneFinalScheduledBalancedParameters) q
+      (explicitVolumeCoolingSchedule q).variances point
+  let tail := figureOneFinalScheduledScalarTerminalTail q
+  have hcooling := scheduledBalancedCoolingProduct_countedMeasurable
+    figureOneFinalScheduledBalancedParameters q I oracle
+      (explicitVolumeCoolingSchedule q).variances
+      (explicitVolumeCoolingSchedule q).positive
+  have htail := figureOneFinalScheduledScalarTerminalTail_countedMeasurable
+    q I oracle
+  have hcoolingCost : Measurable fun point =>
+      countedQueryCost ((cooling point).run oracle.query) :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+      hcooling.1
+  have hpoint : ∀ point,
+      countedQueryCost
+          ((scheduledBalancedFigureOnePointContinuation
+            figureOneFinalScheduledBalancedParameters q point).run
+              oracle.query) =
+        countedQueryCost ((cooling point).run oracle.query) +
+          ∫⁻ product, countedQueryCost ((tail product).run oracle.query)
+            ∂(cooling point).runEstimate oracle.query := by
+    intro point
+    have hprogram :
+        scheduledBalancedFigureOnePointContinuation
+            figureOneFinalScheduledBalancedParameters q point =
+          (cooling point).bind tail := by
+      rfl
+    rw [hprogram]
+    exact MembershipOracleProgram.countedQueryCost_bind_eq_add oracle.query
+      (cooling point) tail (hcooling.2 point) htail.2 htail.1
+  rw [lintegral_congr hpoint, lintegral_add_left hcoolingCost]
+  rw [lintegral_figureOneFinalScheduledCoolingProduct_cost_eq_costTail
+    q I oracle]
+  rw [lintegral_figureOneFinalScheduledTerminalTail_cost_eq q I oracle]
+
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_cost
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
 #print axioms lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
@@ -1122,5 +1306,8 @@ theorem figureOneFinalScheduledScalarTerminalTail_cost
 #print axioms figureOneFinalScheduledCoolingProduct_cost_eq_retainedChain
 #print axioms map_bind_figureOneFinalScheduledCoolingProduct_optionSnd_eq_trace
 #print axioms figureOneFinalScheduledScalarTerminalTail_cost
+#print axioms lintegral_figureOneFinalScheduledCoolingProduct_cost_eq_costTail
+#print axioms lintegral_figureOneFinalScheduledTerminalTail_cost_eq
+#print axioms lintegral_scheduledBalancedFigureOnePointContinuation_cost_eq
 
 end ArlibCommunity.Algorithms.CV18
