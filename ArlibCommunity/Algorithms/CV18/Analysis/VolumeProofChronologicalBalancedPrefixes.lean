@@ -242,10 +242,108 @@ theorem balancedFigureOneForwardHistoryLaw_isProbabilityMeasure
   · exact balancedFigureOneForwardPhaseKernel_measurable parameters q I
   · exact balancedFigureOneForwardPhaseKernel_isProbabilityMeasure parameters q I
 
+/-- Appending any complete phase preserves the exact stored-product
+invariant, independently of whether that phase succeeds or takes its explicit
+failure branch. -/
+theorem balancedFigureOneForwardPhaseKernel_ae_hasProduct
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase m : ℕ)
+    (history : Option (BalancedCoolingHistory q.n))
+    (hproduct : BalancedCoolingHistoryHasProduct m history) :
+    ∀ᵐ next ∂balancedFigureOneForwardPhaseKernel parameters q I phase history,
+      BalancedCoolingHistoryHasProduct (m + 1) next := by
+  cases history with
+  | none =>
+      unfold balancedFigureOneForwardPhaseKernel
+      split_ifs <;>
+        apply (ae_dirac_iff
+          (measurableSet_balancedCoolingHistoryHasProduct _)).2 <;>
+        simp [BalancedCoolingHistoryHasProduct]
+  | some history =>
+      unfold balancedFigureOneForwardPhaseKernel
+      split_ifs with hphase
+      · unfold balancedCoolingForwardGaussianPhaseKernel
+        apply (ae_map_iff
+          ((measurable_balancedCoolingHistorySnocTerminal (n := q.n)).comp
+            (measurable_const.prodMk measurable_id)).aemeasurable
+          (measurableSet_balancedCoolingHistoryHasProduct _)).2
+        filter_upwards with result
+        exact hproduct.snocTerminal result
+      · unfold balancedCoolingForwardTerminalPhaseKernel
+        apply (ae_map_iff
+          ((measurable_balancedCoolingHistorySnocTerminal (n := q.n)).comp
+            (measurable_const.prodMk measurable_id)).aemeasurable
+          (measurableSet_balancedCoolingHistoryHasProduct _)).2
+        filter_upwards with result
+        exact hproduct.snocTerminal result
+
+/-- The forward prefix law contains exactly `phases` stored factors and their
+stored product is their chronological product. -/
+theorem balancedFigureOneForwardHistoryLaw_ae_hasProduct
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) : ∀ phases,
+    ∀ᵐ history ∂balancedFigureOneForwardHistoryLaw parameters q I phases,
+      BalancedCoolingHistoryHasProduct phases history := by
+  intro phases
+  induction phases with
+  | zero =>
+      unfold balancedFigureOneForwardHistoryLaw
+      apply (ae_map_iff measurable_balancedCoolingInitialHistory.aemeasurable
+        (measurableSet_balancedCoolingHistoryHasProduct 0)).2
+      filter_upwards with point
+      simp [balancedCoolingInitialHistory, BalancedCoolingHistoryHasProduct]
+  | succ phases ih =>
+      let prefixLaw := balancedFigureOneForwardHistoryLaw parameters q I phases
+      let kernel := balancedFigureOneForwardPhaseKernel parameters q I phases
+      let good : Set (Option (BalancedCoolingHistory q.n)) :=
+        {history | BalancedCoolingHistoryHasProduct (phases + 1) history}
+      have hgood : MeasurableSet good :=
+        measurableSet_balancedCoolingHistoryHasProduct _
+      have hkernel : Measurable kernel :=
+        balancedFigureOneForwardPhaseKernel_measurable parameters q I phases
+      change ∀ᵐ history ∂prefixLaw.bind kernel,
+        BalancedCoolingHistoryHasProduct (phases + 1) history
+      apply MeasureTheory.mem_ae_iff.mpr
+      change (prefixLaw.bind kernel) goodᶜ = 0
+      rw [Measure.bind_apply hgood.compl hkernel.aemeasurable]
+      apply lintegral_eq_zero_of_ae_eq_zero
+      filter_upwards [ih] with history hhistory
+      exact MeasureTheory.mem_ae_iff.mp
+        (balancedFigureOneForwardPhaseKernel_ae_hasProduct
+          parameters q I phases phases history hhistory)
+
+theorem balancedFigureOneForwardHistoryLaw_zero_retainedState
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    (balancedFigureOneForwardHistoryLaw parameters q I 0).map
+        (balancedCoolingHistoryRetainedState q) =
+      (truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)) := by
+  change ((truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q) : Measure (AmbientSpace q.n)).map
+        balancedCoolingInitialHistory).map
+      (balancedCoolingHistoryRetainedState q) = _
+  rw [Measure.map_map (measurable_balancedCoolingHistoryRetainedState q)
+    measurable_balancedCoolingInitialHistory]
+  calc
+    Measure.map (balancedCoolingHistoryRetainedState q ∘
+        balancedCoolingInitialHistory)
+        (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)) =
+        Measure.map id
+          (truncatedGaussianProbability q I (initialVariance q)
+            (initialVariance_pos q) : Measure (AmbientSpace q.n)) := by
+      apply Measure.map_congr
+      filter_upwards with point
+      rfl
+    _ = _ := Measure.map_id
+
 #print axioms balancedCoolingHistorySnocTerminal_average_coordinate
 #print axioms balancedCoolingForwardGaussianPhaseKernel_measurable
 #print axioms balancedCoolingForwardTerminalPhaseKernel_measurable
 #print axioms balancedFigureOneForwardHistoryLaw_isProbabilityMeasure
+#print axioms balancedFigureOneForwardHistoryLaw_ae_hasProduct
+#print axioms balancedFigureOneForwardHistoryLaw_zero_retainedState
 
 end
 
