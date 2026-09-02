@@ -550,6 +550,42 @@ theorem figureOneFinalScheduledProposalCap_add_two_mul_blockError_le
   dsimp only [e, attempts, stride] at hceil ⊢
   nlinarith
 
+/-- At the final retry horizon, the scheduled stationary-target quarter is
+exactly one block budget per possible trial.  This is the arithmetic identity
+that makes charging a target-replacement submeasure compatible with the large
+local syntactic cap: the cap is multiplied by the small block error before the
+retry factor is introduced. -/
+theorem figureOneCorrectedTargetBudget_eq_safeRetryCount_nsmul_blockBudget
+    (q : VolumeParams) :
+    figureOneCorrectedTargetBudget q =
+      figureOneSafeRetryCount q •
+        figureOneCorrectedBlockBudget q (figureOneSafeRetryCount q - 1) := by
+  let N := figureOneSafeRetryCount q
+  have hN : 0 < N := by
+    simpa [N] using figureOneSafeRetryCount_pos q
+  have hnu : 0 < figureOnePerSampleMixingError q :=
+    figureOnePerSampleMixingError_pos q
+  unfold figureOneCorrectedTargetBudget figureOneCorrectedTransitionBudget
+    figureOneCorrectedBlockBudget figureOneCorrectedBlockMixingError
+  apply (ENNReal.toReal_eq_toReal_iff'
+    (ENNReal.div_ne_top (by simp) (by norm_num))
+    (by
+      rw [nsmul_eq_mul]
+      exact ENNReal.mul_ne_top (by simp) (by simp))).mp
+  rw [ENNReal.toReal_div, ENNReal.toReal_ofReal hnu.le,
+    ENNReal.toReal_ofNat, ENNReal.toReal_nsmul]
+  simp only [nsmul_eq_mul]
+  rw [ENNReal.toReal_ofReal (by positivity :
+    0 ≤ figureOnePerSampleMixingError q /
+      (4 * (((figureOneSafeRetryCount q - 1 : ℕ) : ℝ) + 1)))]
+  have hNcast : (((N - 1 : ℕ) : ℝ) + 1) = N := by
+    exact_mod_cast Nat.sub_add_cancel hN
+  dsimp only [N] at hNcast ⊢
+  rw [hNcast]
+  have hN0 : (figureOneSafeRetryCount q : ℝ) ≠ 0 := by
+    exact_mod_cast hN.ne'
+  field_simp [hN0]
+
 #print axioms figureOneSafeRetryCount_cast_le_correctedMixingLog
 #print axioms figureOneScheduledMixingDenominator_inv_sq_le
 #print axioms figureOneScheduledCorrectedProperStride_cast_le
@@ -559,5 +595,7 @@ theorem figureOneFinalScheduledProposalCap_add_two_mul_blockError_le
 #print axioms figureOneWarmShadowScheduledWork_cast_le
 #print axioms figureOneFinalScheduledLocalCapCeil_mul_blockError_le
 #print axioms figureOneFinalScheduledProposalCap_add_two_mul_blockError_le
+#print axioms
+  figureOneCorrectedTargetBudget_eq_safeRetryCount_nsmul_blockBudget
 
 end ArlibCommunity.Algorithms.CV18
