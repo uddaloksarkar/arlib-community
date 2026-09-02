@@ -1,5 +1,6 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCappedDominance
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledBranchMass
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledRetryCounted
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofExpectedQueryCostBounds
 
@@ -227,5 +228,91 @@ theorem lintegral_scheduledBalancedAccuracyLiveTrial_countedQueryCost_le_of_isWa
       exact lintegral_cappedScheduledAccuracyProperBlock_countedQueryCost_le_of_isWarm_submeasure
         q I oracle hsigma2 hwarm (proposalCap + 1) properStride
     _ = (properStride : ENNReal) * (M * 2) + 2 * mu Set.univ := by ring
+
+/-- Acceptance filtering can only remove mass from a scheduled endpoint law. -/
+theorem scheduledBalancedAcceptedStateMeasure_le
+    (q : VolumeParams) (I : VolumeInput q.n) {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (mu : Measure (AmbientSpace q.n)) :
+    scheduledBalancedAcceptedStateMeasure q I sigma2 mu ≤ mu := by
+  unfold scheduledBalancedAcceptedStateMeasure
+  apply Measure.le_iff.mpr
+  intro A hA
+  rw [withDensity_apply _ hA]
+  calc
+    (∫⁻ x in A, scheduledBalancedAccuracyGaussianAcceptance
+        q I sigma2 x ∂mu) ≤ ∫⁻ _x in A, (1 : ENNReal) ∂mu :=
+      lintegral_mono fun x =>
+        (scheduledBalancedAccuracyGaussianAcceptance_le_half
+          q I hsigma2 x).trans (by norm_num)
+    _ = mu A := by rw [setLIntegral_one]
+
+/-- Any submeasure of a warm measure is warm with the same coefficient. -/
+theorem isWarm_of_le_of_isWarm
+    {S : Type*} [MeasurableSpace S]
+    {M : ENNReal} {mu nu pi : Measure S}
+    (hle : nu ≤ mu) (hwarm : _root_.Arlib.IsWarm M mu pi) :
+    _root_.Arlib.IsWarm M nu pi := by
+  intro A hA
+  exact (Measure.le_iff.mp hle A hA).trans (hwarm A hA)
+
+/-- Both retry branches preserve the warmness of the successful block-endpoint
+sublaw.  No normalization, TV error, or proposal-cap term is required. -/
+theorem scheduledBalancedRetryBranches_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (proposalCap properStride : ℕ)
+    {M : ENNReal} {mu : Measure (AmbientSpace q.n)}
+    (hwarm : _root_.Arlib.IsWarm M mu
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)) :
+    let endpoint := successfulEndpointLaw
+      (mu.bind (scheduledBalancedAccuracyRetryBlockKernel q I sigma2
+        proposalCap properStride))
+    _root_.Arlib.IsWarm M
+        (scheduledBalancedAcceptedStateMeasure q I sigma2 endpoint)
+        (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+          (figureOneScheduledProposalRadius q sigma2) sigma2) ∧
+      _root_.Arlib.IsWarm M
+        (scheduledBalancedRejectedStateMeasure q I sigma2 endpoint)
+        (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+          (figureOneScheduledProposalRadius q sigma2) sigma2) := by
+  dsimp only
+  let pi := ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) sigma2
+  have hinvOne : Kernel.Invariant
+      (lazy (speedyMetropolisGaussian
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)) pi :=
+    (isReversible_lazy
+      (isReversible_speedyMetropolisGaussian_prob
+        (figureOneScheduledPhaseBody_measurable q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)).invariant
+  have hinv : Kernel.Invariant
+      ((lazy (speedyMetropolisGaussian
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)) ^ properStride) pi :=
+    by
+      induction properStride with
+      | zero =>
+          rw [pow_zero, Kernel.Invariant]
+          ext A hA
+          rw [Measure.bind_apply hA (Kernel.aemeasurable _)]
+          change (∫⁻ a, (Kernel.id a) A ∂pi) = pi A
+          simp_rw [Kernel.id_apply, Measure.dirac_apply' _ hA]
+          exact lintegral_indicator_one hA
+      | succ k ih =>
+          rw [pow_succ]
+          exact ih.comp hinvOne
+  have hend : _root_.Arlib.IsWarm M
+      (successfulEndpointLaw
+        (mu.bind (scheduledBalancedAccuracyRetryBlockKernel q I sigma2
+          proposalCap properStride))) pi :=
+    successfulEndpointLaw_bind_scheduledBalancedAccuracyRetryBlockKernel_isWarm
+      q I sigma2 proposalCap properStride hwarm hinv
+  exact ⟨
+    isWarm_of_le_of_isWarm
+      (scheduledBalancedAcceptedStateMeasure_le q I hsigma2 _) hend,
+    isWarm_of_le_of_isWarm
+      (scheduledBalancedRejectedStateMeasure_le q I sigma2 _) hend⟩
 
 end ArlibCommunity.Algorithms.CV18
