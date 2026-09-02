@@ -234,6 +234,14 @@ noncomputable def scheduledBalancedAccuracyGaussianRejectionKernel
   ⟨scheduledBalancedAccuracyGaussianRejectionLaw q I sigma2,
     measurable_scheduledBalancedAccuracyGaussianRejectionLaw q I sigma2⟩
 
+instance scheduledBalancedAccuracyGaussianRejectionKernel_isMarkovKernel
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (sigma2 : ℝ) [Fact (0 < sigma2)] :
+    IsMarkovKernel
+      (scheduledBalancedAccuracyGaussianRejectionKernel q I sigma2) :=
+  ⟨scheduledBalancedAccuracyGaussianRejectionLaw_isProbabilityMeasure
+    q I (Fact.out : 0 < sigma2)⟩
+
 noncomputable def scheduledAccuracyGaussianAcceptedTargetLaw
     (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
     (mu : Measure (AmbientSpace q.n)) : Measure (AmbientSpace q.n) :=
