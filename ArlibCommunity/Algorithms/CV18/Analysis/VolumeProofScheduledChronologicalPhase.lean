@@ -701,6 +701,140 @@ theorem figureOneScheduledActualChronologicalPhaseKernel_measurable_and_probabil
       (scheduledBalancedForwardPhaseKernel_measurable_and_probability
         parameters q I i).2 history) phase
 
+/-- Deterministic state transformer underlying the ideal chronological
+kernel. -/
+noncomputable def figureOneIdealChronologicalState
+    (q : VolumeParams) : ℕ →
+    FigureOneIdealExperimentSpace q × Option (BalancedCoolingHistory q.n) →
+      FigureOneIdealExperimentSpace q × Option (BalancedCoolingHistory q.n)
+  | 0, state => state
+  | phases + 1, state =>
+      let previous := figureOneIdealChronologicalState q phases state
+      if hphase : phases < figureOneDependentPhaseCount q then
+        figureOneIdealChronologicalAppend q phases hphase previous
+      else previous
+
+theorem measurable_figureOneIdealChronologicalState
+    (q : VolumeParams) : ∀ phases,
+    Measurable (figureOneIdealChronologicalState q phases) := by
+  intro phases
+  induction phases with
+  | zero => exact measurable_id
+  | succ phases ih =>
+      simp only [figureOneIdealChronologicalState]
+      split_ifs with hphase
+      · exact (measurable_figureOneIdealChronologicalAppend q phases hphase).comp ih
+      · exact ih
+
+theorem figureOneIdealChronologicalState_fst
+    (q : VolumeParams) (phases : ℕ)
+    (state : FigureOneIdealExperimentSpace q ×
+      Option (BalancedCoolingHistory q.n)) :
+    (figureOneIdealChronologicalState q phases state).1 = state.1 := by
+  induction phases with
+  | zero => rfl
+  | succ phases ih =>
+      simp only [figureOneIdealChronologicalState]
+      split_ifs <;>
+        simp [figureOneIdealChronologicalAppend, ih]
+
+/-- Through the finite horizon, deterministic ideal appends build exactly
+the chronological product of ideal phase averages. -/
+theorem figureOneIdealChronologicalState_product
+    (q : VolumeParams) (samples : FigureOneIdealExperimentSpace q)
+    (initialHistory : BalancedCoolingHistory q.n)
+    (hinitialCount : initialHistory.2.1 = 0)
+    (hinitialProduct : initialHistory.2.2.1 = 1) :
+    ∀ phases, phases ≤ figureOneDependentPhaseCount q →
+      ∃ history,
+        (figureOneIdealChronologicalState q phases
+          (samples, some initialHistory)).2 = some history ∧
+        history.2.1 = phases ∧
+        history.2.2.1 =
+          dependentPhaseSampleProduct
+            (figureOneChronologicalIdealCoordinate q) phases samples := by
+  intro phases hphases
+  induction phases with
+  | zero =>
+      refine ⟨initialHistory, rfl, hinitialCount, ?_⟩
+      simpa [dependentPhaseSampleProduct_zero] using hinitialProduct
+  | succ phases ih =>
+      have hphase : phases < figureOneDependentPhaseCount q := by omega
+      obtain ⟨history, hstate, hcount, hproduct⟩ :=
+        ih (Nat.le_of_succ_le hphases)
+      let next := balancedCoolingHistorySnocTerminal history <| some
+        (figureOneIdealPhaseEstimator q
+            (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)
+            (samples (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)),
+          figureOneIdealPhaseRetainedPoint q
+            (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)
+            (samples (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)))
+      have hnext : (figureOneIdealChronologicalState q (phases + 1)
+          (samples, some initialHistory)).2 = next := by
+        simp only [figureOneIdealChronologicalState]
+        rw [dif_pos hphase]
+        rw [show figureOneIdealChronologicalState q phases
+            (samples, some initialHistory) = (samples, some history) by
+          apply Prod.ext
+          · exact (figureOneIdealChronologicalState_fst q phases _).trans rfl
+          · exact hstate]
+        rfl
+      let nextHistory : BalancedCoolingHistory q.n :=
+        (fun k => if k = history.2.1 then
+            figureOneIdealPhaseEstimator q
+              (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)
+              (samples (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩))
+            else history.1 k,
+          history.2.1 + 1,
+          history.2.2.1 * figureOneIdealPhaseEstimator q
+            (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)
+            (samples (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)),
+          figureOneIdealPhaseRetainedPoint q
+            (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)
+            (samples (figureOneChronologicalPhaseOrder q ⟨phases, hphase⟩)))
+      have hnextSome : next = some nextHistory := by
+        rfl
+      refine ⟨nextHistory, hnext.trans hnextSome, ?_, ?_⟩
+      · simp [nextHistory, hcount]
+      · dsimp only [nextHistory]
+        rw [hproduct, dependentPhaseSampleProduct_succ]
+        congr 1
+        unfold figureOneChronologicalIdealCoordinate figureOneIdealCoordinate
+        rw [figureOneChronologicalPhaseAt_succ q phases hphase]
+
+theorem iteratedKernelLaw_figureOneIdealChronologicalPhaseKernel
+    (q : VolumeParams)
+    (initial : Measure (FigureOneIdealExperimentSpace q ×
+      Option (BalancedCoolingHistory q.n))) : ∀ phases,
+    iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
+        initial phases =
+      initial.map (figureOneIdealChronologicalState q phases) := by
+  intro phases
+  induction phases with
+  | zero =>
+      symm
+      exact Measure.map_id
+  | succ phases ih =>
+      rw [iteratedKernelLaw_succ, ih]
+      rw [map_bind_eq_bind_comp initial
+        (figureOneIdealChronologicalState q phases)
+        (measurable_figureOneIdealChronologicalState q phases)
+        (figureOneIdealChronologicalPhaseKernel q phases)
+        (figureOneIdealChronologicalPhaseKernel_measurable_and_probability
+          q phases).1]
+      have hkernel :
+          figureOneIdealChronologicalPhaseKernel q phases ∘
+              figureOneIdealChronologicalState q phases =
+            fun state => Measure.dirac
+              (figureOneIdealChronologicalState q (phases + 1) state) := by
+        funext state
+        simp only [figureOneIdealChronologicalPhaseKernel,
+          figureOneIdealChronologicalState, Function.comp_apply]
+        split_ifs <;> rfl
+      rw [hkernel]
+      exact Measure.bind_dirac_eq_map _
+        (measurable_figureOneIdealChronologicalState q (phases + 1))
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
