@@ -649,6 +649,58 @@ theorem scheduledChronologicalActualIteration_map_snd
     scheduledChronologicalCommonInitial_map_snd]
   rfl
 
+/-- Ideal outer-phase kernel on the common state.  It reads the next
+independent phase block already present in the ideal experiment and appends
+its average and a retained stationary point deterministically. -/
+noncomputable def figureOneIdealChronologicalPhaseKernel
+    (q : VolumeParams) : ℕ →
+    FigureOneIdealExperimentSpace q × Option (BalancedCoolingHistory q.n) →
+      Measure (FigureOneIdealExperimentSpace q ×
+        Option (BalancedCoolingHistory q.n)) := fun phase state =>
+  if hphase : phase < figureOneDependentPhaseCount q then
+    Measure.dirac (figureOneIdealChronologicalAppend q phase hphase state)
+  else Measure.dirac state
+
+theorem figureOneIdealChronologicalPhaseKernel_measurable_and_probability
+    (q : VolumeParams) (phase : ℕ) :
+    Measurable (figureOneIdealChronologicalPhaseKernel q phase) ∧
+    ∀ state, IsProbabilityMeasure
+      (figureOneIdealChronologicalPhaseKernel q phase state) := by
+  constructor
+  · unfold figureOneIdealChronologicalPhaseKernel
+    split_ifs with hphase
+    · exact Measure.measurable_dirac.comp
+        (measurable_figureOneIdealChronologicalAppend q phase hphase)
+    · exact Measure.measurable_dirac
+  · intro state
+    unfold figureOneIdealChronologicalPhaseKernel
+    split_ifs <;> infer_instance
+
+/-- The actual outer-phase kernel on the common state carries the independent
+ideal experiment untouched and updates only the scheduled history. -/
+noncomputable def figureOneScheduledActualChronologicalPhaseKernel
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :=
+  carryHistoryKernel (A := FigureOneIdealExperimentSpace q)
+    (scheduledBalancedForwardPhaseKernel parameters q I)
+
+theorem figureOneScheduledActualChronologicalPhaseKernel_measurable_and_probability
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase : ℕ) :
+    Measurable
+      (figureOneScheduledActualChronologicalPhaseKernel parameters q I phase) ∧
+    ∀ state, IsProbabilityMeasure
+      (figureOneScheduledActualChronologicalPhaseKernel parameters q I phase
+        state) :=
+  carryHistoryKernel_measurable_and_probability
+    (scheduledBalancedForwardPhaseKernel parameters q I)
+    (fun i =>
+      (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+        parameters q I i).1)
+    (fun i history =>
+      (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+        parameters q I i).2 history) phase
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
