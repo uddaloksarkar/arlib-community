@@ -7,6 +7,34 @@ namespace ArlibCommunity.Algorithms.CV18
 
 open MeasureTheory Set
 
+/-- Pushforward form of approximate independence.  This is useful after a
+future history kernel has been represented by a measurable trace map that
+preserves the two already-created coordinates. -/
+theorem ApproxIndepFun.map
+    {Omega Omega' S T : Type*} [MeasurableSpace Omega]
+    [MeasurableSpace Omega'] [MeasurableSpace S] [MeasurableSpace T]
+    {epsilon : ℝ} {mu : Measure Omega} (f : Omega → Omega')
+    (hf : Measurable f) (X : Omega' → S) (Y : Omega' → T)
+    (hX : Measurable X) (hY : Measurable Y)
+    (h : ApproxIndepFun epsilon (X ∘ f) (Y ∘ f) mu) :
+    ApproxIndepFun epsilon X Y (mu.map f) := by
+  intro A hA B hB
+  have hXA : MeasurableSet (X ⁻¹' A) := hX hA
+  have hYB : MeasurableSet (Y ⁻¹' B) := hY hB
+  have hjoint : (mu.map f).real (X ⁻¹' A ∩ Y ⁻¹' B) =
+      mu.real (f ⁻¹' (X ⁻¹' A ∩ Y ⁻¹' B)) :=
+    congrArg ENNReal.toReal (Measure.map_apply hf (hXA.inter hYB))
+  have hleft : (mu.map f).real (X ⁻¹' A) =
+      mu.real (f ⁻¹' (X ⁻¹' A)) :=
+    congrArg ENNReal.toReal (Measure.map_apply hf hXA)
+  have hright : (mu.map f).real (Y ⁻¹' B) =
+      mu.real (f ⁻¹' (Y ⁻¹' B)) :=
+    congrArg ENNReal.toReal (Measure.map_apply hf hYB)
+  rw [hjoint, hleft, hright]
+  change |mu.real (((X ∘ f) ⁻¹' A) ∩ ((Y ∘ f) ⁻¹' B)) -
+      mu.real ((X ∘ f) ⁻¹' A) * mu.real ((Y ∘ f) ⁻¹' B)| ≤ epsilon
+  exact h A hA B hB
+
 /-- Changing the ambient probability law by total variation `delta` changes
 the strong-mixing coefficient by at most `3 * delta`.  One copy pays for the
 joint rectangle and two copies pay for its marginal product. -/
@@ -93,5 +121,6 @@ theorem ApproxIndepFun.of_measureLeUpTo
 
 #print axioms ApproxIndepFun.of_tvLe
 #print axioms ApproxIndepFun.of_measureLeUpTo
+#print axioms ApproxIndepFun.map
 
 end ArlibCommunity.Algorithms.CV18
