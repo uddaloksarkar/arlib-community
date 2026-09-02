@@ -136,6 +136,67 @@ noncomputable def scheduledBalancedAbortCoolingPrimitives
   ratioEstimate := scheduledBalancedCoolingRatioEstimate parameters
   uniformRatioEstimate := scheduledBalancedCoolingUniformRatioEstimate parameters
 
+/-- `coolingProduct` does not inspect the initialization field, so changing
+only that field leaves every post-initial continuation definitionally
+equivalent. -/
+theorem scheduledBalancedAbort_coolingProduct_eq
+    (parameters : BalancedCoolingParameters) (q : VolumeParams) :
+    ∀ (variances : List ℝ) (point : AmbientSpace q.n),
+      coolingProduct (scheduledBalancedAbortCoolingPrimitives parameters) q
+          variances point =
+        coolingProduct (scheduledBalancedCoolingPrimitives parameters) q
+          variances point := by
+  intro variances
+  induction variances with
+  | nil =>
+      intro point
+      simp [coolingProduct, scheduledBalancedAbortCoolingPrimitives,
+        scheduledBalancedCoolingPrimitives]
+  | cons sigma2 tail ih =>
+      intro point
+      cases tail with
+      | nil =>
+          simp [coolingProduct, scheduledBalancedAbortCoolingPrimitives,
+            scheduledBalancedCoolingPrimitives]
+      | cons tau2 rest =>
+          simp only [coolingProduct, scheduledBalancedAbortCoolingPrimitives,
+            scheduledBalancedCoolingPrimitives]
+          congr 1
+          funext phase
+          cases phase with
+          | none => rfl
+          | some value =>
+              rcases value with ⟨ratio, nextPoint⟩
+              simp only
+              change
+                (coolingProduct
+                    (scheduledBalancedAbortCoolingPrimitives parameters) q
+                    (tau2 :: rest) nextPoint).bind _ =
+                  (coolingProduct
+                    (scheduledBalancedCoolingPrimitives parameters) q
+                    (tau2 :: rest) nextPoint).bind _
+              rw [ih nextPoint]
+
+/-- Replacing the initializer by the aborting version leaves the complete
+post-initial point continuation unchanged. -/
+theorem scheduledBalancedAbort_pointContinuation_eq
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (point : AmbientSpace q.n) :
+    (coolingProduct (scheduledBalancedAbortCoolingPrimitives parameters) q
+        (explicitVolumeCoolingSchedule q).variances point).bind (fun product =>
+      match product with
+      | none => .pure (0 : ℝ)
+      | some (gaussianProduct, lastPoint) =>
+          ((scheduledBalancedAbortCoolingPrimitives parameters).uniformRatioEstimate
+              q (terminalVariance q) lastPoint).bind (fun finalRatio =>
+            .pure (match finalRatio with
+              | some uniformRatio =>
+                  initialGaussianIntegral q * gaussianProduct * uniformRatio
+              | none => (0 : ℝ)))) =
+      scheduledBalancedFigureOnePointContinuation parameters q point := by
+  rw [scheduledBalancedAbort_coolingProduct_eq]
+  rfl
+
 /-- Candidate final scheduled base program whose failed initialization costs
 exactly one query and performs no cooling transitions. -/
 noncomputable def figureOneFinalScheduledAbortBaseProgram
@@ -148,5 +209,7 @@ noncomputable def figureOneFinalScheduledAbortBaseProgram
 #print axioms runEstimate_figureOneAbortInitialSample
 #print axioms figureOneAbortInitialSample_countedStronglyMeasurable
 #print axioms initialGaussianSamplingMeasure_restrict_truncatedBody_le
+#print axioms scheduledBalancedAbort_coolingProduct_eq
+#print axioms scheduledBalancedAbort_pointContinuation_eq
 
 end ArlibCommunity.Algorithms.CV18
