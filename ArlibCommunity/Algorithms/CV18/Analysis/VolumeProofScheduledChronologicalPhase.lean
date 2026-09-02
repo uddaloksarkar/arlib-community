@@ -463,6 +463,70 @@ theorem scheduledBalancedForwardHistoryLaw_isProbabilityMeasure
     exact (scheduledBalancedForwardPhaseKernel_measurable_and_probability
       parameters q I i).2 history
 
+theorem scheduledBalancedForwardPhaseKernel_ae_hasProduct
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase m : ℕ)
+    (history : Option (BalancedCoolingHistory q.n))
+    (hproduct : BalancedCoolingHistoryHasProduct m history) :
+    ∀ᵐ next ∂scheduledBalancedForwardPhaseKernel parameters q I phase history,
+      BalancedCoolingHistoryHasProduct (m + 1) next := by
+  cases history with
+  | none =>
+      unfold scheduledBalancedForwardPhaseKernel
+      apply (ae_dirac_iff
+        (measurableSet_balancedCoolingHistoryHasProduct _)).2
+      simp [BalancedCoolingHistoryHasProduct]
+  | some history =>
+      unfold scheduledBalancedForwardPhaseKernel
+      split_ifs
+      · apply (ae_map_iff
+          ((measurable_balancedCoolingHistorySnocTerminal (n := q.n)).comp
+            (measurable_const.prodMk measurable_id)).aemeasurable
+          (measurableSet_balancedCoolingHistoryHasProduct _)).2
+        filter_upwards with result
+        exact hproduct.snocTerminal result
+      · apply (ae_map_iff
+          ((measurable_balancedCoolingHistorySnocTerminal (n := q.n)).comp
+            (measurable_const.prodMk measurable_id)).aemeasurable
+          (measurableSet_balancedCoolingHistoryHasProduct _)).2
+        filter_upwards with result
+        exact hproduct.snocTerminal result
+
+theorem scheduledBalancedForwardHistoryLaw_ae_hasProduct
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) : ∀ phases,
+    ∀ᵐ history ∂scheduledBalancedForwardHistoryLaw parameters q I phases,
+      BalancedCoolingHistoryHasProduct phases history := by
+  intro phases
+  induction phases with
+  | zero =>
+      unfold scheduledBalancedForwardHistoryLaw
+      apply (ae_map_iff measurable_balancedCoolingInitialHistory.aemeasurable
+        (measurableSet_balancedCoolingHistoryHasProduct 0)).2
+      filter_upwards with point
+      simp [balancedCoolingInitialHistory, BalancedCoolingHistoryHasProduct]
+  | succ phases ih =>
+      let prefixLaw :=
+        scheduledBalancedForwardHistoryLaw parameters q I phases
+      let kernel := scheduledBalancedForwardPhaseKernel parameters q I phases
+      let good : Set (Option (BalancedCoolingHistory q.n)) :=
+        {history | BalancedCoolingHistoryHasProduct (phases + 1) history}
+      have hgood : MeasurableSet good :=
+        measurableSet_balancedCoolingHistoryHasProduct _
+      have hkernel : Measurable kernel :=
+        (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+          parameters q I phases).1
+      change ∀ᵐ history ∂prefixLaw.bind kernel,
+        BalancedCoolingHistoryHasProduct (phases + 1) history
+      apply MeasureTheory.mem_ae_iff.mpr
+      change (prefixLaw.bind kernel) goodᶜ = 0
+      rw [Measure.bind_apply hgood.compl hkernel.aemeasurable]
+      apply lintegral_eq_zero_of_ae_eq_zero
+      filter_upwards [ih] with history hhistory
+      exact MeasureTheory.mem_ae_iff.mp
+        (scheduledBalancedForwardPhaseKernel_ae_hasProduct
+          parameters q I phases phases history hhistory)
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
