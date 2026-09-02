@@ -264,4 +264,217 @@ theorem cappedScheduledAccuracyProperBlock_countedMeasurable
   cappedScheduledAccuracyProperBlockAux_countedMeasurable
     q I oracle hsigma2 properStride rawCap properStride
 
+/-- Pointwise Bellman bound for the actual schedule-targeted proper block.
+The bound is independent of `rawCap`: truncation only removes executions. -/
+theorem cappedScheduledAccuracyProperBlockAux_countedQueryCost_le
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (properStride : ℕ) : ∀ rawCap remainingProper current,
+    countedQueryCost
+        ((cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+          rawCap remainingProper current).run oracle.query) ≤
+      totalLazyProperExpectedRawCost
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledPhaseBody_measurable q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2
+        remainingProper current + 1 := by
+  let K := figureOneScheduledPhaseBody q I sigma2
+  let hK : MeasurableSet K := figureOneScheduledPhaseBody_measurable q I sigma2
+  let delta := figureOneScheduledProposalRadius q sigma2
+  let E := totalLazyProperExpectedRawCost K hK delta sigma2
+  let Q := lazyProperProposalGaussianAux K hK delta sigma2
+  have hstep := one_add_lintegral_totalLazyProperExpectedRawCost_le
+    K hK (figureOneScheduledPhaseBody_convex q I sigma2)
+      (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+      (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+      (figureOneScheduledProposalRadius_pos q hsigma2) sigma2
+  intro rawCap
+  induction rawCap with
+  | zero =>
+      intro remainingProper current
+      simp only [cappedScheduledAccuracyProperBlockAux,
+        MembershipOracleProgram.run, countedQueryCost]
+      rw [lintegral_dirac' _ measurable_countedQueryCost_integrand]
+      simp
+  | succ rawCap ih =>
+      intro remainingProper current
+      cases remainingProper with
+      | zero =>
+          let observation := scheduledAccuracyZeroObservation q sigma2 current
+          let next : ℝ → MembershipOracleProgram q.n
+              (Option (ℝ × AmbientSpace q.n)) := fun observed =>
+            .pure (some (observed, current))
+          have hnext : ∀ observed,
+              (next observed).CountedStronglyMeasurable oracle.query := by
+            intro observed
+            trivial
+          have hnextRun : Measurable fun observed =>
+              (next observed).run oracle.query := by
+            simp only [next, MembershipOracleProgram.run]
+            exact Measure.measurable_dirac.comp <|
+              (measurable_some.comp <|
+                measurable_id.prodMk measurable_const).prodMk measurable_const
+          rw [show cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+              (rawCap + 1) 0 current = observation.bind next by
+                simp [observation, next, cappedScheduledAccuracyProperBlockAux]]
+          rw [(scheduledAccuracyZeroObservation_fixedQueryCount
+            q sigma2 current).countedQueryCost_bind oracle.query next
+              (scheduledAccuracyZeroObservation_stronglyMeasurable
+                q I oracle sigma2 current)
+              (scheduledAccuracyZeroObservation_countedStronglyMeasurable
+                q I oracle sigma2 current) hnext hnextRun]
+          have hzero : ∀ observed, countedQueryCost
+              ((next observed).run oracle.query) = 0 := by
+            intro observed
+            simp only [next, MembershipOracleProgram.run, countedQueryCost]
+            rw [lintegral_dirac' _ measurable_countedQueryCost_integrand]
+            simp
+          simp_rw [hzero]
+          simp [E, totalLazyProperExpectedRawCost]
+      | succ remainingProper =>
+          let step := scheduledAccuracyMetropolisMarkedBallStep q sigma2 current
+          let next : Bool × AmbientSpace q.n → MembershipOracleProgram q.n
+              (Option (ℝ × AmbientSpace q.n)) := fun result =>
+            if result.1 then
+              match remainingProper with
+              | 0 => cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                  rawCap 0 result.2
+              | nextRemaining + 1 =>
+                  cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                    rawCap (nextRemaining + 1) result.2
+            else cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+              rawCap (remainingProper + 1) result.2
+          have hnext : ∀ result,
+              (next result).CountedStronglyMeasurable oracle.query := by
+            rintro ⟨mark, point⟩
+            cases mark
+            · exact (cappedScheduledAccuracyProperBlockAux_countedMeasurable
+                q I oracle hsigma2 properStride rawCap
+                  (remainingProper + 1)).2 point
+            · cases remainingProper with
+              | zero =>
+                  exact (cappedScheduledAccuracyProperBlockAux_countedMeasurable
+                    q I oracle hsigma2 properStride rawCap 0).2 point
+              | succ nextRemaining =>
+                  exact (cappedScheduledAccuracyProperBlockAux_countedMeasurable
+                    q I oracle hsigma2 properStride rawCap
+                      (nextRemaining + 1)).2 point
+          have hnextRun : Measurable fun result =>
+              (next result).run oracle.query := by
+            dsimp only [next]
+            rw [show (fun result : Bool × AmbientSpace q.n =>
+                (if result.1 = true then
+                  match remainingProper with
+                  | 0 => cappedScheduledAccuracyProperBlockAux q sigma2
+                      properStride rawCap 0 result.2
+                  | nextRemaining + 1 =>
+                      cappedScheduledAccuracyProperBlockAux q sigma2
+                        properStride rawCap (nextRemaining + 1) result.2
+                else cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                  rawCap (remainingProper + 1) result.2).run oracle.query) =
+              fun result => if result.1 = true then
+                (match remainingProper with
+                | 0 => cappedScheduledAccuracyProperBlockAux q sigma2
+                    properStride rawCap 0 result.2
+                | nextRemaining + 1 =>
+                    cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                      rawCap (nextRemaining + 1) result.2).run oracle.query
+              else (cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                rawCap (remainingProper + 1) result.2).run oracle.query by
+                funext result
+                split <;> rfl]
+            apply Measurable.ite
+            · exact measurable_fst (measurableSet_singleton true)
+            · cases remainingProper with
+              | zero =>
+                  exact (cappedScheduledAccuracyProperBlockAux_countedMeasurable
+                    q I oracle hsigma2 properStride rawCap 0).1.comp measurable_snd
+              | succ nextRemaining =>
+                  exact (cappedScheduledAccuracyProperBlockAux_countedMeasurable
+                    q I oracle hsigma2 properStride rawCap
+                      (nextRemaining + 1)).1.comp measurable_snd
+            · exact (cappedScheduledAccuracyProperBlockAux_countedMeasurable
+                q I oracle hsigma2 properStride rawCap
+                  (remainingProper + 1)).1.comp measurable_snd
+          rw [show cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+              (rawCap + 1) (remainingProper + 1) current = step.bind next by
+                rw [cappedScheduledAccuracyProperBlockAux]
+                rfl]
+          rw [(scheduledAccuracyMetropolisMarkedBallStep_fixedQueryCount
+            q sigma2 current).countedQueryCost_bind oracle.query next
+              (scheduledAccuracyMetropolisMarkedBallStep_stronglyMeasurable
+                q I oracle sigma2 current)
+              (scheduledAccuracyMetropolisMarkedBallStep_countedStronglyMeasurable
+                q I oracle sigma2 current) hnext hnextRun]
+          rw [runEstimate_scheduledAccuracyMetropolisMarkedBallStep_eq_lazyProperAux
+            q I oracle hsigma2 current]
+          have hmono : (∫⁻ result, countedQueryCost ((next result).run oracle.query)
+                ∂Q current) ≤
+              ∫⁻ result, E (if result.1 then remainingProper else
+                remainingProper + 1) result.2 + 1 ∂Q current := by
+            apply lintegral_mono
+            rintro ⟨mark, point⟩
+            cases mark
+            · exact ih (remainingProper + 1) point
+            · cases remainingProper with
+              | zero => exact ih 0 point
+              | succ nextRemaining => exact ih (nextRemaining + 1) point
+          have hEmeas : Measurable fun result : Bool × AmbientSpace q.n =>
+              E (if result.1 then remainingProper else remainingProper + 1)
+                result.2 := by
+            rw [show (fun result : Bool × AmbientSpace q.n =>
+                E (if result.1 then remainingProper else remainingProper + 1)
+                  result.2) = fun result => if result.1 = true then
+                    E remainingProper result.2 else
+                    E (remainingProper + 1) result.2 by
+              funext result
+              rcases result with ⟨mark, point⟩
+              cases mark <;> rfl]
+            exact Measurable.ite (measurable_fst (measurableSet_singleton true))
+              ((measurable_totalLazyProperExpectedRawCost K hK delta sigma2
+                remainingProper).comp measurable_snd)
+              ((measurable_totalLazyProperExpectedRawCost K hK delta sigma2
+                (remainingProper + 1)).comp measurable_snd)
+          have hresult : (1 : ENNReal) +
+                ∫⁻ result, countedQueryCost ((next result).run oracle.query)
+                  ∂Q current ≤ E (remainingProper + 1) current + 1 := by
+            calc
+              (1 : ENNReal) +
+                  ∫⁻ result, countedQueryCost ((next result).run oracle.query)
+                    ∂Q current ≤
+                1 + ∫⁻ result, E (if result.1 then remainingProper else
+                  remainingProper + 1) result.2 + 1 ∂Q current := by gcongr
+              _ = (1 + ∫⁻ result,
+                  E (if result.1 then remainingProper else remainingProper + 1)
+                    result.2 ∂Q current) + 1 := by
+                rw [lintegral_add_left hEmeas]
+                simp only [lintegral_const, measure_univ, one_mul]
+                ring
+              _ ≤ E (remainingProper + 1) current + 1 := by
+                gcongr
+                exact hstep remainingProper current
+          dsimp only [Q, E, K, delta] at hresult
+          have hK_eq : hK = figureOneScheduledPhaseBody_measurable q I sigma2 :=
+            Subsingleton.elim _ _
+          rw [hK_eq] at hresult
+          simpa only [Nat.cast_one] using hresult
+
+theorem cappedScheduledAccuracyProperBlock_countedQueryCost_le
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (rawCap properStride : ℕ) (current : AmbientSpace q.n) :
+    countedQueryCost
+        ((cappedScheduledAccuracyProperBlock q sigma2 rawCap properStride
+          current).run oracle.query) ≤
+      totalLazyProperExpectedRawCost
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledPhaseBody_measurable q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2
+        properStride current + 1 := by
+  unfold cappedScheduledAccuracyProperBlock
+  exact cappedScheduledAccuracyProperBlockAux_countedQueryCost_le
+    q I oracle hsigma2 properStride rawCap properStride current
+
+#print axioms cappedScheduledAccuracyProperBlock_countedQueryCost_le
+
 end ArlibCommunity.Algorithms.CV18
