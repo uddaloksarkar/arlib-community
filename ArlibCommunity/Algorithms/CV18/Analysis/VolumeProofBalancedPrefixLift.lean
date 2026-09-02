@@ -114,4 +114,75 @@ theorem cappedAccuracyProperCollectWeights_queryPrefixEq_of_le
   · omega
   · omega
 
+/-- Changing the artificial local proposal cap above the outer budget is
+invisible through all balanced retries. -/
+theorem balancedAccuracyRetryCollectAux_queryPrefixEq_of_le
+    (q : VolumeParams) (sigma2 : ℝ)
+    (weight : AmbientSpace q.n → ℝ) (properStride retryLimit : ℕ) :
+    ∀ samples attempts total current budget proposalCap₁ proposalCap₂,
+      budget ≤ proposalCap₁ → budget ≤ proposalCap₂ →
+      QueryPrefixEq budget
+        (balancedAccuracyRetryCollectAux q sigma2 weight proposalCap₁
+          properStride retryLimit attempts samples total current)
+        (balancedAccuracyRetryCollectAux q sigma2 weight proposalCap₂
+          properStride retryLimit attempts samples total current) := by
+  intro samples
+  induction samples using Nat.strong_induction_on with
+  | h samples ihSamples =>
+      cases samples with
+      | zero =>
+          intro attempts total current budget proposalCap₁ proposalCap₂ hcap₁ hcap₂
+          rw [balancedAccuracyRetryCollectAux,
+            balancedAccuracyRetryCollectAux]
+          exact .pure budget _
+      | succ future =>
+          intro attempts
+          induction attempts with
+          | zero =>
+              intro total current budget proposalCap₁ proposalCap₂ hcap₁ hcap₂
+              rw [balancedAccuracyRetryCollectAux,
+                balancedAccuracyRetryCollectAux]
+              exact .pure budget _
+          | succ attempts ihAttempts =>
+              intro total current budget proposalCap₁ proposalCap₂ hcap₁ hcap₂
+              simp only [balancedAccuracyRetryCollectAux]
+              have hblock := cappedAccuracyProperCollectWeights_queryPrefixEq_of_le
+                q sigma2 (fun _ => 0) properStride 1 current hcap₁ hcap₂
+              apply hblock.bind
+              intro block
+              cases block with
+              | none => exact .pure budget _
+              | some value =>
+                  rcases value with ⟨ignored, mixed⟩
+                  apply (QueryPrefixEq.refl budget
+                    (balancedAccuracyGaussianRejectionAttempt q sigma2 mixed)).bind
+                  intro result
+                  by_cases hresult : result.1 = true
+                  · simp only [hresult, if_true]
+                    exact ihSamples future (by omega) retryLimit
+                      (total + weight result.2) mixed budget proposalCap₁
+                        proposalCap₂ hcap₁ hcap₂
+                  · have hfalse : result.1 = false :=
+                      Bool.eq_false_of_not_eq_true hresult
+                    simp only [hfalse, Bool.false_eq_true, if_false]
+                    exact ihAttempts total mixed budget proposalCap₁ proposalCap₂
+                      hcap₁ hcap₂
+
+theorem balancedAccuracyRetryCollect_queryPrefixEq_of_le
+    (q : VolumeParams) (sigma2 : ℝ)
+    (weight : AmbientSpace q.n → ℝ) (properStride retryLimit samples : ℕ)
+    (current : AmbientSpace q.n) {budget proposalCap₁ proposalCap₂ : ℕ}
+    (hcap₁ : budget ≤ proposalCap₁) (hcap₂ : budget ≤ proposalCap₂) :
+    QueryPrefixEq budget
+      (balancedAccuracyRetryCollect q sigma2 weight proposalCap₁
+        properStride retryLimit samples current)
+      (balancedAccuracyRetryCollect q sigma2 weight proposalCap₂
+        properStride retryLimit samples current) := by
+  unfold balancedAccuracyRetryCollect
+  apply (balancedAccuracyRetryCollectAux_queryPrefixEq_of_le
+    q sigma2 weight properStride retryLimit samples retryLimit 0 current budget
+      proposalCap₁ proposalCap₂ hcap₁ hcap₂).bind
+  intro result
+  exact .pure budget _
+
 end ArlibCommunity.Algorithms.CV18
