@@ -36,6 +36,15 @@ def ApproxIndepFun (epsilon : ℝ) (X : Omega -> S) (Y : Omega -> T)
     |mu.real (X ⁻¹' A ∩ Y ⁻¹' B) -
       mu.real (X ⁻¹' A) * mu.real (Y ⁻¹' B)| <= epsilon
 
+/-- An approximate-independence estimate remains true after enlarging its
+error budget. -/
+theorem ApproxIndepFun.mono {epsilon epsilon' : ℝ}
+    {X : Omega -> S} {Y : Omega -> T} {mu : Measure Omega}
+    (h : ApproxIndepFun epsilon X Y mu) (hle : epsilon <= epsilon') :
+    ApproxIndepFun epsilon' X Y mu := by
+  intro A hA B hB
+  exact (h A hA B hB).trans hle
+
 /-- CV18 Lemma 7.13: measurable postprocessing cannot increase the
 approximate-independence coefficient. -/
 theorem ApproxIndepFun.comp {epsilon : ℝ} {X : Omega -> S} {Y : Omega -> T}

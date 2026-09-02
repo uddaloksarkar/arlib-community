@@ -21,6 +21,30 @@ open MeasureTheory Set
 
 variable {H T : Type*} [MeasurableSpace H] [MeasurableSpace T]
 
+/-- Measurable postprocessing preserves warmness with the same coefficient. -/
+theorem isWarm_map {S : Type*} [MeasurableSpace S]
+    {M : ENNReal} {mu nu : Measure H} (h : Arlib.IsWarm M mu nu)
+    {f : H -> S} (hf : Measurable f) :
+    Arlib.IsWarm M (mu.map f) (nu.map f) := by
+  intro A hA
+  rw [Measure.map_apply hf hA, Measure.map_apply hf hA]
+  exact h (f ⁻¹' A) (hf hA)
+
+/-- Mapping a state projection before a kernel agrees with composing that
+kernel with the projection. -/
+theorem map_bind_eq_bind_comp_state
+    {S : Type*} [MeasurableSpace S]
+    (mu : Measure H) {state : H -> S} (hstate : Measurable state)
+    {K : S -> Measure T} (hK : Measurable K) :
+    (mu.map state).bind K = mu.bind (K ∘ state) := by
+  ext A hA
+  rw [Measure.bind_apply hA hK.aemeasurable,
+    Measure.bind_apply hA (hK.comp hstate).aemeasurable]
+  have hm : AEMeasurable (fun s => K s A) (mu.map state) :=
+    ((Measure.measurable_coe hA).comp hK).aemeasurable
+  rw [lintegral_map' hm hstate.aemeasurable]
+  rfl
+
 /-- Joint law of a previous history and the output of the next sequential
 kernel. -/
 noncomputable def sequentialPairLaw (rho : Measure H) (K : H -> Measure T) :
@@ -234,7 +258,91 @@ theorem approxIndepFun_fst_snd_sequentialPairLaw_of_warm_leUpTo
     ((Arlib.IsWarm.refl rho).mono (by norm_num))
   exact hconditioned.to_tvLe.trans hunconditioned.to_tvLe.symm
 
+/-- CV18 Lemma 7.17(c), in its model-independent form.  Once the complete
+past history and the next phase block satisfy Lemma 7.17(b), taking the
+accumulated product of the past and the estimator of the next block is only
+measurable postprocessing.  The final premise records the paper's deliberately
+coarser `3 k m nu` budget. -/
+theorem approxIndepFun_accumulatedProduct_nextEstimator_of_warm_leUpTo
+    (rho : Measure H) [IsProbabilityMeasure rho] {K : H -> Measure T}
+    (hK : Measurable K) (hKprob : forall h, IsProbabilityMeasure (K h))
+    (target : Measure T) [IsProbabilityMeasure target]
+    {delta : ENNReal} (hdelta : delta ≠ ⊤)
+    (happrox : forall mu : Measure H, IsProbabilityMeasure mu ->
+      Arlib.IsWarm 2 mu rho ->
+      MeasureLeUpTo (mu.bind K) target delta)
+    (pastProduct : H -> ℝ) (nextEstimator : T -> ℝ)
+    (hpastProduct : Measurable pastProduct)
+    (hnextEstimator : Measurable nextEstimator)
+    (k m : ℕ) (nu : ℝ)
+    (hbudget : (delta + delta).toReal <=
+      3 * (k : ℝ) * (m : ℝ) * nu) :
+    ApproxIndepFun (3 * (k : ℝ) * (m : ℝ) * nu)
+      (pastProduct ∘ Prod.fst) (nextEstimator ∘ Prod.snd)
+      (sequentialPairLaw rho K) := by
+  have hhistory :=
+    approxIndepFun_fst_snd_sequentialPairLaw_of_warm_leUpTo
+      rho hK hKprob target hdelta happrox
+  exact (hhistory.comp hpastProduct hnextEstimator).mono hbudget
+
+/-- Lemma 7.17(b) when the sequential kernel sees only a retained measurable
+state rather than the whole history.  A `2`-warm conditioning of the history
+projects to a `2`-warm conditioning of its retained-state marginal. -/
+theorem approxIndepFun_history_next_of_state_warm_leUpTo
+    {S : Type*} [MeasurableSpace S]
+    (rho : Measure H) [IsProbabilityMeasure rho]
+    (state : H -> S) (hstate : Measurable state)
+    {K : S -> Measure T}
+    (hK : Measurable K) (hKprob : forall s, IsProbabilityMeasure (K s))
+    (target : Measure T) [IsProbabilityMeasure target]
+    {delta : ENNReal} (hdelta : delta ≠ ⊤)
+    (happrox : forall mu : Measure S, IsProbabilityMeasure mu ->
+      Arlib.IsWarm 2 mu (rho.map state) ->
+      MeasureLeUpTo (mu.bind K) target delta) :
+    ApproxIndepFun (delta + delta).toReal Prod.fst Prod.snd
+      (sequentialPairLaw rho (K ∘ state)) := by
+  apply approxIndepFun_fst_snd_sequentialPairLaw_of_warm_leUpTo
+    rho (hK.comp hstate) (fun h => hKprob (state h)) target hdelta
+  intro mu hmu hwarm
+  let _ : IsProbabilityMeasure mu := hmu
+  let hmuMapProb : IsProbabilityMeasure (mu.map state) :=
+    Measure.isProbabilityMeasure_map hstate.aemeasurable
+  have hprojected := happrox (mu.map state) hmuMapProb
+    (isWarm_map hwarm hstate)
+  rw [map_bind_eq_bind_comp_state mu hstate hK] at hprojected
+  exact hprojected
+
+/-- CV18 Lemma 7.17(c) for a complete history with a retained Markov state.
+The accumulated past product and next-block estimator inherit the paper's
+`3 k m nu` dependence budget. -/
+theorem approxIndepFun_accumulatedProduct_nextEstimator_of_state_warm_leUpTo
+    {S : Type*} [MeasurableSpace S]
+    (rho : Measure H) [IsProbabilityMeasure rho]
+    (state : H -> S) (hstate : Measurable state)
+    {K : S -> Measure T}
+    (hK : Measurable K) (hKprob : forall s, IsProbabilityMeasure (K s))
+    (target : Measure T) [IsProbabilityMeasure target]
+    {delta : ENNReal} (hdelta : delta ≠ ⊤)
+    (happrox : forall mu : Measure S, IsProbabilityMeasure mu ->
+      Arlib.IsWarm 2 mu (rho.map state) ->
+      MeasureLeUpTo (mu.bind K) target delta)
+    (pastProduct : H -> ℝ) (nextEstimator : T -> ℝ)
+    (hpastProduct : Measurable pastProduct)
+    (hnextEstimator : Measurable nextEstimator)
+    (k m : ℕ) (nu : ℝ)
+    (hbudget : (delta + delta).toReal <=
+      3 * (k : ℝ) * (m : ℝ) * nu) :
+    ApproxIndepFun (3 * (k : ℝ) * (m : ℝ) * nu)
+      (pastProduct ∘ Prod.fst) (nextEstimator ∘ Prod.snd)
+      (sequentialPairLaw rho (K ∘ state)) := by
+  have hhistory := approxIndepFun_history_next_of_state_warm_leUpTo
+    rho state hstate hK hKprob target hdelta happrox
+  exact (hhistory.comp hpastProduct hnextEstimator).mono hbudget
+
 #print axioms approxIndepFun_fst_snd_sequentialPairLaw_of_condOn_bind_tv
 #print axioms approxIndepFun_fst_snd_sequentialPairLaw_of_warm_leUpTo
+#print axioms approxIndepFun_accumulatedProduct_nextEstimator_of_warm_leUpTo
+#print axioms approxIndepFun_history_next_of_state_warm_leUpTo
+#print axioms approxIndepFun_accumulatedProduct_nextEstimator_of_state_warm_leUpTo
 
 end ArlibCommunity.Algorithms.CV18
