@@ -25,29 +25,29 @@ def lossTraceResult {H : Type*} (onFailure : H → H) (current : H) :
 
 theorem measurable_lossTraceResult {H : Type*} [MeasurableSpace H]
     (onFailure : H → H) (honFailure : Measurable onFailure) :
-    Measurable fun value : H × Option H ↦
+    Measurable fun value : H × Option H →
       lossTraceResult onFailure value.1 value.2 := by
-  have hnone : Measurable fun current : H ↦ (onFailure current, false) :=
+  have hnone : Measurable fun current : H → (onFailure current, false) :=
     honFailure.prodMk measurable_const
-  have hsome : Measurable fun value : H × H ↦ (value.2, true) :=
+  have hsome : Measurable fun value : H × H → (value.2, true) :=
     measurable_snd.prodMk measurable_const
   convert Measurable.optionElimParam hnone hsome using 1
   funext value
   cases value.2 <;> rfl
 
 noncomputable def lossTraceKernel {H : Type*} [MeasurableSpace H]
-    (K : H ↦ Measure (Option H)) (onFailure : H ↦ H) :
-    H × Bool ↦ Measure (H × Bool)
+    (K : H → Measure (Option H)) (onFailure : H → H) :
+    H × Bool → Measure (H × Bool)
   | (current, true) =>
       (K current).map (lossTraceResult onFailure current)
   | (current, false) => Measure.dirac (onFailure current, false)
 
 noncomputable def absorbingOptionKernel {H : Type*} [MeasurableSpace H]
-    (K : H ↦ Measure (Option H)) : Option H ↦ Measure (Option H)
+    (K : H → Measure (Option H)) : Option H → Measure (Option H)
   | none => Measure.dirac none
   | some current => K current
 
-theorem lossTraceProject_result {H : Type*} (onFailure : H ↦ H)
+theorem lossTraceProject_result {H : Type*} (onFailure : H → H)
     (current : H) (result : Option H) :
     lossTraceProject (lossTraceResult onFailure current result) = result := by
   cases result <;> rfl
@@ -55,8 +55,8 @@ theorem lossTraceProject_result {H : Type*} (onFailure : H ↦ H)
 /-- One lifted trace step projects exactly to the original absorbing optional
 step, independently of which history is retained on failure. -/
 theorem lossTraceKernel_map_project {H : Type*} [MeasurableSpace H]
-    (K : H ↦ Measure (Option H)) (_hK : Measurable K)
-    (onFailure : H ↦ H) (honFailure : Measurable onFailure)
+    (K : H → Measure (Option H)) (_hK : Measurable K)
+    (onFailure : H → H) (honFailure : Measurable onFailure)
     (state : H × Bool) :
     (lossTraceKernel K onFailure state).map lossTraceProject =
       absorbingOptionKernel K (lossTraceProject state) := by
@@ -79,20 +79,20 @@ theorem lossTraceKernel_map_project {H : Type*} [MeasurableSpace H]
 
 theorem lossTraceKernel_measurable_and_probability
     {H : Type*} [MeasurableSpace H]
-    (K : H ↦ Measure (Option H)) (hK : Measurable K)
+    (K : H → Measure (Option H)) (hK : Measurable K)
     (hKprob : ∀ current, IsProbabilityMeasure (K current))
-    (onFailure : H ↦ H) (honFailure : Measurable onFailure) :
+    (onFailure : H → H) (honFailure : Measurable onFailure) :
     Measurable (lossTraceKernel K onFailure) ∧
       ∀ state, IsProbabilityMeasure (lossTraceKernel K onFailure state) := by
   constructor
-  · have hlive : Measurable fun current : H ↦
+  · have hlive : Measurable fun current : H →
         (K current).map (lossTraceResult onFailure current) := by
       exact measurable_measure_map_param_variable hK hKprob
         (measurable_lossTraceResult onFailure honFailure)
-    have hdead : Measurable fun current : H ↦
+    have hdead : Measurable fun current : H →
         Measure.dirac (onFailure current, false) :=
       Measure.measurable_dirac.comp (honFailure.prodMk measurable_const)
-    rw [show lossTraceKernel K onFailure = fun state ↦
+    rw [show lossTraceKernel K onFailure = fun state →
         if state.2 then
           (K state.1).map (lossTraceResult onFailure state.1)
         else Measure.dirac (onFailure state.1, false) by
