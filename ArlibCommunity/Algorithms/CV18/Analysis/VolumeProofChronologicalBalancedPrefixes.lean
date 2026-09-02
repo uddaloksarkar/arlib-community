@@ -61,6 +61,27 @@ theorem balancedCoolingHistorySnocTerminal_average_coordinate
       simp [balancedCoolingHistorySnocTerminal, balancedCoolingAverage,
         balancedCoolingPhaseAverageValue, hcount]
 
+/-- The coordinate appended at chronological position `m + 1` is exactly the
+scalar carried by the successful phase result. -/
+theorem balancedCoolingHistorySnocTerminal_coordinate
+    (q : VolumeParams) (m : ℕ)
+    (history : BalancedCoolingHistory q.n) (hcount : history.2.1 = m)
+    (value : ℝ × AmbientSpace q.n)
+    (hm : m < figureOneDependentPhaseCount q) :
+    balancedCoolingChronologicalPhaseVariable q (m + 1)
+        (balancedCoolingHistorySnocTerminal history (some value)) =
+      value.1 := by
+  rw [balancedCoolingChronologicalPhaseVariable_apply_succ q m hm]
+  simp [balancedCoolingHistorySnocTerminal, hcount]
+
+/-- A successful chronological append retains precisely the phase endpoint. -/
+theorem balancedCoolingHistoryRetainedState_snocTerminal
+    (q : VolumeParams) (history : BalancedCoolingHistory q.n)
+    (value : ℝ × AmbientSpace q.n) :
+    balancedCoolingHistoryRetainedState q
+        (balancedCoolingHistorySnocTerminal history (some value)) = value.2 := by
+  rfl
+
 theorem balancedCoolingHistorySnocTerminal_average_count
     (samples : ℕ) (history : BalancedCoolingHistory n)
     (result : Option (ℝ × AmbientSpace n)) :
@@ -339,6 +360,8 @@ theorem balancedFigureOneForwardHistoryLaw_zero_retainedState
     _ = _ := Measure.map_id
 
 #print axioms balancedCoolingHistorySnocTerminal_average_coordinate
+#print axioms balancedCoolingHistorySnocTerminal_coordinate
+#print axioms balancedCoolingHistoryRetainedState_snocTerminal
 #print axioms balancedCoolingForwardGaussianPhaseKernel_measurable
 #print axioms balancedCoolingForwardTerminalPhaseKernel_measurable
 #print axioms balancedFigureOneForwardHistoryLaw_isProbabilityMeasure
