@@ -185,4 +185,168 @@ theorem balancedAccuracyRetryCollect_queryPrefixEq_of_le
   intro result
   exact .pure budget _
 
+theorem balancedCoolingRatioEstimate_queryPrefixEq
+    (parameters₁ parameters₂ : BalancedCoolingParameters)
+    (q : VolumeParams) (sigma2 tau2 : ℝ) (current : AmbientSpace q.n)
+    (budget : ℕ)
+    (hcap₁ : budget ≤ parameters₁.proposalCap q sigma2)
+    (hcap₂ : budget ≤ parameters₂.proposalCap q sigma2)
+    (hstride : parameters₁.properStride q sigma2 =
+      parameters₂.properStride q sigma2)
+    (hretry : parameters₁.retryLimit q sigma2 =
+      parameters₂.retryLimit q sigma2) :
+    QueryPrefixEq budget
+      (balancedCoolingRatioEstimate parameters₁ q sigma2 tau2 current)
+      (balancedCoolingRatioEstimate parameters₂ q sigma2 tau2 current) := by
+  unfold balancedCoolingRatioEstimate
+  rw [hstride, hretry]
+  apply (balancedAccuracyRetryCollect_queryPrefixEq_of_le q sigma2
+    (gaussianRatioWeight sigma2 tau2) (parameters₂.properStride q sigma2)
+      (parameters₂.retryLimit q sigma2)
+      (figureOnePhaseSampleCount q sigma2)
+      (accuracyScaleFactor q • current) hcap₁ hcap₂).bind
+  intro result
+  exact .pure budget _
+
+theorem balancedCoolingUniformEstimateWithState_queryPrefixEq
+    (parameters₁ parameters₂ : BalancedCoolingParameters)
+    (q : VolumeParams) (sigma2 : ℝ) (current : AmbientSpace q.n)
+    (budget : ℕ)
+    (hcap₁ : budget ≤ parameters₁.proposalCap q sigma2)
+    (hcap₂ : budget ≤ parameters₂.proposalCap q sigma2)
+    (hstride : parameters₁.properStride q sigma2 =
+      parameters₂.properStride q sigma2)
+    (hretry : parameters₁.retryLimit q sigma2 =
+      parameters₂.retryLimit q sigma2) :
+    QueryPrefixEq budget
+      (balancedCoolingUniformEstimateWithState parameters₁ q sigma2 current)
+      (balancedCoolingUniformEstimateWithState parameters₂ q sigma2 current) := by
+  unfold balancedCoolingUniformEstimateWithState
+  rw [hstride, hretry]
+  apply (balancedAccuracyRetryCollect_queryPrefixEq_of_le q sigma2
+    (uniformRatioWeight sigma2) (parameters₂.properStride q sigma2)
+      (parameters₂.retryLimit q sigma2) (figureOneSampleCount q)
+      (accuracyScaleFactor q • current) hcap₁ hcap₂).bind
+  intro result
+  exact .pure budget _
+
+theorem balancedCoolingUniformRatioEstimate_queryPrefixEq
+    (parameters₁ parameters₂ : BalancedCoolingParameters)
+    (q : VolumeParams) (sigma2 : ℝ) (current : AmbientSpace q.n)
+    (budget : ℕ)
+    (hcap₁ : budget ≤ parameters₁.proposalCap q sigma2)
+    (hcap₂ : budget ≤ parameters₂.proposalCap q sigma2)
+    (hstride : parameters₁.properStride q sigma2 =
+      parameters₂.properStride q sigma2)
+    (hretry : parameters₁.retryLimit q sigma2 =
+      parameters₂.retryLimit q sigma2) :
+    QueryPrefixEq budget
+      (balancedCoolingUniformRatioEstimate parameters₁ q sigma2 current)
+      (balancedCoolingUniformRatioEstimate parameters₂ q sigma2 current) := by
+  unfold balancedCoolingUniformRatioEstimate
+  apply (balancedCoolingUniformEstimateWithState_queryPrefixEq
+    parameters₁ parameters₂ q sigma2 current budget hcap₁ hcap₂
+      hstride hretry).bind
+  intro result
+  exact .pure budget _
+
+/-- Prefix invisibility transported through every Gaussian cooling phase. -/
+theorem balancedCoolingProduct_queryPrefixEq
+    (parameters₁ parameters₂ : BalancedCoolingParameters)
+    (q : VolumeParams) (budget : ℕ)
+    (hcap₁ : ∀ sigma2, budget ≤ parameters₁.proposalCap q sigma2)
+    (hcap₂ : ∀ sigma2, budget ≤ parameters₂.proposalCap q sigma2)
+    (hstride : ∀ sigma2, parameters₁.properStride q sigma2 =
+      parameters₂.properStride q sigma2)
+    (hretry : ∀ sigma2, parameters₁.retryLimit q sigma2 =
+      parameters₂.retryLimit q sigma2) :
+    ∀ variances point,
+      QueryPrefixEq budget
+        (coolingProduct (balancedCoolingPrimitives parameters₁) q variances point)
+        (coolingProduct (balancedCoolingPrimitives parameters₂) q variances point) := by
+  intro variances
+  induction variances with
+  | nil =>
+      intro point
+      simpa only [coolingProduct] using
+        (QueryPrefixEq.pure budget (some ((1 : ℝ), point)))
+  | cons sigma2 tail ih =>
+      cases tail with
+      | nil =>
+          intro point
+          simpa only [coolingProduct] using
+            (QueryPrefixEq.pure budget (some ((1 : ℝ), point)))
+      | cons tau2 rest =>
+          intro point
+          simp only [coolingProduct, balancedCoolingPrimitives]
+          apply (balancedCoolingRatioEstimate_queryPrefixEq parameters₁ parameters₂
+            q sigma2 tau2 point budget (hcap₁ sigma2) (hcap₂ sigma2)
+              (hstride sigma2) (hretry sigma2)).bind
+          intro phase
+          cases phase with
+          | none => exact .pure budget _
+          | some value =>
+              rcases value with ⟨ratio, nextPoint⟩
+              apply (ih nextPoint).bind
+              intro result
+              exact .pure budget _
+
+theorem balancedFigureOnePointContinuation_queryPrefixEq
+    (parameters₁ parameters₂ : BalancedCoolingParameters)
+    (q : VolumeParams) (budget : ℕ)
+    (hcap₁ : ∀ sigma2, budget ≤ parameters₁.proposalCap q sigma2)
+    (hcap₂ : ∀ sigma2, budget ≤ parameters₂.proposalCap q sigma2)
+    (hstride : ∀ sigma2, parameters₁.properStride q sigma2 =
+      parameters₂.properStride q sigma2)
+    (hretry : ∀ sigma2, parameters₁.retryLimit q sigma2 =
+      parameters₂.retryLimit q sigma2)
+    (point : AmbientSpace q.n) :
+    QueryPrefixEq budget
+      (balancedFigureOnePointContinuation parameters₁ q point)
+      (balancedFigureOnePointContinuation parameters₂ q point) := by
+  unfold balancedFigureOnePointContinuation
+  apply (balancedCoolingProduct_queryPrefixEq parameters₁ parameters₂ q budget
+    hcap₁ hcap₂ hstride hretry
+      (explicitVolumeCoolingSchedule q).variances point).bind
+  intro product
+  cases product with
+  | none => exact .pure budget _
+  | some value =>
+      rcases value with ⟨gaussianProduct, lastPoint⟩
+      change QueryPrefixEq budget
+        ((balancedCoolingUniformRatioEstimate parameters₁ q
+          (terminalVariance q) lastPoint).bind _)
+        ((balancedCoolingUniformRatioEstimate parameters₂ q
+          (terminalVariance q) lastPoint).bind _)
+      apply (balancedCoolingUniformRatioEstimate_queryPrefixEq
+        parameters₁ parameters₂ q (terminalVariance q) lastPoint budget
+          (hcap₁ _) (hcap₂ _) (hstride _) (hretry _)).bind
+      intro result
+      exact .pure budget _
+
+/-- Full base-program prefix invisibility, including initialization and the
+terminal uniform-ratio phase. -/
+theorem balancedFigureOneBaseVolumeCooling_queryPrefixEq
+    (parameters₁ parameters₂ : BalancedCoolingParameters)
+    (q : VolumeParams) (budget : ℕ)
+    (hcap₁ : ∀ sigma2, budget ≤ parameters₁.proposalCap q sigma2)
+    (hcap₂ : ∀ sigma2, budget ≤ parameters₂.proposalCap q sigma2)
+    (hstride : ∀ sigma2, parameters₁.properStride q sigma2 =
+      parameters₂.properStride q sigma2)
+    (hretry : ∀ sigma2, parameters₁.retryLimit q sigma2 =
+      parameters₂.retryLimit q sigma2) :
+    QueryPrefixEq budget
+      (baseVolumeCooling (balancedCoolingPrimitives parameters₁)
+        explicitVolumeCoolingSchedule q)
+      (baseVolumeCooling (balancedCoolingPrimitives parameters₂)
+        explicitVolumeCoolingSchedule q) := by
+  unfold baseVolumeCooling balancedCoolingPrimitives
+  apply (QueryPrefixEq.refl budget (figureOneInitialSample q)).bind
+  intro initialPoint
+  cases initialPoint with
+  | none => exact .pure budget _
+  | some point =>
+      exact balancedFigureOnePointContinuation_queryPrefixEq
+        parameters₁ parameters₂ q budget hcap₁ hcap₂ hstride hretry point
+
 end ArlibCommunity.Algorithms.CV18
