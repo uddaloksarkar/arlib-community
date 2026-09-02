@@ -57,6 +57,48 @@ theorem MembershipOracleProgram.CountedStronglyMeasurable.stronglyMeasurable
         exact (Measure.measurable_map _ measurable_fst).comp h.1
       · exact fun value => ih value (h.2 value)
 
+/-- A counted-measurable program remains estimate-measurable after installing
+an arbitrary global query cutoff. -/
+theorem MembershipOracleProgram.CountedStronglyMeasurable.withQueryCap_stronglyMeasurable
+    {n : ℕ} {Result : Type} [MeasurableSpace Result]
+    {oracle : AmbientSpace n → Bool}
+    {program : MembershipOracleProgram n Result}
+    (h : program.CountedStronglyMeasurable oracle) (budget : ℕ) :
+    (program.withQueryCap budget).StronglyMeasurable oracle := by
+  induction program generalizing budget with
+  | pure => trivial
+  | query point next ih =>
+      cases budget with
+      | zero => trivial
+      | succ budget => exact ih (oracle point) h budget
+  | randomNat law next ih =>
+      constructor
+      · rw [show (fun seed => (next seed).withQueryCap budget |>.runEstimate oracle) =
+            fun seed => ((next seed).run oracle).map (queryCapOutcome budget) by
+          funext seed
+          exact MembershipOracleProgram.runEstimate_withQueryCap oracle
+            (next seed) budget (h.2 seed).executionMeasurable]
+        exact (Measure.measurable_map _ (measurable_queryCapOutcome budget)).comp h.1
+      · exact fun seed => ih seed (h.2 seed) budget
+  | randomPoint law hprob next ih =>
+      constructor
+      · rw [show (fun point => (next point).withQueryCap budget |>.runEstimate oracle) =
+            fun point => ((next point).run oracle).map (queryCapOutcome budget) by
+          funext point
+          exact MembershipOracleProgram.runEstimate_withQueryCap oracle
+            (next point) budget (h.2 point).executionMeasurable]
+        exact (Measure.measurable_map _ (measurable_queryCapOutcome budget)).comp h.1
+      · exact fun point => ih point (h.2 point) budget
+  | randomReal law hprob next ih =>
+      constructor
+      · rw [show (fun value => (next value).withQueryCap budget |>.runEstimate oracle) =
+            fun value => ((next value).run oracle).map (queryCapOutcome budget) by
+          funext value
+          exact MembershipOracleProgram.runEstimate_withQueryCap oracle
+            (next value) budget (h.2 value).executionMeasurable]
+        exact (Measure.measurable_map _ (measurable_queryCapOutcome budget)).comp h.1
+      · exact fun value => ih value (h.2 value) budget
+
 /-- A syntax-level query bound is exactly strong enough for the outer cap to
 leave every execution branch intact. -/
 theorem MembershipOracleProgram.QueryBound.withQueryCap_eq
@@ -256,5 +298,39 @@ theorem figureOneGlobalBalancedBaseProgram_lintegral_queryCount_le_structural
       figureOneGlobalBalancedParameters q
   · exact figureOneGlobalBalancedBaseProgram_countedStronglyMeasurable
       q I oracle
+
+/-- Real-valued base program used by the generic median amplifier: a global
+cutoff failure is represented by the harmless default value zero. -/
+noncomputable def figureOneGloballyCappedBalancedBaseValueProgram
+    (q : VolumeParams) : MembershipOracleProgram q.n ℝ :=
+  (figureOneGloballyCappedBalancedBaseProgram q).bind fun estimate =>
+    .pure (estimate.getD 0)
+
+theorem measurable_optionGetD_zero :
+    Measurable fun estimate : Option ℝ => estimate.getD 0 := by
+  convert Measurable.optionElim (0 : ℝ) measurable_id using 1
+  funext estimate
+  cases estimate <;> rfl
+
+theorem figureOneGloballyCappedBalancedBaseValueProgram_queryBound
+    (q : VolumeParams) :
+    (figureOneGloballyCappedBalancedBaseValueProgram q).QueryBound
+      (figureOneGlobalQueryBudget q) := by
+  unfold figureOneGloballyCappedBalancedBaseValueProgram
+  exact (figureOneGloballyCappedBalancedBaseProgram_queryBound q).bind
+    fun _ => .pure _ 0
+
+theorem figureOneGloballyCappedBalancedBaseValueProgram_stronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (figureOneGloballyCappedBalancedBaseValueProgram q).StronglyMeasurable
+      oracle.query := by
+  have hcapped :=
+    (figureOneGlobalBalancedBaseProgram_countedStronglyMeasurable
+      q I oracle).withQueryCap_stronglyMeasurable
+        (figureOneGlobalQueryBudget q)
+  unfold figureOneGloballyCappedBalancedBaseValueProgram
+  apply hcapped.bind (fun _ => by trivial)
+  simp only [MembershipOracleProgram.runEstimate]
+  exact Measure.measurable_dirac.comp measurable_optionGetD_zero
 
 end ArlibCommunity.Algorithms.CV18
