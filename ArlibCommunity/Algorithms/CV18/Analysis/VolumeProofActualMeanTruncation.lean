@@ -13,7 +13,7 @@ theorem actualMeanTruncation_moment_package
     (hWmem : MemLp W 2 mu)
     {raw alpha : ℝ} (hraw : raw = ∫ x, W x ∂mu)
     (hrawPos : 0 < raw) (halpha : 1024 ≤ alpha)
-    (hWsecond : (∫ x, W x ^ 2 ∂mu) ≤ 2 * raw ^ 2) :
+    (hWsecond : (∫ x, W x ^ 2 ∂mu) ≤ 4 * raw ^ 2) :
     let V := fun x => min (W x) (alpha * raw)
     let mean := ∫ x, V x ∂mu
     let second := ∫ x, V x ^ 2 ∂mu
@@ -25,7 +25,7 @@ theorem actualMeanTruncation_moment_package
   have htrunc := integral_min_ge_integral_sub_secondMoment_div_four mu
     (hWmem.integrable (by norm_num)) hWmem.integrable_sq hW0 hcapPos
   rw [← hraw] at htrunc
-  have hloss : (∫ x, W x ^ 2 ∂mu) / (4 * (alpha * raw)) ≤ raw / 2048 := by
+  have hloss : (∫ x, W x ^ 2 ∂mu) / (4 * (alpha * raw)) ≤ raw / 1024 := by
     rw [div_le_iff₀ (mul_pos (by norm_num) hcapPos)]
     have hscaled := mul_le_mul_of_nonneg_right halpha hrawPos.le
     nlinarith [hWsecond]
