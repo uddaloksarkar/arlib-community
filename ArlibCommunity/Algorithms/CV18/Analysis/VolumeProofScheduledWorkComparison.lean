@@ -58,6 +58,37 @@ theorem volumeBaseComplexityRate_le_scheduled (q : VolumeParams) :
         (1 / figureOneCorrectedBlockMixingError q
           (figureOneSafeRetryCount q - 1)) - 1)]
 
+theorem volumeScheduledBaseComplexityRate_one_le (q : VolumeParams) :
+    1 ≤ volumeScheduledBaseComplexityRate q := by
+  let n : ℝ := q.n
+  let M : ℝ := max 1 q.roundness
+  let L : ℝ := protectedLog (n / q.eps)
+  let Le : ℝ := protectedLog (1 / q.eps)
+  let H : ℝ := protectedLog (volumeTerminalScale q)
+  let R : ℝ := M * n ^ 3 / q.eps ^ 2 * Le ^ 2 * L ^ 2 * H ^ 2
+  have hn : 3 ≤ n := by
+    dsimp [n]
+    exact_mod_cast q.dim_ok
+  have hM : 1 ≤ M := le_max_left _ _
+  have hL : 1 ≤ L := le_max_left _ _
+  have hLe : 1 ≤ Le := le_max_left _ _
+  have hH : 1 ≤ H := le_max_left _ _
+  have he2pos : 0 < q.eps ^ 2 := sq_pos_of_pos q.heps.1
+  have he2le : q.eps ^ 2 ≤ 1 := by nlinarith [q.heps.1, q.heps.2]
+  have hmul : ∀ {a b : ℝ}, 1 ≤ a → 1 ≤ b → 1 ≤ a * b := by
+    intro a b ha hb
+    nlinarith [mul_nonneg (sub_nonneg.mpr ha) (sub_nonneg.mpr hb)]
+  have hR : 1 ≤ R := by
+    have hn3 : 1 ≤ n ^ 3 := one_le_pow₀ (le_trans (by norm_num) hn)
+    have hfirst : 1 ≤ M * n ^ 3 / q.eps ^ 2 := by
+      rw [le_div_iff₀ he2pos]
+      simpa only [one_mul] using he2le.trans (hmul hM hn3)
+    exact hmul (hmul (hmul hfirst (one_le_pow₀ hLe))
+      (one_le_pow₀ hL)) (one_le_pow₀ hH)
+  have hbase : volumeBaseComplexityRate q = R := by
+    dsimp [volumeBaseComplexityRate, R, M, n, Le, L, H, terminalVariance]
+  exact (hbase.symm ▸ hR).trans (volumeBaseComplexityRate_le_scheduled q)
+
 /-- Exact expected-cost target consumed by the generalized capstone. -/
 def FigureOneScheduledBalancedExpectedQueryCost
     (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
