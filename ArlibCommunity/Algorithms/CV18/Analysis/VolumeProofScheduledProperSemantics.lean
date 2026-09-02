@@ -352,6 +352,281 @@ theorem runEstimate_scheduledAccuracyMetropolisMarkedBallStep_eq_lazyProperAux
       rw [hfalse t ht] at hadd
       exact WithTop.add_left_cancel (measure_ne_top nu ({false} ×ˢ t)) hadd
 
+theorem scheduledAccuracyZeroObservation_stronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    (scheduledAccuracyZeroObservation q sigma2 current).StronglyMeasurable
+      oracle.query := by
+  unfold scheduledAccuracyZeroObservation
+  simp only [MembershipOracleProgram.StronglyMeasurable,
+    MembershipOracleProgram.runEstimate]
+
+theorem runEstimate_scheduledAccuracyZeroObservation
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    (scheduledAccuracyZeroObservation q sigma2 current).runEstimate oracle.query =
+      Measure.dirac 0 := by
+  simp [scheduledAccuracyZeroObservation, MembershipOracleProgram.runEstimate]
+
+/-- A scheduled block with one query reserved for its endpoint observation
+denotes the generic killed proper-step law with the advertised proposal cap. -/
+theorem cappedScheduledAccuracyProperBlockAux_add_one_semantics
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) (properStride : ℕ) :
+    ∀ proposalCap remainingProper,
+      (∀ current,
+        (cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+          (proposalCap + 1) remainingProper current).StronglyMeasurable
+            oracle.query) ∧
+      ∀ current,
+        (cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+          (proposalCap + 1) remainingProper current).runEstimate oracle.query =
+        cappedProperCollectLawAux
+          (lazyProperProposalGaussianAux
+            (figureOneScheduledPhaseBody q I sigma2)
+            (figureOneScheduledPhaseBody_measurable q I sigma2)
+            (figureOneScheduledProposalRadius q sigma2) sigma2)
+          (fun _ => 0) properStride proposalCap remainingProper 1 0 current := by
+  intro proposalCap
+  induction proposalCap with
+  | zero =>
+      intro remainingProper
+      cases remainingProper with
+      | zero =>
+          constructor
+          · intro current
+            simp only [cappedScheduledAccuracyProperBlockAux]
+            exact (scheduledAccuracyZeroObservation_stronglyMeasurable
+              q I oracle sigma2 current).bind (fun _ => by trivial) <| by
+                simp only [MembershipOracleProgram.runEstimate]
+                exact Measure.measurable_dirac.comp <|
+                  measurable_some.comp (measurable_id.prodMk measurable_const)
+          · intro current
+            simp only [cappedScheduledAccuracyProperBlockAux,
+              cappedProperCollectLawAux]
+            rw [MembershipOracleProgram.runEstimate_bind oracle.query]
+            · rw [runEstimate_scheduledAccuracyZeroObservation]
+              have hm : Measurable fun observed : ℝ =>
+                  Measure.dirac (some (observed, current)) :=
+                Measure.measurable_dirac.comp <|
+                  measurable_some.comp (measurable_id.prodMk measurable_const)
+              simp only [MembershipOracleProgram.runEstimate]
+              rw [Measure.dirac_bind hm]
+              norm_num
+            · exact scheduledAccuracyZeroObservation_stronglyMeasurable
+                q I oracle sigma2 current
+            · intro observed; trivial
+            · simp only [MembershipOracleProgram.runEstimate]
+              exact Measure.measurable_dirac.comp <|
+                measurable_some.comp (measurable_id.prodMk measurable_const)
+      | succ remainingProper =>
+          constructor
+          · intro current
+            simp only [cappedScheduledAccuracyProperBlockAux]
+            apply (scheduledAccuracyMetropolisMarkedBallStep_stronglyMeasurable
+              q I oracle sigma2 current).bind
+            · intro result
+              rcases result with ⟨mark, state⟩
+              cases mark <;> cases remainingProper <;> trivial
+            · cases remainingProper <;>
+                simp [MembershipOracleProgram.runEstimate]
+          · intro current
+            simp only [cappedScheduledAccuracyProperBlockAux,
+              cappedProperCollectLawAux]
+            rw [MembershipOracleProgram.runEstimate_bind oracle.query]
+            · rw [runEstimate_scheduledAccuracyMetropolisMarkedBallStep_eq_lazyProperAux
+                q I oracle hsigma2 current]
+              cases remainingProper <;>
+                simp [MembershipOracleProgram.runEstimate]
+            · exact scheduledAccuracyMetropolisMarkedBallStep_stronglyMeasurable
+                q I oracle sigma2 current
+            · intro result
+              rcases result with ⟨mark, state⟩
+              cases mark <;> cases remainingProper <;> trivial
+            · cases remainingProper <;>
+                simp [MembershipOracleProgram.runEstimate]
+  | succ proposalCap ih =>
+      intro remainingProper
+      cases remainingProper with
+      | zero =>
+          constructor
+          · intro current
+            simp only [cappedScheduledAccuracyProperBlockAux]
+            exact (scheduledAccuracyZeroObservation_stronglyMeasurable
+              q I oracle sigma2 current).bind (fun _ => by trivial) <| by
+                simp only [MembershipOracleProgram.runEstimate]
+                exact Measure.measurable_dirac.comp <|
+                  measurable_some.comp (measurable_id.prodMk measurable_const)
+          · intro current
+            simp only [cappedScheduledAccuracyProperBlockAux,
+              cappedProperCollectLawAux]
+            rw [MembershipOracleProgram.runEstimate_bind oracle.query]
+            · rw [runEstimate_scheduledAccuracyZeroObservation]
+              have hm : Measurable fun observed : ℝ =>
+                  Measure.dirac (some (observed, current)) :=
+                Measure.measurable_dirac.comp <|
+                  measurable_some.comp (measurable_id.prodMk measurable_const)
+              simp only [MembershipOracleProgram.runEstimate]
+              rw [Measure.dirac_bind hm]
+              norm_num
+            · exact scheduledAccuracyZeroObservation_stronglyMeasurable
+                q I oracle sigma2 current
+            · intro observed; trivial
+            · simp only [MembershipOracleProgram.runEstimate]
+              exact Measure.measurable_dirac.comp <|
+                measurable_some.comp (measurable_id.prodMk measurable_const)
+      | succ remainingProper =>
+          let next : Bool × AmbientSpace q.n →
+              MembershipOracleProgram q.n (Option (ℝ × AmbientSpace q.n)) :=
+            fun result =>
+              if result.1 then
+                match remainingProper with
+                | 0 => cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                    (proposalCap + 1) 0 result.2
+                | nextRemaining + 1 =>
+                    cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                      (proposalCap + 1) (nextRemaining + 1) result.2
+              else cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                (proposalCap + 1) (remainingProper + 1) result.2
+          let nextLaw : Bool × AmbientSpace q.n →
+              Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+            if result.1 then
+              match remainingProper with
+              | 0 => cappedProperCollectLawAux
+                  (lazyProperProposalGaussianAux
+                    (figureOneScheduledPhaseBody q I sigma2)
+                    (figureOneScheduledPhaseBody_measurable q I sigma2)
+                    (figureOneScheduledProposalRadius q sigma2) sigma2)
+                  (fun _ => 0) properStride proposalCap 0 1 0 result.2
+              | nextRemaining + 1 => cappedProperCollectLawAux
+                  (lazyProperProposalGaussianAux
+                    (figureOneScheduledPhaseBody q I sigma2)
+                    (figureOneScheduledPhaseBody_measurable q I sigma2)
+                    (figureOneScheduledProposalRadius q sigma2) sigma2)
+                  (fun _ => 0) properStride proposalCap
+                    (nextRemaining + 1) 1 0 result.2
+            else cappedProperCollectLawAux
+              (lazyProperProposalGaussianAux
+                (figureOneScheduledPhaseBody q I sigma2)
+                (figureOneScheduledPhaseBody_measurable q I sigma2)
+                (figureOneScheduledProposalRadius q sigma2) sigma2)
+              (fun _ => 0) properStride proposalCap
+                (remainingProper + 1) 1 0 result.2
+          have hnextStrong : ∀ result, (next result).StronglyMeasurable
+              oracle.query := by
+            rintro ⟨mark, state⟩
+            cases mark with
+            | false => exact (ih (remainingProper + 1)).1 state
+            | true =>
+                cases remainingProper with
+                | zero => exact (ih 0).1 state
+                | succ nextRemaining => exact (ih (nextRemaining + 1)).1 state
+          have hnextEq : ∀ result,
+              (next result).runEstimate oracle.query = nextLaw result := by
+            rintro ⟨mark, state⟩
+            cases mark with
+            | false => exact (ih (remainingProper + 1)).2 state
+            | true =>
+                cases remainingProper with
+                | zero => exact (ih 0).2 state
+                | succ nextRemaining => exact (ih (nextRemaining + 1)).2 state
+          have hnextLawMeasurable : Measurable nextLaw := by
+            dsimp only [nextLaw]
+            apply Measurable.ite
+            · exact measurable_fst (measurableSet_singleton true)
+            · cases remainingProper with
+              | zero =>
+                  exact (cappedProperCollectLawAux_measurable_and_probability
+                    (lazyProperProposalGaussianAux
+                      (figureOneScheduledPhaseBody q I sigma2)
+                      (figureOneScheduledPhaseBody_measurable q I sigma2)
+                      (figureOneScheduledProposalRadius q sigma2) sigma2)
+                    measurable_const properStride proposalCap 0 1).1.comp
+                      (measurable_const.prodMk measurable_snd)
+              | succ nextRemaining =>
+                  exact (cappedProperCollectLawAux_measurable_and_probability
+                    (lazyProperProposalGaussianAux
+                      (figureOneScheduledPhaseBody q I sigma2)
+                      (figureOneScheduledPhaseBody_measurable q I sigma2)
+                      (figureOneScheduledProposalRadius q sigma2) sigma2)
+                    measurable_const properStride proposalCap
+                      (nextRemaining + 1) 1).1.comp
+                        (measurable_const.prodMk measurable_snd)
+            · exact (cappedProperCollectLawAux_measurable_and_probability
+                (lazyProperProposalGaussianAux
+                  (figureOneScheduledPhaseBody q I sigma2)
+                  (figureOneScheduledPhaseBody_measurable q I sigma2)
+                  (figureOneScheduledProposalRadius q sigma2) sigma2)
+                measurable_const properStride proposalCap
+                  (remainingProper + 1) 1).1.comp
+                    (measurable_const.prodMk measurable_snd)
+          have hprogram : ∀ current,
+              cappedScheduledAccuracyProperBlockAux q sigma2 properStride
+                  ((proposalCap + 1) + 1) (remainingProper + 1) current =
+                (scheduledAccuracyMetropolisMarkedBallStep q sigma2 current).bind
+                  next := by
+            intro current
+            rw [cappedScheduledAccuracyProperBlockAux]
+            congr 1
+          have hlaw : ∀ current,
+              cappedProperCollectLawAux
+                  (lazyProperProposalGaussianAux
+                    (figureOneScheduledPhaseBody q I sigma2)
+                    (figureOneScheduledPhaseBody_measurable q I sigma2)
+                    (figureOneScheduledProposalRadius q sigma2) sigma2)
+                  (fun _ => 0) properStride (proposalCap + 1)
+                    (remainingProper + 1) 1 0 current =
+                (lazyProperProposalGaussianAux
+                    (figureOneScheduledPhaseBody q I sigma2)
+                    (figureOneScheduledPhaseBody_measurable q I sigma2)
+                    (figureOneScheduledProposalRadius q sigma2) sigma2 current).bind
+                  nextLaw := by
+            intro current
+            rw [cappedProperCollectLawAux]
+            apply Measure.bind_congr_right
+            filter_upwards with result
+            rcases result with ⟨mark, state⟩
+            cases mark <;> cases remainingProper <;>
+              simp [nextLaw, cappedProperCollectLawAux]
+          constructor
+          · intro current
+            rw [hprogram current]
+            exact (scheduledAccuracyMetropolisMarkedBallStep_stronglyMeasurable
+              q I oracle sigma2 current).bind hnextStrong <| by
+                simpa only [hnextEq] using hnextLawMeasurable
+          · intro current
+            rw [hprogram current, hlaw current]
+            rw [MembershipOracleProgram.runEstimate_bind oracle.query _ next
+              (scheduledAccuracyMetropolisMarkedBallStep_stronglyMeasurable
+                q I oracle sigma2 current) hnextStrong]
+            · rw [runEstimate_scheduledAccuracyMetropolisMarkedBallStep_eq_lazyProperAux
+                q I oracle hsigma2 current]
+              apply Measure.bind_congr_right
+              filter_upwards with result
+              exact hnextEq result
+            · simpa only [hnextEq] using hnextLawMeasurable
+
+theorem cappedScheduledAccuracyProperBlock_semantics
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (proposalCap properStride : ℕ) (current : AmbientSpace q.n) :
+    (cappedScheduledAccuracyProperBlock q sigma2 (proposalCap + 1)
+      properStride current).runEstimate oracle.query =
+      scheduledBalancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+        properStride current := by
+  exact (cappedScheduledAccuracyProperBlockAux_add_one_semantics
+    q I oracle hsigma2 properStride proposalCap properStride).2 current
+
+theorem cappedScheduledAccuracyProperBlock_stronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (proposalCap properStride : ℕ) (current : AmbientSpace q.n) :
+    (cappedScheduledAccuracyProperBlock q sigma2 (proposalCap + 1)
+      properStride current).StronglyMeasurable oracle.query :=
+  (cappedScheduledAccuracyProperBlockAux_add_one_semantics
+    q I oracle hsigma2 properStride proposalCap properStride).1 current
+
 #print axioms runEstimate_scheduledAccuracyMetropolisMarkedBallStep_eq_lazyProperAux
+#print axioms cappedScheduledAccuracyProperBlock_semantics
 
 end ArlibCommunity.Algorithms.CV18
