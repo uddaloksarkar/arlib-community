@@ -1011,6 +1011,108 @@ theorem map_bind_figureOneFinalScheduledCoolingProduct_optionSnd_eq_trace
       filter_upwards with trace
       exact optionSnd_balancedCoolingHistoryOutput_traceProject trace
 
+/-- The public scalar terminal wrapper, isolated from the Gaussian product. -/
+noncomputable def figureOneFinalScheduledScalarTerminalTail
+    (q : VolumeParams) : Option (ℝ × AmbientSpace q.n) →
+      MembershipOracleProgram q.n ℝ
+  | none => .pure 0
+  | some (gaussianProduct, lastPoint) =>
+      (scheduledBalancedCoolingUniformRatioEstimate
+        figureOneFinalScheduledBalancedParameters q
+        (terminalVariance q) lastPoint).bind fun finalRatio =>
+          .pure <| match finalRatio with
+          | some uniformRatio =>
+              initialGaussianIntegral q * gaussianProduct * uniformRatio
+          | none => 0
+
+theorem figureOneFinalScheduledScalarTerminalTail_countedMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (Measurable fun product =>
+      (figureOneFinalScheduledScalarTerminalTail q product).run oracle.query) ∧
+    ∀ product,
+      (figureOneFinalScheduledScalarTerminalTail q product).CountedStronglyMeasurable
+        oracle.query := by
+  let uniformProgram (value : ℝ × AmbientSpace q.n) :=
+    scheduledBalancedCoolingUniformRatioEstimate
+      figureOneFinalScheduledBalancedParameters q (terminalVariance q) value.2
+  let finish (z : (ℝ × AmbientSpace q.n) × Option ℝ) : ℝ :=
+    match z.2 with
+    | some uniformRatio => initialGaussianIntegral q * z.1.1 * uniformRatio
+    | none => 0
+  have huniform := scheduledBalancedCoolingUniformRatioEstimate_countedMeasurable
+    figureOneFinalScheduledBalancedParameters q I oracle
+      (terminalVariance_pos' q)
+  have hfinish : Measurable finish := by
+    have hnone : Measurable fun _ : ℝ × AmbientSpace q.n => (0 : ℝ) :=
+      measurable_const
+    have hsome : Measurable fun z : (ℝ × AmbientSpace q.n) × ℝ =>
+        initialGaussianIntegral q * z.1.1 * z.2 := by fun_prop
+    convert Measurable.optionElimParam hnone hsome using 1
+    funext z
+    rcases z with ⟨p, value⟩
+    cases value <;> rfl
+  have hsome := MembershipOracleProgram.countedMeasurable_bind_pure
+    oracle.query uniformProgram finish
+      (huniform.1.comp measurable_snd)
+      (fun value => huniform.2 value.2) hfinish
+  constructor
+  · convert Measurable.optionElim (Measure.dirac ((0 : ℝ), 0))
+      hsome.1 using 1
+    funext product
+    cases product <;> rfl
+  · intro product
+    cases product with
+    | none => trivial
+    | some value => exact hsome.2 value
+
+/-- The scalar/product coordinates in the terminal wrapper are query-free;
+its cost depends only on the optional retained endpoint. -/
+theorem figureOneFinalScheduledScalarTerminalTail_cost
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (product : Option (ℝ × AmbientSpace q.n)) :
+    countedQueryCost
+        ((figureOneFinalScheduledScalarTerminalTail q product).run oracle.query) =
+      countedQueryCost
+        ((figureOneFinalScheduledRetainedTerminalProgram q
+          (optionSnd product)).run oracle.query) := by
+  cases product with
+  | none =>
+      simp only [figureOneFinalScheduledScalarTerminalTail, optionSnd,
+        figureOneFinalScheduledRetainedTerminalProgram]
+      rw [MembershipOracleProgram.countedQueryCost_pure,
+        MembershipOracleProgram.countedQueryCost_pure]
+  | some value =>
+      rcases value with ⟨gaussianProduct, lastPoint⟩
+      unfold figureOneFinalScheduledScalarTerminalTail
+      rw [MembershipOracleProgram.countedQueryCost_bind_pure_eq]
+      · rw [scheduledBalancedCoolingUniformRatioEstimate_countedQueryCost_eq
+          figureOneFinalScheduledBalancedParameters q I oracle
+            (terminalVariance_pos' q) lastPoint]
+        rw [scheduledBalancedCoolingUniformEstimateWithState_countedQueryCost_eq
+          figureOneFinalScheduledBalancedParameters q I oracle
+            (terminalVariance_pos' q) lastPoint]
+        symm
+        exact figureOneFinalScheduledRetainedTerminalProgram_cost
+          q I oracle (some lastPoint)
+      · have hnone : Measurable fun _ : Unit => (0 : ℝ) := measurable_const
+        have hsome : Measurable fun z : Unit × ℝ =>
+            initialGaussianIntegral q * gaussianProduct * z.2 := by fun_prop
+        have hparam : Measurable fun z : Unit × Option ℝ =>
+            match z.2 with
+            | some uniformRatio =>
+                initialGaussianIntegral q * gaussianProduct * uniformRatio
+            | none => 0 := by
+          convert Measurable.optionElimParam hnone hsome using 1
+          funext z
+          rcases z with ⟨u, result⟩
+          cases result <;> rfl
+        exact hparam.comp
+          ((show Measurable fun result : Option ℝ => ((() : Unit), result) from
+            measurable_const.prodMk measurable_id))
+      · exact (scheduledBalancedCoolingUniformRatioEstimate_countedMeasurable
+          figureOneFinalScheduledBalancedParameters q I oracle
+            (terminalVariance_pos' q)).2 lastPoint
+
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_cost
 #print axioms figureOneFinalScheduledRetainedGaussianPhaseProgram_runEstimate
 #print axioms lintegral_figureOneFinalScheduledRetainedGaussianChain_eq_costTail
@@ -1019,5 +1121,6 @@ theorem map_bind_figureOneFinalScheduledCoolingProduct_optionSnd_eq_trace
 #print axioms lintegral_figureOneFinalScheduledRetainedFullCostProgram_eq
 #print axioms figureOneFinalScheduledCoolingProduct_cost_eq_retainedChain
 #print axioms map_bind_figureOneFinalScheduledCoolingProduct_optionSnd_eq_trace
+#print axioms figureOneFinalScheduledScalarTerminalTail_cost
 
 end ArlibCommunity.Algorithms.CV18
