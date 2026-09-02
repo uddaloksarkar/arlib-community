@@ -368,12 +368,203 @@ theorem balancedFigureOneBase_failure_le_of_lemma717bc
   exact balancedFigureOneBase_failure_le_of_directPostInitial
     parameters q I oracle hpost
 
+/-! ## Complete-phase lift of the first retained transition
+
+For Lemma 7.17(c), it is unnecessary (and generally too strong) to compare
+every within-phase transition with an independent draw.  After replacing the
+first transition, the remaining collector is the same probability kernel on
+both sides, so `MeasureLeUpTo.bind_same` preserves the first-transition error
+through the entire phase. -/
+
+/-- A first accepted-target replacement lifts, with no additional loss, to
+the complete accumulated phase law.  The comparison phase starts from the
+fixed `target` law and then runs exactly the same remaining collector. -/
+theorem MeasureLeUpTo.bind_balancedAccuracyTransitionCollectLaw_of_first
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (proposalCap properStride retryLimit samples : ℕ)
+    (mu : Measure (AmbientSpace q.n))
+    (target : Measure (Option (AmbientSpace q.n)))
+    {delta : ENNReal}
+    (hfirst : MeasureLeUpTo
+      (mu.bind (balancedAccuracyTransitionLawAux q I sigma2 proposalCap
+        properStride retryLimit)) target delta) :
+    MeasureLeUpTo
+      (mu.bind fun current =>
+        balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+          properStride retryLimit (samples + 1) 0 current)
+      (target.bind fun result =>
+        match result with
+        | none => Measure.dirac none
+        | some point =>
+            balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+              properStride retryLimit samples (weight point)
+                (accuracyScaleFactor q • point))
+      delta := by
+  let tail : Option (AmbientSpace q.n) →
+      Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+    match result with
+    | none => Measure.dirac none
+    | some point =>
+        balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+          properStride retryLimit samples (weight point)
+            (accuracyScaleFactor q • point)
+  have hcollect :=
+    balancedAccuracyTransitionCollectLaw_measurable_and_probability
+      q I hsigma2 hweight proposalCap properStride retryLimit samples
+  have htail : Measurable tail := by
+    have hsome : Measurable fun point : AmbientSpace q.n =>
+        balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+          properStride retryLimit samples (weight point)
+            (accuracyScaleFactor q • point) := by
+      exact hcollect.1.comp <| hweight.prodMk <|
+        (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+          accuracyScaleFactor q).smul measurable_id
+    convert Measurable.optionElim
+      (Measure.dirac (none : Option (ℝ × AmbientSpace q.n))) hsome using 1
+    funext result
+    cases result <;> rfl
+  have htailProb : ∀ result, IsProbabilityMeasure (tail result) := by
+    intro result
+    cases result with
+    | none =>
+        change IsProbabilityMeasure
+          (Measure.dirac (none : Option (ℝ × AmbientSpace q.n)))
+        infer_instance
+    | some point => exact hcollect.2 _ _
+  have htransition :=
+    balancedAccuracyTransitionLawAux_measurable_and_probability
+      q I hsigma2 proposalCap properStride retryLimit
+  have hsource :
+      (mu.bind fun current =>
+        balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+          properStride retryLimit (samples + 1) 0 current) =
+        (mu.bind (balancedAccuracyTransitionLawAux q I sigma2 proposalCap
+          properStride retryLimit)).bind tail := by
+    calc
+      _ = mu.bind fun current =>
+          (balancedAccuracyTransitionLawAux q I sigma2 proposalCap
+            properStride retryLimit current).bind tail := by
+        apply Measure.bind_congr_right
+        filter_upwards with current
+        simp [balancedAccuracyTransitionCollectLaw, tail]
+        rfl
+      _ = _ :=
+        (Measure.bind_bind htransition.1.aemeasurable htail.aemeasurable).symm
+  change MeasureLeUpTo _ (target.bind tail) delta
+  rw [hsource]
+  exact hfirst.bind_same htail htailProb
+
+/-- Paper-level complete-phase form of Lemma 7.17(b,c).  A uniform
+first-transition replacement for every `2`-warm conditioning of the retained
+history is lifted through all remaining samples, and arbitrary measurable
+past-product and phase-estimator postprocessing then gives the required
+approximate independence. -/
+theorem approxIndepFun_balancedCompletePhase_of_warm_first
+    {H : Type*} [MeasurableSpace H]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (proposalCap properStride retryLimit samples : ℕ)
+    (history : Measure H) [IsProbabilityMeasure history]
+    (state : H → AmbientSpace q.n) (hstate : Measurable state)
+    (target : Measure (Option (AmbientSpace q.n)))
+    [IsProbabilityMeasure target]
+    {delta : ENNReal} (hdelta : delta ≠ ⊤)
+    (hfirst : ∀ mu : Measure (AmbientSpace q.n),
+      IsProbabilityMeasure mu →
+      Arlib.IsWarm 2 mu (history.map state) →
+      MeasureLeUpTo
+        (mu.bind (balancedAccuracyTransitionLawAux q I sigma2 proposalCap
+          properStride retryLimit)) target delta)
+    (pastProduct : H → ℝ)
+    (nextEstimator : Option (ℝ × AmbientSpace q.n) → ℝ)
+    (hpastProduct : Measurable pastProduct)
+    (hnextEstimator : Measurable nextEstimator)
+    (k m : ℕ) (nu : ℝ)
+    (hbudget : (delta + delta).toReal ≤
+      3 * (k : ℝ) * (m : ℝ) * nu) :
+    let phaseTarget := target.bind fun result =>
+      match result with
+      | none => Measure.dirac none
+      | some point =>
+          balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+            properStride retryLimit samples (weight point)
+              (accuracyScaleFactor q • point)
+    ApproxIndepFun (3 * (k : ℝ) * (m : ℝ) * nu)
+      (pastProduct ∘ Prod.fst) (nextEstimator ∘ Prod.snd)
+      (sequentialPairLaw history
+        ((fun current =>
+          balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+            properStride retryLimit (samples + 1) 0 current) ∘ state)) := by
+  dsimp only
+  let phaseKernel : AmbientSpace q.n →
+      Measure (Option (ℝ × AmbientSpace q.n)) := fun current =>
+    balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+      properStride retryLimit (samples + 1) 0 current
+  let phaseTarget : Measure (Option (ℝ × AmbientSpace q.n)) :=
+    target.bind fun result =>
+      match result with
+      | none => Measure.dirac none
+      | some point =>
+          balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+            properStride retryLimit samples (weight point)
+              (accuracyScaleFactor q • point)
+  have hphase :=
+    balancedAccuracyTransitionCollectLaw_measurable_and_probability
+      q I hsigma2 hweight proposalCap properStride retryLimit (samples + 1)
+  have htail :=
+    balancedAccuracyTransitionCollectLaw_measurable_and_probability
+      q I hsigma2 hweight proposalCap properStride retryLimit samples
+  let tail : Option (AmbientSpace q.n) →
+      Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+    match result with
+    | none => Measure.dirac none
+    | some point =>
+        balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+          properStride retryLimit samples (weight point)
+            (accuracyScaleFactor q • point)
+  have htailMeas : Measurable tail := by
+    have hsome : Measurable fun point : AmbientSpace q.n =>
+        balancedAccuracyTransitionCollectLaw q I sigma2 weight proposalCap
+          properStride retryLimit samples (weight point)
+            (accuracyScaleFactor q • point) := by
+      exact htail.1.comp <| hweight.prodMk <|
+        (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+          accuracyScaleFactor q).smul measurable_id
+    convert Measurable.optionElim
+      (Measure.dirac (none : Option (ℝ × AmbientSpace q.n))) hsome using 1
+    funext result
+    cases result <;> rfl
+  have htailProb : ∀ result, IsProbabilityMeasure (tail result) := by
+    intro result
+    cases result with
+    | none => infer_instance
+    | some point => exact htail.2 _ _
+  let _ : IsProbabilityMeasure phaseTarget :=
+    MeasureTheory.isProbabilityMeasure_bind htailMeas.aemeasurable
+      (ae_of_all _ htailProb)
+  apply approxIndepFun_accumulatedProduct_nextEstimator_of_state_warm_leUpTo
+    history state hstate
+      (hphase.1.comp (measurable_const.prodMk measurable_id))
+      (fun current => hphase.2 0 current) phaseTarget hdelta ?_
+      (pastProduct := pastProduct) (nextEstimator := nextEstimator)
+      hpastProduct hnextEstimator k m nu hbudget
+  intro mu hmu hwarm
+  let _ : IsProbabilityMeasure mu := hmu
+  exact MeasureLeUpTo.bind_balancedAccuracyTransitionCollectLaw_of_first
+    q I hsigma2 hweight proposalCap properStride retryLimit samples mu target
+      (hfirst mu hmu hwarm)
+
 #print axioms MeasureLeUpTo.map_iteratedKernelLaw_of_figureOne_phase_max
 #print axioms figureOnePhaseReplacementBudget_sum_le
 #print axioms MeasureLeUpTo.map_figureOnePhaseIteration
 #print axioms balancedFigureOneBase_failure_le_of_phaseIteration
 #print axioms balancedFigureOneBase_failure_le_of_actualChronologicalMoments
 #print axioms balancedFigureOneBase_failure_le_of_lemma717bc
+#print axioms MeasureLeUpTo.bind_balancedAccuracyTransitionCollectLaw_of_first
+#print axioms approxIndepFun_balancedCompletePhase_of_warm_first
 
 end
 
