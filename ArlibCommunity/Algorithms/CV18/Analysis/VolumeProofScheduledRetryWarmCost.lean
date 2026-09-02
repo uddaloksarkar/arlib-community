@@ -365,6 +365,38 @@ theorem isWarm_of_le_of_isWarm
   intro A hA
   exact (Measure.le_iff.mp hle A hA).trans (hwarm A hA)
 
+/-- Every scheduled lazy-speedy stride preserves its speedy stationary law. -/
+theorem scheduledPhaseLazySpeedyPow_invariant
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (properStride : ℕ) :
+    Kernel.Invariant
+      ((lazy (speedyMetropolisGaussian
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)) ^ properStride)
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2) := by
+  let pi := ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) sigma2
+  have hinvOne : Kernel.Invariant
+      (lazy (speedyMetropolisGaussian
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)) pi :=
+    (isReversible_lazy
+      (isReversible_speedyMetropolisGaussian_prob
+        (figureOneScheduledPhaseBody_measurable q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)).invariant
+  induction properStride with
+  | zero =>
+      rw [pow_zero, Kernel.Invariant]
+      ext A hA
+      rw [Measure.bind_apply hA (Kernel.aemeasurable _)]
+      change (∫⁻ a, (Kernel.id a) A ∂pi) = pi A
+      simp_rw [Kernel.id_apply, Measure.dirac_apply' _ hA]
+      exact lintegral_indicator_one hA
+  | succ k ih =>
+      rw [pow_succ]
+      exact ih.comp hinvOne
+
 /-- Both retry branches preserve the warmness of the successful block-endpoint
 sublaw.  No normalization, TV error, or proposal-cap term is required. -/
 theorem scheduledBalancedRetryBranches_isWarm
@@ -389,30 +421,11 @@ theorem scheduledBalancedRetryBranches_isWarm
   dsimp only
   let pi := ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
     (figureOneScheduledProposalRadius q sigma2) sigma2
-  have hinvOne : Kernel.Invariant
-      (lazy (speedyMetropolisGaussian
-        (figureOneScheduledPhaseBody q I sigma2)
-        (figureOneScheduledProposalRadius q sigma2) sigma2)) pi :=
-    (isReversible_lazy
-      (isReversible_speedyMetropolisGaussian_prob
-        (figureOneScheduledPhaseBody_measurable q I sigma2)
-        (figureOneScheduledProposalRadius q sigma2) sigma2)).invariant
   have hinv : Kernel.Invariant
       ((lazy (speedyMetropolisGaussian
         (figureOneScheduledPhaseBody q I sigma2)
         (figureOneScheduledProposalRadius q sigma2) sigma2)) ^ properStride) pi :=
-    by
-      induction properStride with
-      | zero =>
-          rw [pow_zero, Kernel.Invariant]
-          ext A hA
-          rw [Measure.bind_apply hA (Kernel.aemeasurable _)]
-          change (∫⁻ a, (Kernel.id a) A ∂pi) = pi A
-          simp_rw [Kernel.id_apply, Measure.dirac_apply' _ hA]
-          exact lintegral_indicator_one hA
-      | succ k ih =>
-          rw [pow_succ]
-          exact ih.comp hinvOne
+    scheduledPhaseLazySpeedyPow_invariant q I sigma2 properStride
   have hend : _root_.Arlib.IsWarm M
       (successfulEndpointLaw
         (mu.bind (scheduledBalancedAccuracyRetryBlockKernel q I sigma2

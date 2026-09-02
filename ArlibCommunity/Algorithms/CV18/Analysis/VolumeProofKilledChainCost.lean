@@ -7,6 +7,7 @@ namespace ArlibCommunity.Algorithms.CV18
 
 open MeasureTheory ProbabilityTheory
 open scoped ENNReal
+open _root_.Arlib.MarkovChains
 
 /-- Expected accumulated trial cost along at most `trials` transitions of a
 possibly killed (subprobability) transition law. -/
@@ -76,5 +77,121 @@ theorem lintegral_finiteKilledChainExpectedCost_le
         _ = (trials + 1 : ℕ) * C := by
           push_cast
           ring
+
+/-! ## Scheduled-block specialization -/
+
+/-- Successful endpoint transition of one capped scheduled proper block. -/
+noncomputable def scheduledSuccessfulBlockEndpointLaw
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (proposalCap properStride : ℕ) (current : AmbientSpace q.n) :
+    Measure (AmbientSpace q.n) :=
+  successfulEndpointLaw
+    (scheduledBalancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+      properStride current)
+
+theorem scheduledSuccessfulBlockEndpointLaw_measurable
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (proposalCap properStride : ℕ) :
+    Measurable (scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap
+      properStride) := by
+  letI : Fact (0 < sigma2) := ⟨hsigma2⟩
+  let B := scheduledBalancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+    properStride
+  unfold scheduledSuccessfulBlockEndpointLaw successfulEndpointLaw
+  exact measurable_measure_bind_param_variable B.measurable
+    (fun current => IsMarkovKernel.isProbabilityMeasure current)
+    (measurable_successfulEndpointKernel.comp measurable_snd)
+
+theorem bind_scheduledSuccessfulBlockEndpointLaw_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ)
+    (proposalCap properStride : ℕ)
+    {M : ENNReal} {mu : Measure (AmbientSpace q.n)}
+    (hwarm : _root_.Arlib.IsWarm M mu
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2)) :
+    _root_.Arlib.IsWarm M
+      (mu.bind (scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap
+        properStride))
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2) := by
+  let B := scheduledBalancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+    properStride
+  have h :=
+    successfulEndpointLaw_bind_scheduledBalancedAccuracyRetryBlockKernel_isWarm
+      q I sigma2 proposalCap properStride hwarm
+        (scheduledPhaseLazySpeedyPow_invariant q I sigma2 properStride)
+  change _root_.Arlib.IsWarm M
+    (mu.bind fun current => (B current).bind successfulEndpointKernel)
+    (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2)
+  have heq : (mu.bind B).bind successfulEndpointKernel =
+      mu.bind (fun current => (B current).bind successfulEndpointKernel) :=
+    Measure.bind_bind B.aemeasurable
+      measurable_successfulEndpointKernel.aemeasurable
+  rw [← heq]
+  exact h
+
+/-- The fixed-live-trial shadow for a warm scheduled phase has linear cost,
+with no dependence on the local proposal cap. -/
+theorem lintegral_scheduledFixedLiveTrialShadowCost_le_of_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {M : ENNReal} {mu : Measure (AmbientSpace q.n)}
+    (hwarm : _root_.Arlib.IsWarm M mu
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2))
+    (proposalCap properStride trials : ℕ) :
+    let next := scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap
+      properStride
+    let trialCost := fun current => countedQueryCost
+      ((scheduledBalancedAccuracyLiveTrial q sigma2 proposalCap properStride
+        current).run oracle.query)
+    ∫⁻ current, finiteKilledChainExpectedCost next trialCost trials current ∂mu ≤
+      (trials : ENNReal) *
+        ((properStride : ENNReal) * (M * 2) + 2 * M) := by
+  dsimp only
+  let pi := ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) sigma2
+  have hdelta : 0 < figureOneScheduledProposalRadius q sigma2 :=
+    figureOneScheduledProposalRadius_pos q hsigma2
+  have hmass0 := ellGaussianMeasure_univ_ne_zero
+    (figureOneScheduledPhaseBody_measurable q I sigma2)
+    (figureOneScheduledPhaseBody_convex q I sigma2)
+    (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+    (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+    hdelta sigma2
+  have hmasstop := ellGaussianMeasure_ne_top_cv18
+    (figureOneScheduledPhaseBody_volume_ne_top q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) hsigma2
+  let _ : IsProbabilityMeasure pi :=
+    isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
+  let next := scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap
+    properStride
+  let trialCost : AmbientSpace q.n → ENNReal := fun current => countedQueryCost
+    ((scheduledBalancedAccuracyLiveTrial q sigma2 proposalCap properStride
+      current).run oracle.query)
+  have hnext : Measurable next :=
+    scheduledSuccessfulBlockEndpointLaw_measurable q I hsigma2 proposalCap
+      properStride
+  have htrial : Measurable trialCost :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+      (scheduledBalancedAccuracyLiveTrial_run_measurable q I oracle hsigma2
+        proposalCap properStride)
+  apply lintegral_finiteKilledChainExpectedCost_le hnext htrial
+  · intro nu hwarmNu
+    have hmass : nu Set.univ ≤ M := by
+      calc
+        nu Set.univ ≤ M * pi Set.univ :=
+          hwarmNu Set.univ MeasurableSet.univ
+        _ = M := by rw [measure_univ, mul_one]
+    exact
+      (lintegral_scheduledBalancedAccuracyLiveTrial_countedQueryCost_le_of_isWarm
+        q I oracle hsigma2 hwarmNu proposalCap properStride).trans
+        (add_le_add le_rfl (by gcongr))
+  · intro nu hwarmNu
+    exact bind_scheduledSuccessfulBlockEndpointLaw_isWarm q I sigma2
+      proposalCap properStride hwarmNu
+  · exact hwarm
 
 end ArlibCommunity.Algorithms.CV18
