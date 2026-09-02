@@ -398,11 +398,209 @@ theorem bind_figureOneFinalScheduledBalancedTransition_leUpTo_acceptedTarget
   simpa [proposalCap, properStride, attempts,
     Nat.sub_add_cancel (figureOneSafeRetryCount_pos q), K, delta, pi] using hresult
 
+/-- Optional retained-state kernel between consecutive samples of one
+scheduled phase.  Failure is absorbing; a live retained point is contracted
+back to the speedy state before the next balanced transition. -/
+noncomputable def figureOneFinalScheduledRetainedOptionKernel
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
+    Option (AmbientSpace q.n) → Measure (Option (AmbientSpace q.n))
+  | none => Measure.dirac none
+  | some current =>
+      scheduledBalancedAccuracyTransitionLawAux q I sigma2
+        (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+        (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+        (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)
+        (accuracyScaleFactor q • current)
+
+theorem figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    Measurable (figureOneFinalScheduledRetainedOptionKernel q I sigma2) ∧
+    ∀ state, IsProbabilityMeasure
+      (figureOneFinalScheduledRetainedOptionKernel q I sigma2 state) := by
+  have htransition :=
+    scheduledBalancedAccuracyTransitionLawAux_measurable_and_probability
+      q I hsigma2
+        (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+        (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+        (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)
+  have hsome : Measurable fun current : AmbientSpace q.n =>
+      scheduledBalancedAccuracyTransitionLawAux q I sigma2
+        (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+        (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+        (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)
+        (accuracyScaleFactor q • current) := by
+    exact htransition.1.comp <|
+      (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+        accuracyScaleFactor q).smul measurable_id
+  constructor
+  · convert Measurable.optionElim
+      (Measure.dirac (none : Option (AmbientSpace q.n))) hsome using 1
+    ext state
+    cases state <;> rfl
+  · intro state
+    cases state with
+    | none =>
+        change IsProbabilityMeasure
+          (Measure.dirac (none : Option (AmbientSpace q.n)))
+        infer_instance
+    | some current => exact htransition.2 (accuracyScaleFactor q • current)
+
+/-- The normalized accepted target is approximately invariant under one more
+retained transition.  This is the integrated (not pointwise-Dirac) step used
+by the paper's exact-chance argument. -/
+theorem bind_figureOneFinalScheduledAcceptedTarget_retainedOptionKernel_leUpTo
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let pi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2
+    let target := scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+      q I sigma2 pi
+    MeasureLeUpTo
+      ((target.map some).bind
+        (figureOneFinalScheduledRetainedOptionKernel q I sigma2))
+      (target.map some) (figureOneCorrectedTransitionBudget q) := by
+  dsimp only
+  let pi := ellGaussianProb
+    (figureOneScheduledPhaseBody q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) sigma2
+  let target := scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+    q I sigma2 pi
+  let contract : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    accuracyScaleFactor q • x
+  let transition := scheduledBalancedAccuracyTransitionLawAux q I sigma2
+    (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+    (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+    (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)
+  have hdelta : 0 < figureOneScheduledProposalRadius q sigma2 :=
+    figureOneScheduledProposalRadius_pos q hsigma2
+  have hmass0 : ellGaussianMeasure
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2 Set.univ ≠ 0 :=
+    ellGaussianMeasure_univ_ne_zero
+      (figureOneScheduledPhaseBody_measurable q I sigma2)
+      (figureOneScheduledPhaseBody_convex q I sigma2)
+      (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+      (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2) hdelta sigma2
+  have hmasstop : ellGaussianMeasure
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2 Set.univ ≠ ⊤ :=
+    ellGaussianMeasure_ne_top_cv18
+      (figureOneScheduledPhaseBody_volume_ne_top q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) hsigma2
+  let _ : IsProbabilityMeasure pi :=
+    isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
+  have haccepted : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      scheduledBalancedAcceptedStateMeasure q I sigma2 pi Set.univ := by
+    simpa [pi] using
+      scheduledBalancedAcceptedStateMeasure_mass_ge q I hsigma2
+  let _ : IsProbabilityMeasure target :=
+    scheduledBalancedAccuracyGaussianAcceptedTargetLaw_isProbabilityMeasure_of_lower
+      q I hsigma2 pi haccepted
+  have hcontractWarm : Arlib.IsWarm
+      (ENNReal.ofReal (8 * speedyAdjacentWarmConstant q))
+      (target.map contract) pi := by
+    have h8 : Arlib.IsWarm 8 (target.map contract) pi := by
+      simpa [target, pi, contract] using
+        map_scheduledBalancedAcceptedTarget_scale_isWarm_eight q I hsigma2
+    apply h8.mono
+    rw [← ENNReal.ofReal_ofNat 8]
+    exact ENNReal.ofReal_le_ofReal <| by
+      nlinarith [speedyAdjacentWarmConstant_one_le q]
+  let _ : IsProbabilityMeasure (target.map contract) :=
+    Measure.isProbabilityMeasure_map (by fun_prop : Measurable contract).aemeasurable
+  have hstep :=
+    bind_figureOneFinalScheduledBalancedTransition_leUpTo_acceptedTarget
+      q I hsigma2 (target.map contract) hcontractWarm
+        (target.map contract) inferInstance
+        ((Arlib.IsWarm.refl (target.map contract)).mono (by norm_num))
+  have hleft :
+      (target.map some).bind
+          (figureOneFinalScheduledRetainedOptionKernel q I sigma2) =
+        (target.map contract).bind transition := by
+    calc
+      _ = target.bind (figureOneFinalScheduledRetainedOptionKernel
+          q I sigma2 ∘ some) :=
+        map_bind_eq_bind_comp_state target measurable_some
+          (figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+            q I hsigma2).1
+      _ = target.bind fun current => transition (contract current) := by
+        apply Measure.bind_congr_right
+        filter_upwards with current
+        rfl
+      _ = _ := (map_bind_eq_bind_comp_state target (by fun_prop : Measurable contract)
+        (by
+          exact (scheduledBalancedAccuracyTransitionLawAux_measurable_and_probability
+            q I hsigma2
+              (figureOneFinalScheduledBalancedParameters.proposalCap q sigma2)
+              (figureOneFinalScheduledBalancedParameters.properStride q sigma2)
+              (figureOneFinalScheduledBalancedParameters.retryLimit q sigma2)).1)).symm
+  rw [hleft]
+  simpa [pi, target, contract, transition] using hstep
+
+/-- Repeating retained transitions accumulates only an additive exact-chance
+loss.  In particular, bad mass is transported by the probability kernel and
+is never doubled. -/
+theorem iterated_figureOneFinalScheduledRetainedOptionKernel_leUpTo
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (actualInitial : Measure (Option (AmbientSpace q.n)))
+    {initialError : ENNReal}
+    (hinitial :
+      let pi := ellGaussianProb
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2
+      let target := scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+        q I sigma2 pi
+      MeasureLeUpTo actualInitial (target.map some) initialError) :
+    ∀ samples,
+      let pi := ellGaussianProb
+        (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2
+      let target := scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+        q I sigma2 pi
+      MeasureLeUpTo
+        (iteratedKernelLaw
+          (fun _ => figureOneFinalScheduledRetainedOptionKernel q I sigma2)
+          actualInitial samples)
+        (target.map some)
+        (initialError + samples • figureOneCorrectedTransitionBudget q) := by
+  intro samples
+  dsimp only
+  let target := scheduledBalancedAccuracyGaussianAcceptedTargetLaw q I sigma2
+    (ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2)
+  let K := figureOneFinalScheduledRetainedOptionKernel q I sigma2
+  have hK := figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+    q I hsigma2
+  have hstep : MeasureLeUpTo ((target.map some).bind K)
+      (target.map some) (figureOneCorrectedTransitionBudget q) := by
+    simpa [target, K] using
+      bind_figureOneFinalScheduledAcceptedTarget_retainedOptionKernel_leUpTo
+        q I hsigma2
+  induction samples with
+  | zero => simpa [target] using hinitial
+  | succ samples ih =>
+      have hnext := MeasureLeUpTo.bind_then_replace ih K hK.1 hK.2 hstep
+      change MeasureLeUpTo
+        ((iteratedKernelLaw (fun _ =>
+          figureOneFinalScheduledRetainedOptionKernel q I sigma2)
+          actualInitial samples).bind K)
+        (target.map some)
+        (initialError + (samples + 1) • figureOneCorrectedTransitionBudget q)
+      convert hnext using 1
+      rw [succ_nsmul]
+      ac_rfl
+
 #print axioms TVLe.withDensity_mass_ge_two_sevenths_cv18
 #print axioms scheduledAccuracyPhase_stationary_acceptance_ge_one_eighth
 #print axioms scheduledBalancedAcceptedStateMeasure_mass_ge_one_sixteenth
 #print axioms map_scheduledBalancedAcceptedTarget_scale_eq
 #print axioms map_scheduledBalancedAcceptedTarget_scale_isWarm_eight
 #print axioms bind_figureOneFinalScheduledBalancedTransition_leUpTo_acceptedTarget
+#print axioms bind_figureOneFinalScheduledAcceptedTarget_retainedOptionKernel_leUpTo
+#print axioms iterated_figureOneFinalScheduledRetainedOptionKernel_leUpTo
 
 end ArlibCommunity.Algorithms.CV18
