@@ -1083,4 +1083,411 @@ theorem bind_balancedAccuracyTransitionLawAux_succ_leUpTo_stationary
     q I hsigma2 proposalCap properStride attempts pi] at hsecond
   exact hsecond
 
+/-- Additive domination is preserved by scaling both measures. -/
+theorem MeasureLeUpTo.smul
+    {A : Type*} [MeasurableSpace A]
+    {mu nu : Measure A} {delta c : ENNReal}
+    (h : MeasureLeUpTo mu nu delta) :
+    MeasureLeUpTo (c • mu) (c • nu) (c * delta) := by
+  obtain ⟨error, hle, hmass⟩ := h
+  refine ⟨c • error, ?_, ?_⟩
+  · apply Measure.le_iff.mpr
+    intro S hS
+    rw [Measure.smul_apply, Measure.add_apply,
+      Measure.smul_apply, Measure.smul_apply]
+    change c * mu S ≤ c * nu S + c * error S
+    rw [← mul_add]
+    exact mul_le_mul' le_rfl (Measure.le_iff.mp hle S hS)
+  · rw [Measure.smul_apply]
+    exact mul_le_mul' le_rfl hmass
+
+/-- Adding an identical measure to both sides preserves additive
+domination. -/
+theorem MeasureLeUpTo.add_left
+    {A : Type*} [MeasurableSpace A]
+    {mu nu : Measure A} {delta : ENNReal}
+    (xi : Measure A) (h : MeasureLeUpTo mu nu delta) :
+    MeasureLeUpTo (xi + mu) (xi + nu) delta := by
+  obtain ⟨error, hle, hmass⟩ := h
+  refine ⟨error, ?_, hmass⟩
+  calc
+    xi + mu ≤ xi + (nu + error) := add_le_add le_rfl hle
+    _ = (xi + nu) + error := by ac_rfl
+
+/-- A finite nonzero measure is its mass times its normalization on the
+whole space. -/
+theorem measure_eq_mass_smul_condOn_univ
+    {A : Type*} [MeasurableSpace A] (mu : Measure A)
+    (h0 : mu Set.univ ≠ 0) (htop : mu Set.univ ≠ ⊤) :
+    mu = mu Set.univ • Arlib.condOn mu Set.univ := by
+  rw [Arlib.condOn_def, Measure.restrict_univ, smul_smul,
+    ENNReal.mul_inv_cancel h0 htop, one_smul]
+
+/-- Accepted and rejected stationary current-state masses sum to one. -/
+theorem balancedAcceptedRejected_mass_add_eq_one
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (pi : Measure (AmbientSpace q.n)) [IsProbabilityMeasure pi] :
+    balancedAcceptedStateMeasure q I sigma2 pi Set.univ +
+      balancedRejectedStateMeasure q I sigma2 pi Set.univ = 1 := by
+  letI : Fact (0 < sigma2) := ⟨hsigma2⟩
+  let D := balancedAccuracyDecisionKernel q I sigma2
+  have hmass := congrArg (fun mu : Measure (Bool × AmbientSpace q.n) =>
+      mu Set.univ)
+    (bind_balancedAccuracyDecisionKernel_eq_branches q I sigma2 pi)
+  rw [measure_bind_apply_univ pi D.measurable
+    (fun x => IsMarkovKernel.isProbabilityMeasure x)] at hmass
+  have htrue : Measurable fun x : AmbientSpace q.n => (true, x) :=
+    measurable_const.prodMk measurable_id
+  have hfalse : Measurable fun x : AmbientSpace q.n => (false, x) :=
+    measurable_const.prodMk measurable_id
+  rw [Measure.add_apply,
+    Measure.map_apply htrue MeasurableSet.univ,
+    Measure.map_apply hfalse MeasurableSet.univ,
+    Set.preimage_univ, Set.preimage_univ] at hmass
+  simpa only [measure_univ] using hmass.symm
+
+/-- The unnormalized accepted target branch is its acceptance mass times the
+normalized balanced accepted-target law. -/
+theorem balancedAcceptedTargetSubmeasure_eq_mass_smul
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (pi : Measure (AmbientSpace q.n)) [IsProbabilityMeasure pi]
+    (hacceptedLower : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      balancedAcceptedStateMeasure q I sigma2 pi Set.univ) :
+    let accepted := balancedAcceptedStateMeasure q I sigma2 pi
+    let acceptedTarget := accepted.map
+      (fun x => (accuracyScaleFactor q)⁻¹ • x)
+    acceptedTarget = accepted Set.univ •
+      balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 pi := by
+  dsimp only
+  let accepted := balancedAcceptedStateMeasure q I sigma2 pi
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    (accuracyScaleFactor q)⁻¹ • x
+  let acceptedTarget := accepted.map scale
+  have hscale : Measurable scale := by
+    dsimp only [scale]
+    exact (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹).smul measurable_id
+  have haccepted0 : accepted Set.univ ≠ 0 := ne_of_gt <|
+    (by norm_num : 0 < ENNReal.ofReal (7 / 128 : ℝ)).trans_le
+      (by simpa [accepted] using hacceptedLower)
+  have hacceptedTop : accepted Set.univ ≠ ⊤ := by
+    have hle := balancedAcceptedStateMeasure_le_half_smul q I hsigma2 pi
+    exact ne_top_of_le_ne_top (by simp) <|
+      Measure.le_iff'.mp hle Set.univ
+  have htargetMass : acceptedTarget Set.univ = accepted Set.univ := by
+    dsimp only [acceptedTarget]
+    rw [Measure.map_apply hscale MeasurableSet.univ, Set.preimage_univ]
+  have htarget0 : acceptedTarget Set.univ ≠ 0 := by
+    rw [htargetMass]
+    exact haccepted0
+  have htargetTop : acceptedTarget Set.univ ≠ ⊤ := by
+    rw [htargetMass]
+    exact hacceptedTop
+  have hnormalize := measure_eq_mass_smul_condOn_univ acceptedTarget
+    htarget0 htargetTop
+  change acceptedTarget = accepted Set.univ •
+    Arlib.condOn acceptedTarget Set.univ
+  rw [← htargetMass]
+  exact hnormalize
+
+/-- Recursive additive error for balanced retries.  The base value `1` is
+the certain failure when no attempts remain. -/
+noncomputable def balancedRetryError (delta rejectMass : ENNReal) : ℕ → ENNReal
+  | 0 => 1
+  | attempts + 1 => delta + rejectMass *
+      balancedRetryError delta rejectMass attempts
+
+/-- Starting from the normalized stationary rejection branch, finite
+balanced retries are dominated by the normalized accepted target.  The
+recursive error records both block approximation and exhausting every
+attempt. -/
+theorem bind_balancedRejectedTransition_leUpTo_acceptedTarget
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (proposalCap properStride : ℕ)
+    (pi : Measure (AmbientSpace q.n)) [IsProbabilityMeasure pi]
+    {delta : ENNReal}
+    (hacceptedLower : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      balancedAcceptedStateMeasure q I sigma2 pi Set.univ)
+    (hrejectedLower : (2 : ENNReal)⁻¹ ≤
+      balancedRejectedStateMeasure q I sigma2 pi Set.univ)
+    (hblock :
+      let rejected := balancedRejectedStateMeasure q I sigma2 pi
+      let rejectedProb := Arlib.condOn rejected Set.univ
+      MeasureLeUpTo
+        ((rejectedProb.bind
+          (balancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+            properStride)).map optionSnd)
+        (pi.map some) delta) :
+    let rejected := balancedRejectedStateMeasure q I sigma2 pi
+    let rejectMass := rejected Set.univ
+    let rejectedProb := Arlib.condOn rejected Set.univ
+    ∀ attempts,
+      MeasureLeUpTo
+        (rejectedProb.bind
+          (balancedAccuracyTransitionLawAux q I sigma2 proposalCap
+            properStride attempts))
+        ((balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 pi).map some)
+        (balancedRetryError delta rejectMass attempts) := by
+  dsimp only
+  let accepted := balancedAcceptedStateMeasure q I sigma2 pi
+  let rejected := balancedRejectedStateMeasure q I sigma2 pi
+  let acceptMass := accepted Set.univ
+  let rejectMass := rejected Set.univ
+  let rejectedProb := Arlib.condOn rejected Set.univ
+  let target := balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 pi
+  let targetSome := target.map some
+  let E := balancedAccuracyTransitionLawAux q I sigma2 proposalCap properStride
+  have hrejected0 : rejectMass ≠ 0 := ne_of_gt <|
+    (by norm_num : 0 < (2 : ENNReal)⁻¹).trans_le
+      (by simpa [rejectMass, rejected] using hrejectedLower)
+  have hrejectedTop : rejectMass ≠ ⊤ := by
+    have hle : rejected ≤ pi := by
+      simpa [rejected] using
+        balancedRejectedStateMeasure_le q I sigma2 pi
+    exact ne_top_of_le_ne_top (measure_ne_top pi Set.univ) <|
+      Measure.le_iff'.mp hle Set.univ
+  let _ : IsProbabilityMeasure rejectedProb :=
+    Arlib.isProbabilityMeasure_condOn rejected hrejected0 hrejectedTop
+  have hmass : acceptMass + rejectMass = 1 := by
+    simpa [acceptMass, rejectMass, accepted, rejected] using
+      balancedAcceptedRejected_mass_add_eq_one q I hsigma2 pi
+  have hacceptedTarget :
+      (accepted.map (fun x => (accuracyScaleFactor q)⁻¹ • x)).map some =
+        acceptMass • targetSome := by
+    have hbase := balancedAcceptedTargetSubmeasure_eq_mass_smul
+      q I hsigma2 pi hacceptedLower
+    change (accepted.map
+      (fun x => (accuracyScaleFactor q)⁻¹ • x)).map some = _
+    rw [hbase, Measure.map_smul]
+  have hrejectedNormalize : rejected = rejectMass • rejectedProb := by
+    exact measure_eq_mass_smul_condOn_univ rejected hrejected0 hrejectedTop
+  intro attempts
+  induction attempts with
+  | zero =>
+      change MeasureLeUpTo
+        (rejectedProb.bind fun _ =>
+          Measure.dirac (none : Option (AmbientSpace q.n))) targetSome 1
+      rw [Measure.bind_const, measure_univ, one_smul]
+      refine ⟨Measure.dirac none, ?_, by simp⟩
+      apply Measure.le_iff.mpr
+      intro S hS
+      rw [Measure.add_apply]
+      exact le_add_left le_rfl
+  | succ attempts ih =>
+      have hone :=
+        bind_balancedAccuracyTransitionLawAux_succ_leUpTo_stationary
+          q I hsigma2 proposalCap properStride attempts rejectedProb pi hblock
+      have hscaled := ih.smul (c := rejectMass)
+      have hrejectedBind :
+          rejected.bind (E attempts) =
+            rejectMass • (rejectedProb.bind (E attempts)) := by
+        rw [hrejectedNormalize, Measure.bind_smul]
+      rw [← hrejectedBind] at hscaled
+      have hadd := hscaled.add_left
+        ((accepted.map
+          (fun x => (accuracyScaleFactor q)⁻¹ • x)).map some)
+      have htargetSum :
+          acceptMass • targetSome + rejectMass • targetSome = targetSome := by
+        rw [← add_smul, hmass, one_smul]
+      have hresult := hone.trans hadd
+      rw [hacceptedTarget, htargetSum] at hresult
+      simpa only [balancedRetryError] using hresult
+
+/-- The recursive retry error is bounded by a linear accumulation of block
+errors plus the probability of rejecting every attempt. -/
+theorem balancedRetryError_le_nsmul_add_pow
+    {delta rejectMass : ENNReal} (hrejectMass : rejectMass ≤ 1) :
+    ∀ attempts,
+      balancedRetryError delta rejectMass attempts ≤
+        attempts • delta + rejectMass ^ attempts := by
+  intro attempts
+  induction attempts with
+  | zero => simp [balancedRetryError]
+  | succ attempts ih =>
+      have hscale : rejectMass * (attempts • delta) ≤ attempts • delta := by
+        calc
+          rejectMass * (attempts • delta) ≤ 1 * (attempts • delta) :=
+            mul_le_mul' hrejectMass le_rfl
+          _ = attempts • delta := one_mul _
+      calc
+        balancedRetryError delta rejectMass (attempts + 1) =
+            delta + rejectMass *
+              balancedRetryError delta rejectMass attempts := rfl
+        _ ≤ delta + rejectMass *
+              (attempts • delta + rejectMass ^ attempts) :=
+            add_le_add le_rfl (mul_le_mul' le_rfl ih)
+        _ = delta + rejectMass * (attempts • delta) +
+              rejectMass ^ (attempts + 1) := by
+            rw [mul_add, pow_succ']
+            exact (add_assoc _ _ _).symm
+        _ ≤ delta + (attempts • delta) +
+              rejectMass ^ (attempts + 1) :=
+            add_le_add (add_le_add le_rfl hscale) le_rfl
+        _ = (attempts + 1) • delta + rejectMass ^ (attempts + 1) := by
+            rw [add_nsmul]
+            simp only [one_nsmul]
+            ac_rfl
+
+/-- The stationary balanced rejection probability is at most `121/128`. -/
+theorem balancedRejectedStateMeasure_mass_le
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (pi : Measure (AmbientSpace q.n)) [IsProbabilityMeasure pi]
+    (hacceptedLower : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      balancedAcceptedStateMeasure q I sigma2 pi Set.univ) :
+    balancedRejectedStateMeasure q I sigma2 pi Set.univ ≤
+      ENNReal.ofReal (121 / 128 : ℝ) := by
+  let acceptMass := balancedAcceptedStateMeasure q I sigma2 pi Set.univ
+  let rejectMass := balancedRejectedStateMeasure q I sigma2 pi Set.univ
+  have hmass : acceptMass + rejectMass = 1 := by
+    simpa [acceptMass, rejectMass] using
+      balancedAcceptedRejected_mass_add_eq_one q I hsigma2 pi
+  have hrejected : rejectMass = 1 - acceptMass := by
+    exact ENNReal.eq_sub_of_add_eq' ENNReal.one_ne_top
+      (by simpa [add_comm] using hmass)
+  change rejectMass ≤ ENNReal.ofReal (121 / 128 : ℝ)
+  rw [hrejected]
+  calc
+    1 - acceptMass ≤ 1 - ENNReal.ofReal (7 / 128 : ℝ) :=
+      tsub_le_tsub_left (by simpa [acceptMass] using hacceptedLower) 1
+    _ = ENNReal.ofReal (121 / 128 : ℝ) := by
+      rw [← ENNReal.ofReal_one,
+        ← ENNReal.ofReal_sub (1 : ℝ) (by norm_num : (0 : ℝ) ≤ 7 / 128)]
+      norm_num
+
+/-- A finite balanced transition from any first-block law is dominated by
+the same accepted target.  Subsequent rejected attempts use the normalized
+stationary rejection branch. -/
+theorem bind_balancedTransition_leUpTo_acceptedTarget
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (proposalCap properStride attempts : ℕ)
+    (rho pi : Measure (AmbientSpace q.n)) [IsProbabilityMeasure pi]
+    {firstError retryError : ENNReal}
+    (hacceptedLower : ENNReal.ofReal (7 / 128 : ℝ) ≤
+      balancedAcceptedStateMeasure q I sigma2 pi Set.univ)
+    (hrejectedLower : (2 : ENNReal)⁻¹ ≤
+      balancedRejectedStateMeasure q I sigma2 pi Set.univ)
+    (hfirstBlock : MeasureLeUpTo
+      ((rho.bind
+        (balancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+          properStride)).map optionSnd)
+      (pi.map some) firstError)
+    (hretryBlock :
+      let rejected := balancedRejectedStateMeasure q I sigma2 pi
+      let rejectedProb := Arlib.condOn rejected Set.univ
+      MeasureLeUpTo
+        ((rejectedProb.bind
+          (balancedAccuracyRetryBlockKernel q I sigma2 proposalCap
+            properStride)).map optionSnd)
+        (pi.map some) retryError) :
+    MeasureLeUpTo
+      (rho.bind
+        (balancedAccuracyTransitionLawAux q I sigma2 proposalCap
+          properStride (attempts + 1)))
+      ((balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 pi).map some)
+      (firstError +
+        balancedRejectedStateMeasure q I sigma2 pi Set.univ *
+          balancedRetryError retryError
+            (balancedRejectedStateMeasure q I sigma2 pi Set.univ) attempts) := by
+  let accepted := balancedAcceptedStateMeasure q I sigma2 pi
+  let rejected := balancedRejectedStateMeasure q I sigma2 pi
+  let acceptMass := accepted Set.univ
+  let rejectMass := rejected Set.univ
+  let rejectedProb := Arlib.condOn rejected Set.univ
+  let target := balancedAccuracyGaussianAcceptedTargetLaw q I sigma2 pi
+  let targetSome := target.map some
+  let E := balancedAccuracyTransitionLawAux q I sigma2 proposalCap properStride
+  have hrejected0 : rejectMass ≠ 0 := ne_of_gt <|
+    (by norm_num : 0 < (2 : ENNReal)⁻¹).trans_le
+      (by simpa [rejectMass, rejected] using hrejectedLower)
+  have hrejectedTop : rejectMass ≠ ⊤ := by
+    have hle : rejected ≤ pi := by
+      simpa [rejected] using
+        balancedRejectedStateMeasure_le q I sigma2 pi
+    exact ne_top_of_le_ne_top (measure_ne_top pi Set.univ) <|
+      Measure.le_iff'.mp hle Set.univ
+  let _ : IsProbabilityMeasure rejectedProb :=
+    Arlib.isProbabilityMeasure_condOn rejected hrejected0 hrejectedTop
+  have hmass : acceptMass + rejectMass = 1 := by
+    simpa [acceptMass, rejectMass, accepted, rejected] using
+      balancedAcceptedRejected_mass_add_eq_one q I hsigma2 pi
+  have hacceptedTarget :
+      (accepted.map (fun x => (accuracyScaleFactor q)⁻¹ • x)).map some =
+        acceptMass • targetSome := by
+    have hbase := balancedAcceptedTargetSubmeasure_eq_mass_smul
+      q I hsigma2 pi hacceptedLower
+    change (accepted.map
+      (fun x => (accuracyScaleFactor q)⁻¹ • x)).map some = _
+    rw [hbase, Measure.map_smul]
+  have hrejectedNormalize : rejected = rejectMass • rejectedProb :=
+    measure_eq_mass_smul_condOn_univ rejected hrejected0 hrejectedTop
+  have hretry := bind_balancedRejectedTransition_leUpTo_acceptedTarget
+    q I hsigma2 proposalCap properStride pi hacceptedLower hrejectedLower
+      hretryBlock attempts
+  have hscaled := hretry.smul (c := rejectMass)
+  have hrejectedBind : rejected.bind (E attempts) =
+      rejectMass • (rejectedProb.bind (E attempts)) := by
+    rw [hrejectedNormalize, Measure.bind_smul]
+  rw [← hrejectedBind] at hscaled
+  have hadd := hscaled.add_left
+    ((accepted.map (fun x => (accuracyScaleFactor q)⁻¹ • x)).map some)
+  have hone :=
+    bind_balancedAccuracyTransitionLawAux_succ_leUpTo_stationary
+      q I hsigma2 proposalCap properStride attempts rho pi hfirstBlock
+  have hresult := hone.trans hadd
+  have htargetSum :
+      acceptMass • targetSome + rejectMass • targetSome = targetSome := by
+    rw [← add_smul, hmass, one_smul]
+  rw [hacceptedTarget, htargetSum] at hresult
+  simpa [rejectMass, rejected, targetSome, target] using hresult
+
+/-- Convert the paper's multiplicative proper-proposal cutoff inequality into
+an explicit cap-failure probability bound. -/
+theorem bind_balancedAccuracyRetryBlockKernel_none_le_of_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {M : ENNReal} {mu : Measure (AmbientSpace q.n)}
+    (hwarm : Arlib.IsWarm M mu
+      (Arlib.MarkovChains.ellGaussianProb
+        (accuracyPhaseTruncatedBody q I sigma2)
+        (figureOneProposalRadius q sigma2) sigma2))
+    (proposalCap properStride : ℕ) (hproposalCap : 0 < proposalCap)
+    {capError : ENNReal}
+    (hbudget : ((properStride : ℕ) : ENNReal) * M ≤
+      (ENNReal.ofReal (1 / 2) * (proposalCap : ENNReal)) * capError) :
+    (mu.bind
+      (balancedAccuracyRetryBlockKernel q I sigma2 proposalCap properStride))
+        {none} ≤ capError := by
+  let fail := (mu.bind
+    (balancedAccuracyRetryBlockKernel q I sigma2 proposalCap properStride))
+      {none}
+  let coefficient := ENNReal.ofReal (1 / 2) * (proposalCap : ENNReal)
+  have hmoment :=
+    half_mul_natCast_mul_bind_accuracyCappedProperCollectLaw_none_le
+      q I hsigma2
+      (weight := accuracyImportanceWeight q I sigma2 (fun _ => 0))
+      (measurable_accuracyImportanceWeight q I sigma2
+        (measurable_const : Measurable fun _ : AmbientSpace q.n => (0 : ℝ)))
+      hwarm proposalCap properStride 1
+  have hmoment' : coefficient * fail ≤
+      ((properStride : ℕ) : ENNReal) * M := by
+    simpa [coefficient, fail, balancedAccuracyRetryBlockKernel] using hmoment
+  have hcoeff0 : coefficient ≠ 0 := by
+    simp [coefficient, hproposalCap.ne']
+  have hcoeffTop : coefficient ≠ ⊤ := by
+    exact ENNReal.mul_ne_top ENNReal.ofReal_ne_top (by simp [coefficient])
+  have hcombined : coefficient * fail ≤ coefficient * capError :=
+    hmoment'.trans hbudget
+  calc
+    fail = coefficient⁻¹ * (coefficient * fail) := by
+      rw [← mul_assoc, ENNReal.inv_mul_cancel hcoeff0 hcoeffTop, one_mul]
+    _ ≤ coefficient⁻¹ * (coefficient * capError) :=
+      mul_le_mul' le_rfl hcombined
+    _ = capError := by
+      rw [← mul_assoc, ENNReal.inv_mul_cancel hcoeff0 hcoeffTop, one_mul]
+
 end ArlibCommunity.Algorithms.CV18
