@@ -1525,10 +1525,31 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
 
 /-! ## Paper-faithful scheduled Lemma 7.15 interface -/
 
+/-- Nonnegative version of the stored chronological coordinate.  The history
+type itself admits arbitrary negative entries, whereas executable histories
+are nonnegative only almost surely.  Clamping makes Lemma 7.15's pointwise
+nonnegativity premise honest; an AE support fact below identifies it with the
+executable output. -/
+noncomputable def scheduledBalancedChronologicalPhaseVariable
+    (q : VolumeParams) (j : ℕ) :
+    Option (BalancedCoolingHistory q.n) → ℝ := fun history =>
+  max 0 (balancedCoolingChronologicalPhaseVariable q j history)
+
+theorem measurable_scheduledBalancedChronologicalPhaseVariable
+    (q : VolumeParams) (j : ℕ) :
+    Measurable (scheduledBalancedChronologicalPhaseVariable q j) :=
+  measurable_const.max (measurable_balancedCoolingChronologicalPhaseVariable q j)
+
+theorem scheduledBalancedChronologicalPhaseVariable_nonneg
+    (q : VolumeParams) (j : ℕ)
+    (history : Option (BalancedCoolingHistory q.n)) :
+    0 ≤ scheduledBalancedChronologicalPhaseVariable q j history :=
+  le_max_left _ _
+
 noncomputable def scheduledFigureOneActualRawMean
     (parameters : BalancedCoolingParameters) (q : VolumeParams)
     (I : VolumeInput q.n) (j : ℕ) : ℝ :=
-  ∫ history, balancedCoolingChronologicalPhaseVariable q j history
+  ∫ history, scheduledBalancedChronologicalPhaseVariable q j history
     ∂scheduledBalancedForwardHistoryLaw parameters q I
       (figureOneDependentPhaseCount q)
 
@@ -1538,7 +1559,7 @@ noncomputable def scheduledFigureOneActualTruncatedPhase
     ℕ → Option (BalancedCoolingHistory q.n) → ℝ :=
   dependentTruncatedPhase (figureOneDependentAlpha q)
     (scheduledFigureOneActualRawMean parameters q I)
-    (balancedCoolingChronologicalPhaseVariable q)
+    (scheduledBalancedChronologicalPhaseVariable q)
 
 noncomputable def scheduledFigureOneActualTruncatedMean
     (parameters : BalancedCoolingParameters) (q : VolumeParams)
@@ -1570,10 +1591,13 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_lemma717bc
           figureOneFinalScheduledBalancedParameters q I
           (figureOneDependentPhaseCount q) point).map
             (balancedFigureOneHistoryEstimate q))
-    (hW0 : ∀ j history,
-      0 ≤ balancedCoolingChronologicalPhaseVariable q j history)
+    (hWnonneg : ∀ᵐ history ∂scheduledBalancedForwardHistoryLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q),
+      ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+        0 ≤ balancedCoolingChronologicalPhaseVariable q j history)
     (hWint : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
-      Integrable (balancedCoolingChronologicalPhaseVariable q j)
+      Integrable (scheduledBalancedChronologicalPhaseVariable q j)
         (scheduledBalancedForwardHistoryLaw
           figureOneFinalScheduledBalancedParameters q I
           (figureOneDependentPhaseCount q)))
@@ -1643,7 +1667,7 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_lemma717bc
   let parameters := figureOneFinalScheduledBalancedParameters
   let mu := scheduledBalancedForwardHistoryLaw parameters q I
     (figureOneDependentPhaseCount q)
-  let W := balancedCoolingChronologicalPhaseVariable q
+  let W := scheduledBalancedChronologicalPhaseVariable q
   let rawMean := scheduledFigureOneActualRawMean parameters q I
   let V := scheduledFigureOneActualTruncatedPhase parameters q I
   let mean := scheduledFigureOneActualTruncatedMean parameters q I
@@ -1654,7 +1678,9 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_lemma717bc
   let _ : IsProbabilityMeasure mu :=
     scheduledBalancedForwardHistoryLaw_isProbabilityMeasure parameters q I _
   have hWmeas : ∀ j, Measurable (W j) := fun j =>
-    measurable_balancedCoolingChronologicalPhaseVariable q j
+    measurable_scheduledBalancedChronologicalPhaseVariable q j
+  have hW0 : ∀ j history, 0 ≤ W j history := fun j history =>
+    scheduledBalancedChronologicalPhaseVariable_nonneg q j history
   have hVmeas : ∀ j, Measurable (V j) := fun j =>
     (hWmeas j).min measurable_const
   have hV0 : ∀ j history, 0 ≤ V j history := by
@@ -1687,9 +1713,16 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_lemma717bc
     rw [hhistory]
     apply Measure.map_congr
     filter_upwards [scheduledBalancedForwardHistoryLaw_ae_hasProduct
-      parameters q I (figureOneDependentPhaseCount q)] with history hproduct
-    exact balancedFigureOneHistoryEstimate_eq_sampleProduct
-      q history hproduct
+      parameters q I (figureOneDependentPhaseCount q), hWnonneg]
+      with history hproduct hnonneg
+    rw [balancedFigureOneHistoryEstimate_eq_sampleProduct q history hproduct]
+    congr 1
+    unfold dependentPhaseSampleProduct
+    apply Finset.prod_congr rfl
+    intro j hj
+    simp only [W, scheduledBalancedChronologicalPhaseVariable]
+    rw [max_eq_right (hnonneg (j + 1) (by omega)
+      (Nat.succ_le_iff.mpr (Finset.mem_range.mp hj)))]
   have hX : Measurable
       (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q)) := by
     unfold dependentPhaseSampleProduct
