@@ -18,6 +18,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyRejectionSeman
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyAcceptance
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyImportance
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyImportanceMoments
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyTVL2
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyImportanceProgram
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyImportanceLaw
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofCappedDominance
