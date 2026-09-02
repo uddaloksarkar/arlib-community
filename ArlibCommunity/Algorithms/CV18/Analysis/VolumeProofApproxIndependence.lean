@@ -53,6 +53,53 @@ theorem ApproxIndepFun.symm {epsilon : ℝ} {X : Omega -> S} {Y : Omega -> T}
   intro B hB A hA
   simpa [inter_comm, mul_comm, abs_sub_comm] using h A hA B hB
 
+/-- As observed after equation (4) of Lovasz--Vempala [24], it suffices to
+check approximate independence on left events of probability at least one
+half.  The complementary rectangle has the same covariance with opposite
+sign. -/
+theorem ApproxIndepFun.of_large_left
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    {epsilon : ℝ} {X : Omega -> S} {Y : Omega -> T}
+    (hX : Measurable X) (hY : Measurable Y)
+    (hlarge : forall A : Set S, MeasurableSet A ->
+      1 / 2 <= mu.real (X ⁻¹' A) ->
+      forall B : Set T, MeasurableSet B ->
+        |mu.real (X ⁻¹' A ∩ Y ⁻¹' B) -
+          mu.real (X ⁻¹' A) * mu.real (Y ⁻¹' B)| <= epsilon) :
+    ApproxIndepFun epsilon X Y mu := by
+  intro A hA B hB
+  let EA : Set Omega := X ⁻¹' A
+  let EB : Set Omega := Y ⁻¹' B
+  have hEA : MeasurableSet EA := hX hA
+  have hEB : MeasurableSet EB := hY hB
+  by_cases hhalf : 1 / 2 <= mu.real EA
+  · exact hlarge A hA hhalf B hB
+  · have hhalfCompl : 1 / 2 <= mu.real EAᶜ := by
+      have hsum := probReal_add_probReal_compl (μ := mu) hEA
+      rw [not_le] at hhalf
+      linarith
+    have hcomp := hlarge Aᶜ hA.compl (by simpa [EA] using hhalfCompl) B hB
+    have hpreComp : X ⁻¹' Aᶜ = EAᶜ := by simp [EA]
+    have hinterComp : X ⁻¹' Aᶜ ∩ Y ⁻¹' B = EB \ EA := by
+      ext omega
+      simp [EA, EB, and_comm]
+    have hEACompl : mu.real EAᶜ = 1 - mu.real EA := by
+      rw [measureReal_compl hEA, probReal_univ]
+    have hinter : mu.real (EB \ EA) =
+        mu.real EB - mu.real (EA ∩ EB) := by
+      have hsub := measureReal_sdiff (μ := mu) (s₁ := EB) (s₂ := EA ∩ EB)
+        inter_subset_right (hEA.inter hEB) (measure_ne_top mu EB)
+      rw [show EB \ (EA ∩ EB) = EB \ EA by ext omega; simp] at hsub
+      exact hsub
+    change |mu.real (EAᶜ ∩ EB) - mu.real EAᶜ * mu.real EB| <= epsilon at hcomp
+    rw [show EAᶜ ∩ EB = EB \ EA by ext omega; simp [and_comm],
+      hEACompl, hinter] at hcomp
+    change |mu.real (EA ∩ EB) - mu.real EA * mu.real EB| <= epsilon
+    rw [show (mu.real EB - mu.real (EA ∩ EB) -
+        (1 - mu.real EA) * mu.real EB) =
+          -(mu.real (EA ∩ EB) - mu.real EA * mu.real EB) by ring] at hcomp
+    simpa [abs_sub_comm] using hcomp
+
 /-- The real mass of a measurable set under a nonnegative real density is
 the corresponding set integral. -/
 theorem withDensity_ofReal_real_apply_eq_setIntegral

@@ -79,6 +79,19 @@ theorem MeasureLeUpTo.event_le {α : Type*} [MeasurableSpace α]
       add_le_add le_rfl (measure_mono (μ := error) (Set.subset_univ S))
     _ ≤ ν S + δ := add_le_add_right hmass _
 
+/-- For probability measures, additive domination is already a total-
+variation estimate with the same error.  The reverse event inequality follows
+from complements, so the positive error measure in `MeasureLeUpTo` costs no
+additional factor. -/
+theorem MeasureLeUpTo.to_tvLe
+    {α : Type*} [MeasurableSpace α]
+    {μ ν : Measure α} [IsProbabilityMeasure μ] [IsProbabilityMeasure ν]
+    {δ : ENNReal} (h : MeasureLeUpTo μ ν δ) :
+    Arlib.TVLe μ ν δ := by
+  apply Arlib.tvLe_of_forall_le
+  intro S _hS
+  exact h.event_le S
+
 theorem measure_bind_mono_left
     {α β : Type*} [MeasurableSpace α] [MeasurableSpace β]
     {μ ν : Measure α} (hμν : μ ≤ ν)
