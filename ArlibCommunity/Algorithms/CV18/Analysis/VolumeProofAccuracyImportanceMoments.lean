@@ -493,4 +493,135 @@ theorem stationary_accuracyAcceptedTarget_isWarm
   rw [Arlib.condOn_def, Measure.restrict_univ]
   convert hw using 1 <;> norm_num
 
+/-- Warmness transfers every square-integrable real second moment.  This
+small adapter is useful below because the KLS observable is unbounded on the
+ambient space even though its accepted law is dominated by the target. -/
+theorem integral_sq_le_of_isWarm_cv18
+    {S : Type*} [MeasurableSpace S]
+    {M : ENNReal} (hMtop : M ≠ ⊤) {mu nu : Measure S}
+    (hwarm : IsWarm M mu nu) {f : S → ℝ} (hf : MemLp f 2 nu) :
+    (∫ x, f x ^ 2 ∂mu) ≤ M.toReal * ∫ x, f x ^ 2 ∂nu := by
+  have hle : mu ≤ M • nu := (isWarm_iff_le_smul _ _).1 hwarm
+  calc
+    (∫ x, f x ^ 2 ∂mu) ≤ ∫ x, f x ^ 2 ∂(M • nu) := by
+      exact integral_mono_measure hle
+        (Filter.Eventually.of_forall fun x => sq_nonneg (f x))
+        (hf.integrable_sq.smul_measure hMtop)
+    _ = M.toReal * ∫ x, f x ^ 2 ∂nu := by
+      rw [integral_smul_measure]
+      rfl
+
+/-- The square of a centered Rao--Blackwell observation at speedy
+stationarity is bounded by four times the corresponding exact-target second
+moment.  Crucially, the same acceptance weight multiplies the centered
+observable before squaring; this is the cancellation lost by independent
+numerator and denominator trajectories. -/
+theorem integral_stationary_accuracyImportance_centered_sq_le_four_target
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (r : ℝ)
+    (hsource : MemLp
+      (accuracyImportanceWeight q I sigma2 (fun y => weight y - r)) 2
+      (ellGaussianProb
+        (accuracyPhaseTruncatedBody q I sigma2)
+        (figureOneProposalRadius q sigma2) sigma2))
+    (htarget : MemLp (fun y => weight y - r) 2
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n))) :
+    (∫ x, accuracyImportanceWeight q I sigma2
+          (fun y => weight y - r) x ^ 2
+        ∂ellGaussianProb
+          (accuracyPhaseTruncatedBody q I sigma2)
+          (figureOneProposalRadius q sigma2) sigma2) ≤
+      4 * ∫ y, (weight y - r) ^ 2
+        ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+          Measure (AmbientSpace q.n)) := by
+  let pi := ellGaussianProb
+    (accuracyPhaseTruncatedBody q I sigma2)
+    (figureOneProposalRadius q sigma2) sigma2
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  let accept := accuracyGaussianRejectionAcceptance q I sigma2
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    (accuracyScaleFactor q)⁻¹ • x
+  let u : AmbientSpace q.n → ℝ := fun y => weight y - r
+  let accepted := (pi.withDensity accept).map scale
+  have haccept : Measurable accept :=
+    measurable_accuracyGaussianRejectionAcceptance q I sigma2
+  have hscale : Measurable scale := by
+    dsimp [scale]
+    exact (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹).smul measurable_id
+  have hu : Measurable u := by
+    exact hweight.sub measurable_const
+  have hdom : accepted ≤ (4 : ENNReal) • nu := by
+    simpa [accepted, pi, nu, accept, scale] using
+      stationary_accuracyAcceptedSubmeasure_le_four_target q I hsigma2
+  have hu2Large : Integrable (fun y => u y ^ 2) ((4 : ENNReal) • nu) := by
+    have hu2 : Integrable (fun y => u y ^ 2) nu := by
+      simpa [u, nu] using htarget.integrable_sq
+    exact hu2.smul_measure (by norm_num)
+  have hu2Accepted : Integrable (fun y => u y ^ 2) accepted :=
+    hu2Large.mono_measure hdom
+  have hu2Density : Integrable (fun x => u (scale x) ^ 2)
+      (pi.withDensity accept) := by
+    apply (integrable_map_measure hu2Accepted.aestronglyMeasurable
+      hscale.aemeasurable).mp
+    simpa [accepted] using hu2Accepted
+  have hweighted : Integrable
+      (fun x => (accept x).toReal * u (scale x) ^ 2) pi := by
+    have hfinite : ∀ᵐ x ∂pi, accept x < ⊤ :=
+      Filter.Eventually.of_forall fun x => lt_of_le_of_lt
+        (accuracyGaussianRejectionAcceptance_le_one q I hsigma2 x)
+        ENNReal.one_lt_top
+    have h := (integrable_withDensity_iff haccept hfinite).mp hu2Density
+    simpa [mul_comm] using h
+  have hpoint : ∀ x,
+      accuracyImportanceWeight q I sigma2 u x ^ 2 ≤
+        (accept x).toReal * u (scale x) ^ 2 := by
+    intro x
+    have ha0 : 0 ≤ (accept x).toReal := ENNReal.toReal_nonneg
+    have ha1 : (accept x).toReal ≤ 1 := by
+      exact ENNReal.toReal_mono ENNReal.one_ne_top
+        (accuracyGaussianRejectionAcceptance_le_one q I hsigma2 x)
+    change ((accept x).toReal * u (scale x)) ^ 2 ≤
+      (accept x).toReal * u (scale x) ^ 2
+    rw [mul_pow]
+    exact mul_le_mul_of_nonneg_right (by nlinarith)
+      (sq_nonneg (u (scale x)))
+  have hleft :
+      (∫ x, accuracyImportanceWeight q I sigma2 u x ^ 2 ∂pi) ≤
+        ∫ x, (accept x).toReal * u (scale x) ^ 2 ∂pi := by
+    apply integral_mono_ae hsource.integrable_sq hweighted
+    exact Filter.Eventually.of_forall hpoint
+  have hidentity :
+      (∫ x, (accept x).toReal * u (scale x) ^ 2 ∂pi) =
+        ∫ y, u y ^ 2 ∂accepted := by
+    dsimp only [accepted]
+    rw [integral_map hscale.aemeasurable
+      ((hu.pow_const 2).aestronglyMeasurable)]
+    rw [integral_withDensity_eq_integral_toReal_smul haccept
+      (Filter.Eventually.of_forall fun x => lt_of_le_of_lt
+        (accuracyGaussianRejectionAcceptance_le_one q I hsigma2 x)
+        ENNReal.one_lt_top)]
+    simp only [smul_eq_mul]
+  have hright : (∫ y, u y ^ 2 ∂accepted) ≤
+      ∫ y, u y ^ 2 ∂((4 : ENNReal) • nu) := by
+    exact integral_mono_measure hdom
+      (Filter.Eventually.of_forall fun y => sq_nonneg (u y)) hu2Large
+  calc
+    (∫ x, accuracyImportanceWeight q I sigma2
+          (fun y => weight y - r) x ^ 2 ∂pi) =
+        ∫ x, accuracyImportanceWeight q I sigma2 u x ^ 2 ∂pi := by rfl
+    _ ≤ ∫ x, (accept x).toReal * u (scale x) ^ 2 ∂pi := hleft
+    _ = ∫ y, u y ^ 2 ∂accepted := hidentity
+    _ ≤ ∫ y, u y ^ 2 ∂((4 : ENNReal) • nu) := hright
+    _ = 4 * ∫ y, (weight y - r) ^ 2 ∂nu := by
+      rw [integral_smul_measure]
+      norm_num [u]
+    _ = 4 * ∫ y, (weight y - r) ^ 2
+        ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+          Measure (AmbientSpace q.n)) := by rfl
+
 end ArlibCommunity.Algorithms.CV18
