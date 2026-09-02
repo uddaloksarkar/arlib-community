@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofChronologicalBalancedPrefixes
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledRetryKernel
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCoolingPrimitives
 
 /-!
 # Chronological complete-phase law at the schedule-targeted geometry
@@ -1062,6 +1063,61 @@ theorem scheduledPostInitialDirectFailureBound_of_phaseIteration
   · simpa [W, mu, actualK, idealK, initial, output] using htransfer
   · exact hlaw
 
+/-- Base-run form of the scheduled mapped-law capstone.  The initial fallback
+uses `eps/64`, so the post-initial `3/16` guarantee becomes `13/64`. -/
+theorem figureOneScheduledBalancedBase_failure_le_of_phaseIteration
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (continuation : AmbientSpace q.n → Measure ℝ)
+    (hcontinuationMeas : Measurable continuation)
+    (hcontinuationProb : ∀ point, IsProbabilityMeasure (continuation point))
+    (hpostLaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation =
+        (scheduledBalancedForwardHistoryLaw
+          figureOneScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)).map
+            (balancedFigureOneHistoryEstimate q))
+    (hbaseLaw :
+      (figureOneScheduledBalancedBaseProgram q).runEstimate oracle.query =
+        ((initialGaussianSamplingMeasure q).map
+          (initialTruncatedFallback q I)).bind continuation)
+    (hphase : ∀ phase,
+      MeasureLeUpTo
+        ((iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
+          (scheduledChronologicalCommonInitial q I) phase).bind
+            (figureOneScheduledActualChronologicalPhaseKernel
+              figureOneScheduledBalancedParameters q I phase))
+        (iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
+          (scheduledChronologicalCommonInitial q I) (phase + 1))
+        (figureOnePhaseReplacementBudget q)) :
+    (figureOneScheduledBalancedBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  have hpost := scheduledPostInitialDirectFailureBound_of_phaseIteration
+    figureOneScheduledBalancedParameters q I hrounded continuation hpostLaw hphase
+  have hinitial := initialTruncatedFallback_bind_apply_le q I continuation
+    hcontinuationMeas hcontinuationProb (accurateOutcome q I)ᶜ
+    (accurateOutcome_measurable q I).compl
+  unfold FigureOnePostInitialDirectFailureBoundFor at hpost
+  rw [hbaseLaw]
+  calc
+    ((initialGaussianSamplingMeasure q).map
+        (initialTruncatedFallback q I)).bind continuation
+          (accurateOutcome q I)ᶜ ≤
+      ((truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation) (accurateOutcome q I)ᶜ +
+        ENNReal.ofReal (q.eps / 64) := hinitial
+    _ ≤ ENNReal.ofReal (3 / 16 : ℝ) + ENNReal.ofReal (1 / 64 : ℝ) := by
+      exact add_le_add hpost (ENNReal.ofReal_le_ofReal (by
+        linarith [q.heps.2]))
+    _ = ENNReal.ofReal (13 / 64 : ℝ) := by
+      rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 3 / 16)
+        (by norm_num : (0 : ℝ) ≤ 1 / 64)]
+      congr 1
+      norm_num
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
@@ -1247,6 +1303,9 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms scheduledBalancedForwardHistoryLaw_isProbabilityMeasure
 #print axioms map_snd_iteratedKernelLaw_carryHistoryKernel
 #print axioms scheduledChronologicalActualIteration_map_snd
+#print axioms figureOneIdealChronologicalIteration_map_output
+#print axioms scheduledPostInitialDirectFailureBound_of_phaseIteration
+#print axioms figureOneScheduledBalancedBase_failure_le_of_phaseIteration
 
 end
 
