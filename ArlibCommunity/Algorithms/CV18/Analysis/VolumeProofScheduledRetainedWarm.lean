@@ -275,6 +275,31 @@ theorem map_scheduledBalancedAcceptedTarget_scale_isWarm_eight
         norm_num
       rw [← mul_assoc, hcoef]
 
+/-- After the scheduled contraction and one cooling increment, the retained
+accepted target has exactly the phase-start warmness budget already used by
+the concrete first-block theorem. -/
+theorem map_scheduledBalancedAcceptedTarget_scale_adjacent_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ) :
+    let sigma2 := scheduleValue q phase
+    let pi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2
+    let nextPi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I (scheduleValue q (phase + 1)))
+      (figureOneScheduledProposalRadius q (scheduleValue q (phase + 1)))
+      (scheduleValue q (phase + 1))
+    Arlib.IsWarm (ENNReal.ofReal (8 * speedyAdjacentWarmConstant q))
+      ((scheduledBalancedAccuracyGaussianAcceptedTargetLaw
+        q I sigma2 pi).map (fun x => accuracyScaleFactor q • x)) nextPi := by
+  dsimp only
+  have hsame := map_scheduledBalancedAcceptedTarget_scale_isWarm_eight
+    q I (scheduleValue_pos q phase)
+  have hadj := scheduledPhase_speedyStationary_adjacent_isWarm q I phase
+  have htrans := hsame.trans hadj
+  convert htrans using 1
+  rw [show (8 : ENNReal) = ENNReal.ofReal (8 : ℝ) by norm_num,
+    ← ENNReal.ofReal_mul (by norm_num : (0 : ℝ) ≤ 8)]
+
 /-- Concrete final-parameter transition domination before the KLS target is
 replaced by the restricted Gaussian.  Keeping this accepted target is what
 allows the chronological good path to remain warm phase after phase. -/
@@ -599,6 +624,7 @@ theorem iterated_figureOneFinalScheduledRetainedOptionKernel_leUpTo
 #print axioms scheduledBalancedAcceptedStateMeasure_mass_ge_one_sixteenth
 #print axioms map_scheduledBalancedAcceptedTarget_scale_eq
 #print axioms map_scheduledBalancedAcceptedTarget_scale_isWarm_eight
+#print axioms map_scheduledBalancedAcceptedTarget_scale_adjacent_isWarm
 #print axioms bind_figureOneFinalScheduledBalancedTransition_leUpTo_acceptedTarget
 #print axioms bind_figureOneFinalScheduledAcceptedTarget_retainedOptionKernel_leUpTo
 #print axioms iterated_figureOneFinalScheduledRetainedOptionKernel_leUpTo
