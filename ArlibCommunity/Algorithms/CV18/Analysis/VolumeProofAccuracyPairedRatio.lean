@@ -410,6 +410,38 @@ theorem integral_sub_sq_eq_integral_sub_mean_sq_add
   rw [hcenter]
   nlinarith
 
+/-- A relative second-moment estimate is exactly a centered-variance estimate
+after subtracting one from its factor. -/
+theorem integral_sub_mean_sq_le_of_relativeSecondMoment
+    {S : Type*} [MeasurableSpace S]
+    {mu : Measure S} [IsProbabilityMeasure mu]
+    {f : S → ℝ} (hf : MemLp f 2 mu)
+    {factor : ℝ}
+    (hmean : 0 < ∫ x, f x ∂mu)
+    (hfactor :
+      (∫ x, f x ^ 2 ∂mu) / (∫ x, f x ∂mu) ^ 2 ≤ factor) :
+    (∫ x, (f x - ∫ y, f y ∂mu) ^ 2 ∂mu) ≤
+      (factor - 1) * (∫ x, f x ∂mu) ^ 2 := by
+  let mean := ∫ x, f x ∂mu
+  let second := ∫ x, f x ^ 2 ∂mu
+  have hmeanSq : 0 < mean ^ 2 := sq_pos_of_pos hmean
+  have hsecond : second ≤ factor * mean ^ 2 := by
+    rw [div_le_iff₀ hmeanSq] at hfactor
+    simpa [mean, second] using hfactor
+  have hcenter : (∫ x, (f x - mean) ^ 2 ∂mu) = second - mean ^ 2 := by
+    calc
+      (∫ x, (f x - mean) ^ 2 ∂mu) =
+          Arlib.MarkovChains.varianceReal mu f := by
+        symm
+        change ProbabilityTheory.variance f mu = _
+        simpa [mean] using
+          (ProbabilityTheory.variance_eq_integral hf.aemeasurable)
+      _ = second - mean ^ 2 := by
+        simpa [mean, second] using
+          (Arlib.MarkovChains.varianceReal_eq_sub hf)
+  rw [hcenter]
+  nlinarith
+
 /-- Relative second moments and accepted-law bias combine additively in the
 centered target moment used by the paired numerator. -/
 theorem integral_sub_acceptedMean_sq_le_of_relativeSecondMoment
@@ -477,6 +509,183 @@ theorem accuracyStationaryAcceptedMean_bias_le
   simpa [accuracyStationaryAcceptedMean] using
     stationary_accuracyAcceptedTarget_integral_bias_le
       q I hsigma2 hweight hweight0 hmem
+
+/-- Centered homogeneous accepted-mean bias.  If the exact target variance
+is at most `R²`, then the KLS accepted mean moves by at most the tiny core
+accuracy scale times `R`.  Applying this with the cooling-ratio variance is
+what preserves the accelerated schedule's telescoping `factor - 1` charge. -/
+theorem accuracyStationaryAcceptedMean_bias_le_centered_secondMoment
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (hmem : MemLp weight 2
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n)))
+    {R : ℝ} (hR : 0 < R)
+    (hcentered :
+      (∫ x, (weight x - ∫ y, weight y
+          ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+            Measure (AmbientSpace q.n))) ^ 2
+        ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+          Measure (AmbientSpace q.n))) ≤ R ^ 2) :
+    |accuracyStationaryAcceptedMean q I sigma2 weight -
+        ∫ x, weight x
+          ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+            Measure (AmbientSpace q.n))| ≤
+      67 * accuracyAcceptedBiasScale q * R := by
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  let pi := Arlib.MarkovChains.ellGaussianProb
+    (accuracyPhaseTruncatedBody q I sigma2)
+    (figureOneProposalRadius q sigma2) sigma2
+  let accepted := accuracyGaussianAcceptedTargetLaw q I sigma2 pi
+  let mean := ∫ x, weight x ∂nu
+  let centered : AmbientSpace q.n → ℝ := fun x => weight x - mean
+  let _ : IsProbabilityMeasure nu := by dsimp [nu]; infer_instance
+  let _ : IsProbabilityMeasure accepted :=
+    accuracyGaussianAcceptedTargetLaw_isProbabilityMeasure_stationary q I hsigma2
+  have hcenterMeas : Measurable centered := hweight.sub measurable_const
+  have hcenterMem : MemLp centered 2 nu := by
+    exact hmem.sub (memLp_const mean)
+  have hwarm : Arlib.IsWarm 64 accepted nu := by
+    simpa [accepted, nu, pi] using
+      stationary_accuracyAcceptedTarget_isWarm q I hsigma2
+  have hle : accepted ≤ (64 : ENNReal) • nu :=
+    (Arlib.MarkovChains.isWarm_iff_le_smul _ _).1 hwarm
+  have hweightAccepted : MemLp weight 2 accepted :=
+    (hmem.smul_measure (by norm_num : (64 : ENNReal) ≠ ⊤)).mono_measure hle
+  have htransfer :=
+    stationary_accuracyAcceptedTarget_integral_bias_le_sqrt_secondMoment
+      q I hsigma2 hcenterMeas hcenterMem hR
+      (by simpa [centered, mean, nu] using hcentered)
+  have htargetIntegral : (∫ x, centered x ∂nu) = 0 := by
+    rw [show centered = fun x => weight x - mean by rfl,
+      integral_sub (hmem.integrable (by norm_num)) (integrable_const mean)]
+    simp [mean, nu]
+  have hacceptedIntegral : (∫ x, centered x ∂accepted) =
+      accuracyStationaryAcceptedMean q I sigma2 weight - mean := by
+    rw [show centered = fun x => weight x - mean by rfl,
+      integral_sub (hweightAccepted.integrable (by norm_num))
+        (integrable_const mean)]
+    simp [accuracyStationaryAcceptedMean, accepted, pi]
+  change |(∫ x, centered x ∂accepted) - (∫ x, centered x ∂nu)| ≤
+    67 * accuracyAcceptedBiasScale q * R at htransfer
+  rw [hacceptedIntegral, htargetIntegral, sub_zero] at htransfer
+  simpa [mean, nu] using htransfer
+
+/-- The paired numerator variance inherits the same centered target scale.
+Both the intrinsic target variance and the accepted-law displacement are now
+proportional to `R²`; there is no phase-count-sized additive defect. -/
+theorem varianceReal_accuracyImportanceWeight_sub_acceptedMean_le_of_centeredSecondMoment
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Continuous weight)
+    (hmem : MemLp weight 2
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n)))
+    {R : ℝ} (hR : 0 < R)
+    (hcentered :
+      (∫ x, (weight x - ∫ y, weight y
+          ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+            Measure (AmbientSpace q.n))) ^ 2
+        ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+          Measure (AmbientSpace q.n))) ≤ R ^ 2) :
+    Arlib.MarkovChains.varianceReal
+      (Arlib.MarkovChains.ellGaussianProb
+        (accuracyPhaseTruncatedBody q I sigma2)
+        (figureOneProposalRadius q sigma2) sigma2)
+      (fun x => accuracyImportanceWeight q I sigma2
+        (fun y => weight y -
+          accuracyStationaryAcceptedMean q I sigma2 weight) x) ≤
+      4 * (R ^ 2 +
+        (67 * accuracyAcceptedBiasScale q * R) ^ 2) := by
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  let mean := ∫ x, weight x ∂nu
+  let acceptedMean := accuracyStationaryAcceptedMean q I sigma2 weight
+  let bias := 67 * accuracyAcceptedBiasScale q * R
+  let _ : IsProbabilityMeasure nu := by dsimp [nu]; infer_instance
+  have hbias0 : 0 ≤ bias := by
+    dsimp [bias]
+    exact mul_nonneg
+      (mul_nonneg (by norm_num) (accuracyAcceptedBiasScale_pos q).le) hR.le
+  have hbias : |acceptedMean - mean| ≤ bias := by
+    simpa [acceptedMean, mean, bias, nu] using
+      accuracyStationaryAcceptedMean_bias_le_centered_secondMoment
+        q I hsigma2 hweight.measurable hmem hR hcentered
+  have hbiasSq : (mean - acceptedMean) ^ 2 ≤ bias ^ 2 := by
+    have habs : |mean - acceptedMean| ≤ bias := by
+      simpa [abs_sub_comm] using hbias
+    have hprod := mul_nonneg (sub_nonneg.mpr habs)
+      (add_nonneg hbias0 (abs_nonneg (mean - acceptedMean)))
+    nlinarith [sq_abs (mean - acceptedMean)]
+  have htarget := integral_sub_sq_eq_integral_sub_mean_sq_add
+    (mu := nu) hmem acceptedMean
+  have hsource := varianceReal_accuracyImportanceWeight_sub_acceptedMean_le
+    q I hsigma2 hweight hmem
+  calc
+    _ ≤ 4 * ∫ y, (weight y - acceptedMean) ^ 2 ∂nu := by
+      simpa [acceptedMean, nu] using hsource
+    _ = 4 * ((∫ y, (weight y - mean) ^ 2 ∂nu) +
+        (mean - acceptedMean) ^ 2) := by
+      rw [htarget]
+    _ ≤ 4 * (R ^ 2 + bias ^ 2) := by
+      gcongr
+    _ = _ := by rfl
+
+/-- Sharp relative-moment specialization of the centered paired variance
+bound.  Its entire right-hand side is proportional to `factor - 1`, including
+the executable KLS bias. -/
+theorem varianceReal_accuracyImportanceWeight_sub_acceptedMean_le_of_relativeSecondMoment_sharp
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Continuous weight)
+    (hmem : MemLp weight 2
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n)))
+    {factor : ℝ} (hfactorOne : 1 < factor)
+    (hmean : 0 < ∫ x, weight x
+      ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n)))
+    (hrelative :
+      (∫ x, weight x ^ 2
+          ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+            Measure (AmbientSpace q.n))) /
+        (∫ x, weight x
+          ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+            Measure (AmbientSpace q.n))) ^ 2 ≤ factor) :
+    let mean := ∫ x, weight x
+      ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n))
+    let R := Real.sqrt (factor - 1) * mean
+    Arlib.MarkovChains.varianceReal
+      (Arlib.MarkovChains.ellGaussianProb
+        (accuracyPhaseTruncatedBody q I sigma2)
+        (figureOneProposalRadius q sigma2) sigma2)
+      (fun x => accuracyImportanceWeight q I sigma2
+        (fun y => weight y -
+          accuracyStationaryAcceptedMean q I sigma2 weight) x) ≤
+      4 * (R ^ 2 + (67 * accuracyAcceptedBiasScale q * R) ^ 2) := by
+  dsimp only
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  let mean := ∫ x, weight x ∂nu
+  let R := Real.sqrt (factor - 1) * mean
+  let _ : IsProbabilityMeasure nu := by dsimp [nu]; infer_instance
+  have hR : 0 < R := by
+    dsimp [R, mean]
+    exact mul_pos (Real.sqrt_pos.2 (sub_pos.mpr hfactorOne))
+      (by simpa [nu] using hmean)
+  have hcentered : (∫ x, (weight x - mean) ^ 2 ∂nu) ≤ R ^ 2 := by
+    have hvar := integral_sub_mean_sq_le_of_relativeSecondMoment
+      (mu := nu) hmem (by simpa [nu] using hmean)
+      (by simpa [nu] using hrelative)
+    have hsqrt : (Real.sqrt (factor - 1)) ^ 2 = factor - 1 :=
+      Real.sq_sqrt (sub_nonneg.mpr hfactorOne.le)
+    simpa [R, mean, hsqrt, mul_pow] using hvar
+  simpa [R, mean, nu] using
+    varianceReal_accuracyImportanceWeight_sub_acceptedMean_le_of_centeredSecondMoment
+      q I hsigma2 hweight hmem hR hcentered
 
 /-- Final sharp local variance package: target relative second moment plus
 the proved KLS bias controls the centered paired numerator at speedy

@@ -181,6 +181,130 @@ theorem TVLe.integral_nonnegative_le_of_isWarm_secondMoment_sqrt
       exact add_le_add hfirst le_rfl
     _ = eta * (1 + (M.toReal + 1) * ∫ x, f x ^ 2 ∂nu) := by ring
 
+/-- Signed version of the TV--warmness interpolation estimate.  Splitting an
+observable into its positive and negative parts costs a factor two only in
+the bounded TV term; the two squared tails recombine exactly to `f²`.  This
+is the form needed for centered cooling-ratio observables. -/
+theorem TVLe.integral_le_of_isWarm_secondMoment
+    {S : Type*} [MeasurableSpace S]
+    {mu nu : Measure S} [IsProbabilityMeasure mu] [IsProbabilityMeasure nu]
+    {epsilon M : ENNReal}
+    (htv : Arlib.TVLe mu nu epsilon) (hepsilon : epsilon ≠ ⊤)
+    (hM : M ≠ ⊤) (hwarm : Arlib.IsWarm M mu nu)
+    {f : S → ℝ} (hf : Measurable f) (hfmem : MemLp f 2 nu)
+    {T : ℝ} (hT : 0 < T) :
+    |(∫ x, f x ∂mu) - (∫ x, f x ∂nu)| ≤
+      2 * epsilon.toReal * T +
+        (M.toReal + 1) * (∫ x, f x ^ 2 ∂nu) / T := by
+  let fp : S → ℝ := fun x => max (f x) 0
+  let fn : S → ℝ := fun x => max (-f x) 0
+  have hfpMeas : Measurable fp := hf.max measurable_const
+  have hfnMeas : Measurable fn := hf.neg.max measurable_const
+  have hfp0 : ∀ x, 0 ≤ fp x := fun x => le_max_right _ _
+  have hfn0 : ∀ x, 0 ≤ fn x := fun x => le_max_right _ _
+  have hfpMem : MemLp fp 2 nu := by simpa [fp] using hfmem.pos_part
+  have hfnMem : MemLp fn 2 nu := by simpa [fn] using hfmem.neg_part
+  have hle : mu ≤ M • nu :=
+    (Arlib.MarkovChains.isWarm_iff_le_smul _ _).1 hwarm
+  have hfmemMu : MemLp f 2 mu :=
+    (hfmem.smul_measure hM).mono_measure hle
+  have hfpMemMu : MemLp fp 2 mu := by simpa [fp] using hfmemMu.pos_part
+  have hfnMemMu : MemLp fn 2 mu := by simpa [fn] using hfmemMu.neg_part
+  have hfDecomp : f = fun x => fp x - fn x := by
+    funext x
+    dsimp [fp, fn]
+    rcases le_total 0 (f x) with hx | hx
+    · rw [max_eq_left hx, max_eq_right (by linarith : -f x ≤ 0)]
+      ring
+    · rw [max_eq_right hx, max_eq_left (by linarith : 0 ≤ -f x)]
+      ring
+  have hpos := TVLe.integral_nonnegative_le_of_isWarm_secondMoment
+    htv hepsilon hM hwarm hfpMeas hfp0 hfpMem hT
+  have hneg := TVLe.integral_nonnegative_le_of_isWarm_secondMoment
+    htv hepsilon hM hwarm hfnMeas hfn0 hfnMem hT
+  have hsquares :
+      (∫ x, fp x ^ 2 ∂nu) + ∫ x, fn x ^ 2 ∂nu =
+        ∫ x, f x ^ 2 ∂nu := by
+    rw [← integral_add hfpMem.integrable_sq hfnMem.integrable_sq]
+    apply integral_congr_ae
+    filter_upwards with x
+    dsimp [fp, fn]
+    rcases le_total 0 (f x) with hx | hx
+    · rw [max_eq_left hx, max_eq_right (by linarith : -f x ≤ 0)]
+      ring
+    · rw [max_eq_right hx, max_eq_left (by linarith : 0 ≤ -f x)]
+      ring
+  have hdecompMu : (∫ x, f x ∂mu) =
+      (∫ x, fp x ∂mu) - ∫ x, fn x ∂mu := by
+    rw [hfDecomp, integral_sub
+      (hfpMemMu.integrable (by norm_num))
+      (hfnMemMu.integrable (by norm_num))]
+  have hdecompNu : (∫ x, f x ∂nu) =
+      (∫ x, fp x ∂nu) - ∫ x, fn x ∂nu := by
+    rw [hfDecomp, integral_sub
+      (hfpMem.integrable (by norm_num))
+      (hfnMem.integrable (by norm_num))]
+  rw [hdecompMu, hdecompNu]
+  calc
+    |((∫ x, fp x ∂mu) - ∫ x, fn x ∂mu) -
+        ((∫ x, fp x ∂nu) - ∫ x, fn x ∂nu)| =
+        |((∫ x, fp x ∂mu) - ∫ x, fp x ∂nu) -
+          ((∫ x, fn x ∂mu) - ∫ x, fn x ∂nu)| := by ring_nf
+    _ ≤ |(∫ x, fp x ∂mu) - ∫ x, fp x ∂nu| +
+          |(∫ x, fn x ∂mu) - ∫ x, fn x ∂nu| := abs_sub _ _
+    _ ≤ (epsilon.toReal * T +
+          (M.toReal + 1) * (∫ x, fp x ^ 2 ∂nu) / T) +
+        (epsilon.toReal * T +
+          (M.toReal + 1) * (∫ x, fn x ^ 2 ∂nu) / T) :=
+      add_le_add hpos hneg
+    _ = 2 * epsilon.toReal * T +
+        (M.toReal + 1) * (∫ x, f x ^ 2 ∂nu) / T := by
+      rw [← hsquares]
+      ring
+
+/-- Homogeneous square-root form for a signed observable.  Unlike the
+nonnegative estimate above, this bound vanishes with the `L²` scale `R`; it
+therefore preserves the phase-amortized variance accounting of CV18. -/
+theorem TVLe.integral_le_of_isWarm_secondMoment_sqrt
+    {S : Type*} [MeasurableSpace S]
+    {mu nu : Measure S} [IsProbabilityMeasure mu] [IsProbabilityMeasure nu]
+    {epsilon M : ENNReal}
+    (htv : Arlib.TVLe mu nu epsilon) (hepsilon : epsilon ≠ ⊤)
+    (hM : M ≠ ⊤) (hwarm : Arlib.IsWarm M mu nu)
+    {f : S → ℝ} (hf : Measurable f) (hfmem : MemLp f 2 nu)
+    {eta R : ℝ} (heta : 0 < eta) (hR : 0 < R)
+    (hepsEta : epsilon.toReal ≤ eta ^ 2)
+    (hsecond : (∫ x, f x ^ 2 ∂nu) ≤ R ^ 2) :
+    |(∫ x, f x ∂mu) - (∫ x, f x ∂nu)| ≤
+      (M.toReal + 3) * eta * R := by
+  have hbase := TVLe.integral_le_of_isWarm_secondMoment
+    htv hepsilon hM hwarm hf hfmem (T := R / eta) (div_pos hR heta)
+  have hM0 : 0 ≤ M.toReal := ENNReal.toReal_nonneg
+  have hsq0 : 0 ≤ ∫ x, f x ^ 2 ∂nu :=
+    integral_nonneg fun x => sq_nonneg (f x)
+  have hfirst :
+      2 * epsilon.toReal * (R / eta) ≤ 2 * eta * R := by
+    rw [show 2 * epsilon.toReal * (R / eta) =
+      (2 * epsilon.toReal * R) / eta by ring]
+    apply (div_le_iff₀ heta).2
+    have hmul := mul_le_mul_of_nonneg_right hepsEta hR.le
+    nlinarith
+  have hsecondTerm :
+      (M.toReal + 1) * (∫ x, f x ^ 2 ∂nu) / (R / eta) ≤
+        (M.toReal + 1) * R ^ 2 / (R / eta) := by
+    exact div_le_div_of_nonneg_right
+      (mul_le_mul_of_nonneg_left hsecond (by positivity))
+      (div_pos hR heta).le
+  calc
+    |(∫ x, f x ∂mu) - (∫ x, f x ∂nu)| ≤
+        2 * epsilon.toReal * (R / eta) +
+          (M.toReal + 1) * (∫ x, f x ^ 2 ∂nu) / (R / eta) := hbase
+    _ ≤ 2 * eta * R + (M.toReal + 1) * R ^ 2 / (R / eta) :=
+      add_le_add hfirst hsecondTerm
+    _ = (M.toReal + 3) * eta * R := by
+      field_simp [heta.ne', hR.ne']
+      ring
+
 /-- Square-root scale of the stationary KLS core and radial TV defects. -/
 noncomputable def accuracyAcceptedBiasScale (q : VolumeParams) : ℝ :=
   16 * Real.sqrt (accuracyCoreError q) + (q.eps / (q.n : ℝ)) ^ 8
@@ -325,6 +449,56 @@ theorem stationary_accuracyAcceptedTarget_integral_bias_le
     (by simpa [nu] using hfmem)
     (accuracyAcceptedBiasScale_pos q)
     (accuracyPhase_stationary_tvError_toReal_le_biasScale_sq q)
+  convert h using 1 <;> norm_num [mu, nu, pi]
+
+/-- Homogeneous stationary accepted-law bias for a signed observable.  A
+target `L²` bound `R²` yields an expectation defect proportional to `R`, with
+no additive per-phase term. -/
+theorem stationary_accuracyAcceptedTarget_integral_bias_le_sqrt_secondMoment
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {f : AmbientSpace q.n → ℝ} (hf : Measurable f)
+    (hfmem : MemLp f 2
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n)))
+    {R : ℝ} (hR : 0 < R)
+    (hsecond : (∫ x, f x ^ 2
+        ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+          Measure (AmbientSpace q.n))) ≤ R ^ 2) :
+    let pi := Arlib.MarkovChains.ellGaussianProb
+      (accuracyPhaseTruncatedBody q I sigma2)
+      (figureOneProposalRadius q sigma2) sigma2
+    |(∫ x, f x ∂accuracyGaussianAcceptedTargetLaw q I sigma2 pi) -
+      ∫ x, f x ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n))| ≤
+      67 * accuracyAcceptedBiasScale q * R := by
+  dsimp only
+  let pi := Arlib.MarkovChains.ellGaussianProb
+    (accuracyPhaseTruncatedBody q I sigma2)
+    (figureOneProposalRadius q sigma2) sigma2
+  let mu := accuracyGaussianAcceptedTargetLaw q I sigma2 pi
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  let _ : IsProbabilityMeasure mu :=
+    accuracyGaussianAcceptedTargetLaw_isProbabilityMeasure_stationary q I hsigma2
+  let _ : IsProbabilityMeasure nu := by dsimp [nu]; infer_instance
+  have htv : Arlib.TVLe mu nu
+      (96 * ENNReal.ofReal (accuracyCoreError q) +
+        ENNReal.ofReal ((q.eps / (q.n : ℝ)) ^ 16)) := by
+    simpa [mu, nu, pi] using
+      accuracyPhase_stationaryAcceptedTargetLaw_tv q I hsigma2
+  have hwarm : Arlib.IsWarm 64 mu nu := by
+    simpa [mu, nu, pi] using
+      stationary_accuracyAcceptedTarget_isWarm q I hsigma2
+  have h := TVLe.integral_le_of_isWarm_secondMoment_sqrt
+    htv (ENNReal.add_ne_top.2 ⟨
+      ENNReal.mul_ne_top (by norm_num) ENNReal.ofReal_ne_top,
+      ENNReal.ofReal_ne_top⟩)
+    (by norm_num : (64 : ENNReal) ≠ ⊤) hwarm hf
+    (by simpa [nu] using hfmem)
+    (accuracyAcceptedBiasScale_pos q) hR
+    (accuracyPhase_stationary_tvError_toReal_le_biasScale_sq q)
+    (by simpa [nu] using hsecond)
   convert h using 1 <;> norm_num [mu, nu, pi]
 
 end ArlibCommunity.Algorithms.CV18
