@@ -643,8 +643,42 @@ theorem scheduledBalancedStationaryTargetError_le_targetBudget
     figureOneCorrectedTargetBudget, figureOneCorrectedTransitionBudget] using
       figureOneScheduledTargetError_le q
 
+/-- The corrected transition allocation instantiated with the scheduled KLS
+target error.  This is the concrete replacement for the formerly impossible
+old fixed-radius `targetError_le` premise. -/
+noncomputable def figureOneScheduledCorrectedErrorAllocation
+    (q : VolumeParams) (rejectMass : ENNReal) (attempts : ℕ)
+    (hreject : rejectMass ≤ 1)
+    (hretry : rejectMass ^ (attempts + 1) ≤
+      figureOneCorrectedRetryTailBudget q) :
+    BalancedTransitionErrorAllocation (q := q) rejectMass attempts
+      (scheduledBalancedStationaryTargetError q) where
+  totalBudget := figureOneCorrectedTransitionBudget q
+  blockBudget := figureOneCorrectedBlockBudget q attempts
+  retryTailBudget := figureOneCorrectedRetryTailBudget q
+  targetBudget := figureOneCorrectedTargetBudget q
+  reject_le_one := hreject
+  retryTail_le := hretry
+  targetError_le := scheduledBalancedStationaryTargetError_le_targetBudget q
+  components_le := figureOneCorrected_components_le q attempts
+
+theorem scheduledBalancedTransitionError_le_budget
+    (q : VolumeParams) {rejectMass : ENNReal} {attempts : ℕ}
+    (hreject : rejectMass ≤ 1)
+    (hretry : rejectMass ^ (attempts + 1) ≤
+      figureOneCorrectedRetryTailBudget q) :
+    figureOneCorrectedBlockBudget q attempts + rejectMass *
+        balancedRetryError (figureOneCorrectedBlockBudget q attempts)
+          rejectMass attempts +
+      scheduledBalancedStationaryTargetError q ≤
+        figureOneCorrectedTransitionBudget q := by
+  exact balancedTransitionError_le_allocation
+    (figureOneScheduledCorrectedErrorAllocation q rejectMass attempts
+      hreject hretry)
+
 #print axioms scheduledBalancedAccuracyGaussianAcceptedTargetLaw_tv
 #print axioms runEstimate_scheduledBalancedAccuracyGaussianRejectionAttempt
 #print axioms scheduledBalancedStationaryTargetError_le_targetBudget
+#print axioms scheduledBalancedTransitionError_le_budget
 
 end ArlibCommunity.Algorithms.CV18
