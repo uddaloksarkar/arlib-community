@@ -1424,6 +1424,59 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_phaseItera
       q I oracle
   · exact hphase
 
+/-- Final scheduled initial-coupling transport, independent of how the
+paper's post-initial `3/16` estimate was proved.  This is the consumer for the
+Lemma 7.15/7.17(c) route. -/
+theorem figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I)
+    (hpost : FigureOnePostInitialDirectFailureBoundFor q I fun point =>
+      (scheduledBalancedFigureOnePointContinuation
+        figureOneFinalScheduledBalancedParameters q point).runEstimate
+          oracle.query) :
+    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  let continuation : AmbientSpace q.n → Measure ℝ := fun point =>
+    (scheduledBalancedFigureOnePointContinuation
+      figureOneFinalScheduledBalancedParameters q point).runEstimate
+        oracle.query
+  have hpointCounted :=
+    scheduledBalancedFigureOnePointContinuation_countedMeasurable
+      figureOneFinalScheduledBalancedParameters q I oracle
+  have hcontinuationMeas : Measurable continuation := by
+    rw [show continuation = fun point =>
+        (MembershipOracleProgram.run oracle.query
+          (scheduledBalancedFigureOnePointContinuation
+            figureOneFinalScheduledBalancedParameters q point)).map Prod.fst by
+      funext point
+      exact MembershipOracleProgram.runEstimate_eq_map_fst_run oracle.query _
+        (hpointCounted.2 point).executionMeasurable]
+    exact (Measure.measurable_map _ measurable_fst).comp hpointCounted.1
+  have hcontinuationProb : ∀ point, IsProbabilityMeasure (continuation point) :=
+    fun point => MembershipOracleProgram.runEstimate_isProbabilityMeasure
+      oracle.query _ (hpointCounted.2 point).stronglyMeasurable.estimateMeasurable
+  have hinitial := initialTruncatedFallback_bind_apply_le q I continuation
+    hcontinuationMeas hcontinuationProb (accurateOutcome q I)ᶜ
+      (accurateOutcome_measurable q I).compl
+  rw [figureOneFinalScheduledBalancedBaseProgram_runEstimate_eq_initial_bind]
+  unfold FigureOnePostInitialDirectFailureBoundFor at hpost
+  calc
+    ((initialGaussianSamplingMeasure q).map
+        (initialTruncatedFallback q I)).bind continuation
+          (accurateOutcome q I)ᶜ ≤
+      ((truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation) (accurateOutcome q I)ᶜ +
+        ENNReal.ofReal (q.eps / 64) := hinitial
+    _ ≤ ENNReal.ofReal (3 / 16 : ℝ) + ENNReal.ofReal (1 / 64 : ℝ) := by
+      exact add_le_add hpost (ENNReal.ofReal_le_ofReal (by
+        linarith [q.heps.2]))
+    _ = ENNReal.ofReal (13 / 64 : ℝ) := by
+      rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 3 / 16)
+        (by norm_num : (0 : ℝ) ≤ 1 / 64)]
+      congr 1
+      norm_num
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
@@ -1614,6 +1667,7 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms figureOneFinalScheduledBalancedBase_failure_le_of_phaseIteration
 #print axioms figureOneFinalScheduledBalancedBaseProgram_runEstimate_eq_initial_bind
 #print axioms figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_phaseIteration
+#print axioms figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
 
 end
 
