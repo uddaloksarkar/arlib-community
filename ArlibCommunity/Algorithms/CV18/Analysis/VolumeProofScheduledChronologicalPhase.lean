@@ -952,6 +952,116 @@ theorem figureOneScheduledActualChronologicalIteration_map_output
         (scheduledBalancedForwardPhaseKernel parameters q I) by rfl]
   rw [scheduledChronologicalActualIteration_map_snd]
 
+/-- Scheduled mapped-law capstone before the executable interpreter
+identifications.  The only probabilistic premise is one complete-phase
+replacement on the fully ideal chronological prefix. -/
+theorem scheduledPostInitialDirectFailureBound_of_phaseIteration
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (hrounded : WellRounded q I)
+    (continuation : AmbientSpace q.n → Measure ℝ)
+    (hlaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation =
+        (scheduledBalancedForwardHistoryLaw parameters q I
+          (figureOneDependentPhaseCount q)).map
+            (balancedFigureOneHistoryEstimate q))
+    (hphase : ∀ phase,
+      MeasureLeUpTo
+        ((iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
+          (scheduledChronologicalCommonInitial q I) phase).bind
+            (figureOneScheduledActualChronologicalPhaseKernel
+              parameters q I phase))
+        (iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
+          (scheduledChronologicalCommonInitial q I) (phase + 1))
+        (figureOnePhaseReplacementBudget q)) :
+    FigureOnePostInitialDirectFailureBoundFor q I continuation := by
+  let actualK :=
+    figureOneScheduledActualChronologicalPhaseKernel parameters q I
+  let idealK := figureOneIdealChronologicalPhaseKernel q
+  let initial := scheduledChronologicalCommonInitial q I
+  let output := scheduledChronologicalCommonOutput q
+  have htransfer := MeasureLeUpTo.map_figureOnePhaseIteration q
+    actualK idealK initial
+    (fun phase =>
+      (figureOneScheduledActualChronologicalPhaseKernel_measurable_and_probability
+        parameters q I phase).1)
+    (fun phase state =>
+      (figureOneScheduledActualChronologicalPhaseKernel_measurable_and_probability
+        parameters q I phase).2 state)
+    hphase output (measurable_scheduledChronologicalCommonOutput q)
+  rw [show (iteratedKernelLaw actualK initial
+          (figureOneDependentPhaseCount q)).map output =
+        (scheduledBalancedForwardHistoryLaw parameters q I
+          (figureOneDependentPhaseCount q)).map
+            (balancedFigureOneHistoryEstimate q) by
+      exact figureOneScheduledActualChronologicalIteration_map_output
+        parameters q I _,
+    show (iteratedKernelLaw idealK initial
+          (figureOneDependentPhaseCount q)).map output =
+        (figureOneIdealExperimentLaw q I).map
+          (fun samples => initialGaussianIntegral q *
+            dependentPhaseSampleProduct
+              (figureOneChronologicalIdealCoordinate q)
+              (figureOneDependentPhaseCount q) samples) by
+      exact figureOneIdealChronologicalIteration_map_output q I] at htransfer
+  let W := figureOneChronologicalIdealCoordinate q
+  let mu := figureOneIdealExperimentLaw q I
+  let mean := dependentPhaseMeanProduct
+    (figureOneChronologicalTruncatedMean q I mu W)
+    (figureOneDependentPhaseCount q)
+  let _ : IsProbabilityMeasure mu :=
+    figureOneIdealExperimentLaw_isProbabilityMeasure q I
+  have hmeas : ∀ j, Measurable (W j) :=
+    fun j => figureOneChronologicalIdealCoordinate_measurable q j
+  have hnonneg : ∀ j samples, 0 ≤ W j samples :=
+    fun j samples => figureOneChronologicalIdealCoordinate_nonneg q j samples
+  have hmem : ∀ j, MemLp (W j) 2 mu :=
+    fun j => figureOneChronologicalIdealCoordinate_memLp q I j 2
+  have hsharp := figureOneSharpAcceleratedMoments q I
+  have hmean : ∀ j, (∫ samples, W j samples ∂mu) =
+      figureOneChronologicalRawMean q I j :=
+    fun j => figureOneChronologicalIdealCoordinate_mean q I hsharp j
+  have hsecond : ∀ j, (∫ samples, W j samples ^ 2 ∂mu) ≤
+      figureOneChronologicalMomentFactor q j *
+        figureOneChronologicalRawMean q I j ^ 2 :=
+    fun j => figureOneChronologicalIdealCoordinate_secondMoment_le
+      q I hsharp j
+  have hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
+        (dependentTruncatedProduct (figureOneDependentAlpha q)
+          (figureOneChronologicalTruncatedMean q I mu W)
+          (figureOneChronologicalTruncatedPhase q I W) i)
+        (figureOneChronologicalTruncatedPhase q I W (i + 1)) mu := by
+    intro i hi
+    exact (figureOneChronologicalIdeal_exactIndependence q I i hi).mono
+      (figureOneDependentEpsilon_nonneg q)
+  have htail := measure_chronologicalIdealPhaseSampleProduct_figureOne_le
+    q I mu W hmeas hnonneg hmem hmean hsecond hind
+  have hmeanApprox :=
+    figureOneChronologicalTruncatedMeanProduct_relativeApprox
+      q I mu W hmeas hnonneg hmem hmean hsecond
+  have hestimate : balancedFigureOneHistoryEstimate q = fun history =>
+      initialGaussianIntegral q * balancedCoolingHistoryProduct q history := by
+    funext history
+    cases history <;>
+      simp [balancedFigureOneHistoryEstimate, balancedCoolingHistoryProduct]
+  rw [hestimate] at htransfer hlaw
+  apply figureOnePostInitialDirectFailureBoundFor_of_mappedProductLe
+    q I continuation (figureOneRadialTruncationBound q I hrounded)
+    (scheduledBalancedForwardHistoryLaw parameters q I
+      (figureOneDependentPhaseCount q)) mu
+    (balancedCoolingHistoryProduct q)
+    (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q))
+    (measurable_balancedCoolingHistoryProduct q)
+    (by
+      unfold dependentPhaseSampleProduct
+      exact (Finset.range (figureOneDependentPhaseCount q)).measurable_fun_prod
+        fun j _ => hmeas (j + 1))
+    mean hmeanApprox htail
+  · simpa [W, mu, actualK, idealK, initial, output] using htransfer
+  · exact hlaw
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
