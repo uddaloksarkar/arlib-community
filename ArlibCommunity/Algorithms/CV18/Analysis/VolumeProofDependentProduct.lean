@@ -625,15 +625,16 @@ theorem dependentTruncatedProduct_candidateSecond_of_relativeProduct
     (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
     (hind : ∀ i, ApproxIndepFun epsilon
       (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
-    (hrelative : ∀ i,
+    (phases : ℕ)
+    (hrelative : ∀ i, i ≤ phases →
       (1 + 2 * epsilon * alpha ^ 4 * i) * dependentPhaseMeanProduct second i ≤
         2 * dependentPhaseMeanProduct mean i ^ 2) :
-    ∀ i,
+    ∀ i, i < phases →
       (∫ omega, (dependentTruncatedProduct alpha mean V i omega *
         V (i + 1) omega) ^ 2 ∂mu) ≤
           2 * dependentPhaseMeanProduct mean (i + 1) ^ 2 := by
-  intro i
-  have hrel := hrelative (i + 1)
+  intro i hi
+  have hrel := hrelative (i + 1) (Nat.succ_le_iff.mpr hi)
   norm_num only [Nat.cast_add, Nat.cast_one] at hrel
   exact (integral_dependentTruncatedProduct_candidate_sq_le
     mu alpha epsilon mean rawMean second V halpha hepsilon hmean hrawMean
@@ -704,11 +705,11 @@ theorem integral_dependentTruncatedProduct_succ_ge_sub
     (hVmean : ∀ j, (∫ omega, V j omega ∂mu) = mean j)
     (hind : ∀ i, ApproxIndepFun epsilon
       (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
-    (hcandidateSecond : ∀ i,
+    (i : ℕ)
+    (hcandidateSecond :
       (∫ omega, (dependentTruncatedProduct alpha mean V i omega *
         V (i + 1) omega) ^ 2 ∂mu) ≤
-          2 * dependentPhaseMeanProduct mean (i + 1) ^ 2)
-    (i : ℕ) :
+          2 * dependentPhaseMeanProduct mean (i + 1) ^ 2) :
     (∫ omega, dependentTruncatedProduct alpha mean V (i + 1) omega ∂mu) ≥
       (∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu) *
           mean (i + 1) -
@@ -759,7 +760,7 @@ theorem integral_dependentTruncatedProduct_succ_ge_sub
           (4 * (alpha * M)) ≤ M / (2 * alpha) := by
     calc
       _ ≤ (2 * M ^ 2) / (4 * (alpha * M)) := by
-        exact div_le_div_of_nonneg_right (hcandidateSecond i)
+        exact div_le_div_of_nonneg_right hcandidateSecond
           (mul_nonneg (by norm_num) (mul_nonneg halphaPos.le hMpos.le))
       _ = M / (2 * alpha) := by
         field_simp [halphaPos.ne', hMpos.ne']
@@ -814,7 +815,8 @@ theorem integral_dependentTruncatedProduct_ge
   | i + 1 => by
       have hstep := integral_dependentTruncatedProduct_succ_ge_sub
         mu alpha epsilon mean rawMean V halpha hepsilon hsmall hmean hmeanPos
-          hrawMean hrawMean_le hVmeas hV0 hVcap hVmean hind hcandidateSecond i
+          hrawMean hrawMean_le hVmeas hV0 hVcap hVmean hind i
+          (hcandidateSecond i)
       have hinduction := integral_dependentTruncatedProduct_ge
         mu alpha epsilon mean rawMean V halpha hepsilon hsmall hmean hmeanPos
           hrawMean hrawMean_le hVmeas hV0 hVcap hVmean hind hcandidateSecond i
@@ -855,18 +857,18 @@ theorem dependentTruncatedProduct_moment_bounds_of_relativeProduct
     (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
     (hind : ∀ i, ApproxIndepFun epsilon
       (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
-    (hrelative : ∀ i,
+    (phases : ℕ)
+    (hrelative : ∀ i, i ≤ phases →
       (1 + 2 * epsilon * alpha ^ 4 * i) * dependentPhaseMeanProduct second i ≤
         2 * dependentPhaseMeanProduct mean i ^ 2) :
-    ∀ i,
-      (1 - i / alpha) * dependentPhaseMeanProduct mean i ≤
-          ∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu ∧
-      (∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu) ≤
-          (1 + 2 * epsilon * alpha ^ 2 * i) *
-            dependentPhaseMeanProduct mean i ∧
-      (∫ omega, dependentTruncatedProduct alpha mean V i omega ^ 2 ∂mu) ≤
-          (1 + 2 * epsilon * alpha ^ 4 * i) *
-            dependentPhaseMeanProduct second i := by
+    (1 - phases / alpha) * dependentPhaseMeanProduct mean phases ≤
+        ∫ omega, dependentTruncatedProduct alpha mean V phases omega ∂mu ∧
+    (∫ omega, dependentTruncatedProduct alpha mean V phases omega ∂mu) ≤
+        (1 + 2 * epsilon * alpha ^ 2 * phases) *
+          dependentPhaseMeanProduct mean phases ∧
+    (∫ omega, dependentTruncatedProduct alpha mean V phases omega ^ 2 ∂mu) ≤
+        (1 + 2 * epsilon * alpha ^ 4 * phases) *
+          dependentPhaseMeanProduct second phases := by
   have hVcapTwo : ∀ j omega, V j omega ≤ 2 * alpha * mean j := by
     intro j omega
     calc
@@ -876,17 +878,41 @@ theorem dependentTruncatedProduct_moment_bounds_of_relativeProduct
       _ = 2 * alpha * mean j := by ring
   have hcandidate := dependentTruncatedProduct_candidateSecond_of_relativeProduct
     mu alpha epsilon mean rawMean second V halpha hepsilon hmean hrawMean
-      hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVsecond hind hrelative
-  have hlower := integral_dependentTruncatedProduct_ge
-    mu alpha epsilon mean rawMean V halpha hepsilon hsmall hmean hmeanPos
-      hrawMean hrawMean_le hVmeas hV0 hVcap hVmean hind hcandidate
+      hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVsecond hind phases hrelative
+  have hlowerAll : ∀ n, n ≤ phases →
+      (1 - n / alpha) * dependentPhaseMeanProduct mean n ≤
+        ∫ omega, dependentTruncatedProduct alpha mean V n omega ∂mu := by
+    intro n hn
+    induction n with
+    | zero => simp [dependentTruncatedProduct, dependentPhaseMeanProduct]
+    | succ i hi =>
+        have hstep := integral_dependentTruncatedProduct_succ_ge_sub
+          mu alpha epsilon mean rawMean V halpha hepsilon hsmall hmean hmeanPos
+            hrawMean hrawMean_le hVmeas hV0 hVcap hVmean hind i
+            (hcandidate i (lt_of_lt_of_le (Nat.lt_succ_self i) hn))
+        have hscaled := mul_le_mul_of_nonneg_right
+          (hi (Nat.le_trans (Nat.le_succ i) hn)) (hmean (i + 1))
+        rw [dependentPhaseMeanProduct_succ]
+        norm_num only [Nat.cast_add, Nat.cast_one]
+        calc
+          (1 - (i + 1) / alpha) *
+              (dependentPhaseMeanProduct mean i * mean (i + 1)) =
+            ((1 - i / alpha) * dependentPhaseMeanProduct mean i) *
+                mean (i + 1) -
+              (dependentPhaseMeanProduct mean i * mean (i + 1)) / alpha := by ring
+          _ ≤ (∫ omega, dependentTruncatedProduct alpha mean V i omega ∂mu) *
+                mean (i + 1) -
+              (dependentPhaseMeanProduct mean i * mean (i + 1)) / alpha := by
+            linarith
+          _ ≤ ∫ omega, dependentTruncatedProduct alpha mean V (i + 1) omega ∂mu := by
+            simpa only [dependentPhaseMeanProduct_succ] using hstep
+  have hlower := hlowerAll phases le_rfl
   have hupper := integral_dependentTruncatedProduct_le
     mu alpha epsilon mean V halpha hepsilon hmean hVmeas hV0 hVcapTwo hVmean hind
   have hsquared := integral_dependentTruncatedProduct_sq_le
     mu alpha epsilon mean rawMean second V halpha hepsilon hmean hrawMean
       hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVsecond hind
-  intro i
-  exact ⟨hlower i, hupper i, hsquared i⟩
+  exact ⟨hlower, hupper phases, hsquared phases⟩
 
 /-- Expanding a squared deviation from a deterministic target on a
 probability space. -/
@@ -1004,10 +1030,11 @@ theorem measure_dependentTruncatedProduct_relativeDeviation_le
     (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
     (hind : ∀ i, ApproxIndepFun epsilon
       (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
-    (hrelative : ∀ i,
+    (phases : ℕ)
+    (hrelative : ∀ i, i ≤ phases →
       (1 + 2 * epsilon * alpha ^ 4 * i) * dependentPhaseMeanProduct second i ≤
         2 * dependentPhaseMeanProduct mean i ^ 2)
-    (phases : ℕ) {tailDelta relativeEps : ℝ}
+    {tailDelta relativeEps : ℝ}
     (htailDelta : 0 ≤ tailDelta) (hrelativeEps : 0 < relativeEps)
     (htailSecond :
       (1 + 2 * epsilon * alpha ^ 4 * phases) *
@@ -1020,7 +1047,7 @@ theorem measure_dependentTruncatedProduct_relativeDeviation_le
   have hmoments := dependentTruncatedProduct_moment_bounds_of_relativeProduct
     mu alpha epsilon mean rawMean second V halpha hepsilon hsmall hmean hmeanPos
       hrawMean hrawMean_le hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap
-      hVmean hVsecond hind hrelative phases
+      hVmean hVsecond hind phases hrelative
   have htarget : 0 < dependentPhaseMeanProduct mean phases := by
     dsimp [dependentPhaseMeanProduct]
     apply Finset.prod_pos
@@ -1365,10 +1392,10 @@ theorem measure_dependentPhaseSampleProduct_relativeDeviation_le
     (hWmean : ∀ j, (∫ omega, W j omega ∂mu) = rawMean j)
     (hind : ∀ i, ApproxIndepFun epsilon
       (dependentTruncatedProduct alpha mean V i) (V (i + 1)) mu)
-    (hrelative : ∀ i,
+    (phases : ℕ)
+    (hrelative : ∀ i, i ≤ phases →
       (1 + 2 * epsilon * alpha ^ 4 * i) * dependentPhaseMeanProduct second i ≤
         2 * dependentPhaseMeanProduct mean i ^ 2)
-    (phases : ℕ)
     (hcoefficient : ∀ i, i < phases →
       2 * epsilon * alpha ^ 2 * (i + 1) ≤ 1)
     {tailDelta relativeEps : ℝ}
@@ -1393,7 +1420,7 @@ theorem measure_dependentPhaseSampleProduct_relativeDeviation_le
   have htail := measure_dependentTruncatedProduct_relativeDeviation_le
     mu alpha epsilon mean rawMean second V halpha hepsilon hsmall hmean hmeanPos
       hrawMean hrawMean_le hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap
-      hVmean hVsecond hind hrelative phases htailDelta hrelativeEps htailSecond
+      hVmean hVsecond hind phases hrelative htailDelta hrelativeEps htailSecond
   apply measure_dependentPhaseSampleProduct_relativeDeviation_le_of_truncation_bounds
     mu alpha mean V W phases relativeEps (dependentPhaseMeanProduct mean phases)
       (ENNReal.ofReal

@@ -256,7 +256,7 @@ theorem measure_dependentPhaseSampleProduct_figureOne_le
     (hind : ∀ i, ApproxIndepFun (figureOneDependentEpsilon q)
       (dependentTruncatedProduct (figureOneDependentAlpha q) mean V i)
       (V (i + 1)) mu)
-    (hrelative : ∀ i,
+    (hrelative : ∀ i, i ≤ figureOneDependentPhaseCount q →
       (1 + 2 * figureOneDependentEpsilon q *
           figureOneDependentAlpha q ^ 4 * i) *
           dependentPhaseMeanProduct second i ≤
@@ -286,8 +286,8 @@ theorem measure_dependentPhaseSampleProduct_figureOne_le
       (figureOneDependent_smallness q)
       hmean hmeanPos hrawMean hrawMeanPos hrawMean_le hsecond
       hmeanSecond hrawSecond hVmeas hV0 hVcap hVmean hVsecond hVeq
-      hWmeas hW0 hWint hWmean hind hrelative
-      (figureOneDependentPhaseCount q)
+      hWmeas hW0 hWint hWmean hind
+      (figureOneDependentPhaseCount q) hrelative
       (fun i hi => figureOneDependent_coefficient q hi)
       (tailDelta := q.eps ^ 2 / 16) (relativeEps := 5 * q.eps / 8)
       (div_nonneg (sq_nonneg q.eps) (by norm_num))
@@ -304,7 +304,8 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
     (q : VolumeParams) (I : VolumeInput q.n)
     (htrunc : FigureOneRadialTruncationBound q I)
     (mu : Measure Omega) (X : Omega → ℝ) {mean : ℝ}
-    (hmeanEq : mean = ∏ i, figureOneIdealPhaseMean q I i)
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ i, figureOneIdealPhaseMean q I i) mean)
     {delta : ENNReal}
     (htail : mu {omega | (5 * q.eps / 8) * mean ≤
       |X omega - mean|} ≤ delta) :
@@ -312,6 +313,7 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
       accurateOutcome q I} ≤ delta := by
   let target := euclideanVolume (truncatedVolumeInput q I)
   let A := initialGaussianIntegral q
+  let ideal := ∏ i, figureOneIdealPhaseMean q I i
   have hA : 0 < A := by
     dsimp [A, initialGaussianIntegral]
     exact Real.rpow_pos_of_pos
@@ -319,10 +321,42 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
   have htarget : 0 < target := by
     dsimp [target]
     exact euclideanVolume_pos q (truncatedVolumeInput q I)
-  have hcenter : RelativeApprox (q.eps / 32) target (A * mean) := by
-    rw [hmeanEq]
-    simpa [A, target] using
+  have hideal : 0 < ideal := by
+    dsimp [ideal]
+    exact Finset.prod_pos fun i _ => figureOneIdealPhaseMean_pos q I i
+  have hidealCenter : RelativeApprox (q.eps / 32) target (A * ideal) := by
+    simpa [A, ideal, target] using
       figureOneIdealMean_relativeApprox_truncatedVolume q I
+  have hmeanApprox' : RelativeApprox (q.eps / 32) ideal mean := by
+    simpa [ideal] using hmeanApprox
+  have hmeanBounds := hmeanApprox'
+  have hidealBounds := hidealCenter
+  unfold RelativeApprox Arlib.relErr at hmeanBounds hidealBounds
+  have hcenter : RelativeApprox (q.eps / 14) target (A * mean) := by
+    unfold RelativeApprox Arlib.relErr
+    constructor
+    · have hcoef0 : 0 ≤ 1 - q.eps / 32 := by linarith [q.heps.2]
+      have hmeanScaled := mul_le_mul_of_nonneg_left hmeanBounds.1 hA.le
+      have hidealScaled := mul_le_mul_of_nonneg_left hidealBounds.1 hcoef0
+      have hcoefficient :
+          (1 - q.eps / 14) * target ≤
+            (1 - q.eps / 32) * ((1 - q.eps / 32) * target) := by
+        have hc : 1 - q.eps / 14 ≤
+            (1 - q.eps / 32) * (1 - q.eps / 32) := by
+          nlinarith [q.heps.1, sq_nonneg q.eps]
+        nlinarith [mul_le_mul_of_nonneg_right hc htarget.le]
+      nlinarith
+    · have hcoef0 : 0 ≤ 1 + q.eps / 32 := by linarith [q.heps.1]
+      have hmeanScaled := mul_le_mul_of_nonneg_left hmeanBounds.2 hA.le
+      have hidealScaled := mul_le_mul_of_nonneg_left hidealBounds.2 hcoef0
+      have hcoefficient :
+          (1 + q.eps / 32) * ((1 + q.eps / 32) * target) ≤
+            (1 + q.eps / 14) * target := by
+        have hc : (1 + q.eps / 32) * (1 + q.eps / 32) ≤
+            1 + q.eps / 14 := by
+          nlinarith [mul_nonneg q.heps.1.le (sub_nonneg.mpr q.heps.2.le)]
+        nlinarith [mul_le_mul_of_nonneg_right hc htarget.le]
+      nlinarith
   have hsubset :
       {omega | initialGaussianIntegral q * X omega ∉ accurateOutcome q I} ⊆
         {omega | (5 * q.eps / 8) * mean ≤ |X omega - mean|} := by
@@ -338,28 +372,31 @@ theorem measure_scaledDependentProduct_failure_le_of_relativeDeviation
     unfold RelativeApprox Arlib.relErr at hcenterBounds
     have hlower : (1 - 3 * q.eps / 4) * target ≤ A * X omega := by
       have hdiffLower := (abs_lt.mp hscaled).1
-      have hbase : (1 - q.eps / 32) * target ≤ A * mean := hcenterBounds.1
+      have hbase : (1 - q.eps / 14) * target ≤ A * mean := hcenterBounds.1
       have hnonneg : 0 ≤ target := htarget.le
       have hc : 0 ≤ 1 - 5 * q.eps / 8 := by linarith [q.heps.2]
       have hbaseScaled := mul_le_mul_of_nonneg_left hbase hc
       have hcoefficient :
           (1 - 3 * q.eps / 4) * target ≤
-            (1 - 5 * q.eps / 8) * ((1 - q.eps / 32) * target) := by
-        nlinarith [mul_nonneg q.heps.1.le hnonneg,
-          mul_nonneg (sq_nonneg q.eps) hnonneg]
+            (1 - 5 * q.eps / 8) * ((1 - q.eps / 14) * target) := by
+        have hc : 1 - 3 * q.eps / 4 ≤
+            (1 - 5 * q.eps / 8) * (1 - q.eps / 14) := by
+          nlinarith [q.heps.1, sq_nonneg q.eps]
+        nlinarith [mul_le_mul_of_nonneg_right hc hnonneg]
       nlinarith
     have hupper : A * X omega ≤ (1 + 3 * q.eps / 4) * target := by
       have hdiffUpper := (abs_lt.mp hscaled).2
-      have hbase : A * mean ≤ (1 + q.eps / 32) * target := hcenterBounds.2
+      have hbase : A * mean ≤ (1 + q.eps / 14) * target := hcenterBounds.2
       have hnonneg : 0 ≤ target := htarget.le
       have hc : 0 ≤ 1 + 5 * q.eps / 8 := by linarith [q.heps.1]
       have hbaseScaled := mul_le_mul_of_nonneg_left hbase hc
       have hcoefficient :
-          (1 + 5 * q.eps / 8) * ((1 + q.eps / 32) * target) ≤
+          (1 + 5 * q.eps / 8) * ((1 + q.eps / 14) * target) ≤
             (1 + 3 * q.eps / 4) * target := by
-        nlinarith [mul_nonneg q.heps.1.le hnonneg,
-          mul_nonneg q.heps.1.le
-            (mul_nonneg (sub_nonneg.mpr q.heps.2.le) hnonneg)]
+        have hc : (1 + 5 * q.eps / 8) * (1 + q.eps / 14) ≤
+            1 + 3 * q.eps / 4 := by
+          nlinarith [mul_nonneg q.heps.1.le (sub_nonneg.mpr q.heps.2.le)]
+        nlinarith [mul_le_mul_of_nonneg_right hc hnonneg]
       nlinarith
     apply hbad
     apply relativeApprox_full_of_three_quarters_truncated q I htrunc
@@ -390,7 +427,8 @@ theorem figureOnePostInitialDirectFailureBound_of_dependentProduct
     (htrunc : FigureOneRadialTruncationBound q I)
     (mu : Measure Omega) [IsProbabilityMeasure mu]
     (X : Omega → ℝ) (hX : Measurable X) {mean : ℝ}
-    (hmeanEq : mean = ∏ i, figureOneIdealPhaseMean q I i)
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ i, figureOneIdealPhaseMean q I i) mean)
     (hlaw :
       (truncatedGaussianProbability q I (initialVariance q)
           (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
@@ -403,11 +441,81 @@ theorem figureOnePostInitialDirectFailureBound_of_dependentProduct
     measurable_const.mul hX
   have hfailure :=
     measure_scaledDependentProduct_failure_le_of_relativeDeviation
-      q I htrunc mu X hmeanEq htail
+      q I htrunc mu X hmeanApprox htail
   unfold FigureOnePostInitialDirectFailureBound
   rw [hlaw, Measure.map_apply hscaled (accurateOutcome_measurable q I).compl]
   refine hfailure.trans ?_
   exact ENNReal.ofReal_le_ofReal (by norm_num)
+
+/-- Paper-aligned post-initial assembly: the finite-horizon premises of
+Lemma 7.15, the quantitative truncation bias of its phase means, and the
+law identification of the executable continuation imply the direct `3/16`
+failure contract. -/
+theorem figureOnePostInitialDirectFailureBound_of_lemma715
+    {Omega : Type*} [MeasurableSpace Omega]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I)
+    (htrunc : FigureOneRadialTruncationBound q I)
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (mean rawMean second : ℕ → ℝ) (V W : ℕ → Omega → ℝ)
+    (hmean : ∀ j, 0 ≤ mean j) (hmeanPos : ∀ j, 0 < mean j)
+    (hrawMean : ∀ j, 0 ≤ rawMean j)
+    (hrawMeanPos : ∀ j, 0 < rawMean j)
+    (hrawMean_le : ∀ j, rawMean j ≤ 2 * mean j)
+    (hsecond : ∀ j, 0 ≤ second j)
+    (hmeanSecond : ∀ j, mean j ^ 2 ≤ second j)
+    (hrawSecond : ∀ j, rawMean j ^ 2 ≤ 2 * second j)
+    (hVmeas : ∀ j, Measurable (V j))
+    (hV0 : ∀ j omega, 0 ≤ V j omega)
+    (hVcap : ∀ j omega,
+      V j omega ≤ figureOneDependentAlpha q * rawMean j)
+    (hVmean : ∀ j, (∫ omega, V j omega ∂mu) = mean j)
+    (hVsecond : ∀ j, (∫ omega, V j omega ^ 2 ∂mu) = second j)
+    (hVeq : ∀ j omega, V j omega =
+      dependentTruncatedPhase (figureOneDependentAlpha q) rawMean W j omega)
+    (hWmeas : ∀ j, Measurable (W j))
+    (hW0 : ∀ j omega, 0 ≤ W j omega)
+    (hWint : ∀ j, Integrable (W j) mu)
+    (hWmean : ∀ j, (∫ omega, W j omega ∂mu) = rawMean j)
+    (hind : ∀ i, ApproxIndepFun (figureOneDependentEpsilon q)
+      (dependentTruncatedProduct (figureOneDependentAlpha q) mean V i)
+      (V (i + 1)) mu)
+    (hrelative : ∀ i, i ≤ figureOneDependentPhaseCount q →
+      (1 + 2 * figureOneDependentEpsilon q *
+          figureOneDependentAlpha q ^ 4 * i) *
+          dependentPhaseMeanProduct second i ≤
+        2 * dependentPhaseMeanProduct mean i ^ 2)
+    (htailSecond :
+      (1 + 2 * figureOneDependentEpsilon q *
+          figureOneDependentAlpha q ^ 4 *
+            figureOneDependentPhaseCount q) *
+          dependentPhaseMeanProduct second
+            (figureOneDependentPhaseCount q) ≤
+        (1 + q.eps ^ 2 / 16) *
+          dependentPhaseMeanProduct mean
+            (figureOneDependentPhaseCount q) ^ 2)
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ i, figureOneIdealPhaseMean q I i)
+      (dependentPhaseMeanProduct mean (figureOneDependentPhaseCount q)))
+    (hlaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          (figureOneContinuationLaw explicitVolumeCoolingSchedule q I oracle) =
+        mu.map fun omega => initialGaussianIntegral q *
+          dependentPhaseSampleProduct W (figureOneDependentPhaseCount q) omega) :
+    FigureOnePostInitialDirectFailureBound q I oracle := by
+  have htail := measure_dependentPhaseSampleProduct_figureOne_le
+    q mu mean rawMean second V W hmean hmeanPos hrawMean hrawMeanPos
+      hrawMean_le hsecond hmeanSecond hrawSecond hVmeas hV0 hVcap hVmean
+      hVsecond hVeq hWmeas hW0 hWint hWmean hind hrelative htailSecond
+  have hX : Measurable
+      (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q)) := by
+    unfold dependentPhaseSampleProduct
+    fun_prop
+  exact figureOnePostInitialDirectFailureBound_of_dependentProduct
+    q I oracle htrunc mu
+      (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q)) hX
+      hmeanApprox hlaw htail
 
 /-- A direct `3/16` post-initial failure bound is already stronger than what
 the base-run theorem needs: the initial-start replacement costs at most
@@ -462,6 +570,7 @@ theorem figureOne_base_accuracy_of_direct_postInitialFailure
 #print axioms measure_dependentPhaseSampleProduct_figureOne_le
 #print axioms measure_scaledDependentProduct_failure_le_of_relativeDeviation
 #print axioms figureOnePostInitialDirectFailureBound_of_dependentProduct
+#print axioms figureOnePostInitialDirectFailureBound_of_lemma715
 #print axioms figureOne_base_accuracy_of_direct_postInitialFailure
 
 end ArlibCommunity.Algorithms.CV18
