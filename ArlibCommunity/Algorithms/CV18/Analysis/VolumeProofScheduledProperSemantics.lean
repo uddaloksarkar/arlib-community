@@ -626,6 +626,60 @@ theorem cappedScheduledAccuracyProperBlock_stronglyMeasurable
   (cappedScheduledAccuracyProperBlockAux_add_one_semantics
     q I oracle hsigma2 properStride proposalCap properStride).1 current
 
+theorem scheduledBalancedAccuracyGaussianRejectionAttempt_stronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (current : AmbientSpace q.n) :
+    (scheduledBalancedAccuracyGaussianRejectionAttempt q sigma2 current).StronglyMeasurable
+      oracle.query := by
+  simp only [scheduledBalancedAccuracyGaussianRejectionAttempt,
+    MembershipOracleProgram.StronglyMeasurable]
+  let target : AmbientSpace q.n := (accuracyScaleFactor q)⁻¹ • current
+  let output : ℝ → Bool × AmbientSpace q.n := fun coin =>
+    if oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ figureOneScheduledPhaseRadius q sigma2 ∧
+        ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+          gaussianScaleAcceptance sigma2 (accuracyScaleFactor q) target then
+      (true, target)
+    else (false, target)
+  have hout : Measurable output := by
+    by_cases heligible : oracle.query target = true ∧
+        ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+        ‖target‖ ≤ figureOneScheduledPhaseRadius q sigma2
+    · simp only [output, heligible.1, heligible.2.1, heligible.2.2, true_and]
+      exact Measurable.ite
+        (measurableSet_le (ENNReal.measurable_ofReal.comp measurable_id)
+          measurable_const) measurable_const measurable_const
+    · have hfalse : ∀ coin : ℝ, ¬ (oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ figureOneScheduledPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            gaussianScaleAcceptance sigma2 (accuracyScaleFactor q) target) := by
+        intro coin h
+        exact heligible ⟨h.1, h.2.1, h.2.2.1⟩
+      simp only [output, hfalse, if_false]
+      exact measurable_const
+  constructor
+  · rw [show (fun coin => MembershipOracleProgram.runEstimate oracle.query
+        (if oracle.query target = true ∧
+            ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+            ‖target‖ ≤ figureOneScheduledPhaseRadius q sigma2 ∧
+            ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+              gaussianScaleAcceptance sigma2 (accuracyScaleFactor q) target then
+          .pure (true, target) else .pure (false, target))) =
+        fun coin => Measure.dirac (output coin) by
+      funext coin
+      by_cases h : oracle.query target = true ∧
+          ‖target‖ ≤ Real.sqrt (terminalVariance q) ∧
+          ‖target‖ ≤ figureOneScheduledPhaseRadius q sigma2 ∧
+          ENNReal.ofReal coin ≤ (2 : ENNReal)⁻¹ *
+            gaussianScaleAcceptance sigma2 (accuracyScaleFactor q) target
+      · simp [h, output, MembershipOracleProgram.runEstimate]
+      · simp [h, output, MembershipOracleProgram.runEstimate]]
+    exact Measure.measurable_dirac.comp hout
+  · intro coin
+    split <;> trivial
+
 #print axioms runEstimate_scheduledAccuracyMetropolisMarkedBallStep_eq_lazyProperAux
 #print axioms cappedScheduledAccuracyProperBlock_semantics
 
