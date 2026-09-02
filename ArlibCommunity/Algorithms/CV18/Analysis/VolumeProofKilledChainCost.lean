@@ -132,6 +132,56 @@ theorem bind_scheduledSuccessfulBlockEndpointLaw_isWarm
   rw [← heq]
   exact h
 
+/-- A padded trial charges the proper block plus one rejection query even if
+the block is killed.  This dominates the executable retry step and makes the
+fixed-shadow recurrence exact. -/
+noncomputable def scheduledPaddedTrialCost
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (sigma2 : ℝ) (proposalCap properStride : ℕ)
+    (current : AmbientSpace q.n) : ENNReal :=
+  countedQueryCost
+    ((cappedScheduledAccuracyProperBlock q sigma2 (proposalCap + 1)
+      properStride current).run oracle.query) + 1
+
+theorem measurable_scheduledPaddedTrialCost
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (proposalCap properStride : ℕ) :
+    Measurable (scheduledPaddedTrialCost q I oracle sigma2 proposalCap
+      properStride) := by
+  unfold scheduledPaddedTrialCost
+  exact ((Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+    (cappedScheduledAccuracyProperBlock_countedMeasurable q I oracle hsigma2
+      (proposalCap + 1) properStride).1).add measurable_const
+
+theorem lintegral_scheduledPaddedTrialCost_le_of_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {M : ENNReal} {mu : Measure (AmbientSpace q.n)}
+    (hwarm : _root_.Arlib.IsWarm M mu
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2))
+    (proposalCap properStride : ℕ) :
+    ∫⁻ current, scheduledPaddedTrialCost q I oracle sigma2 proposalCap
+        properStride current ∂mu ≤
+      (properStride : ENNReal) * (M * 2) + 2 * mu Set.univ := by
+  unfold scheduledPaddedTrialCost
+  have hmeasCost : Measurable fun current => countedQueryCost
+      ((cappedScheduledAccuracyProperBlock q sigma2 (proposalCap + 1)
+        properStride current).run oracle.query) :=
+    (Measure.measurable_lintegral measurable_countedQueryCost_integrand).comp
+      (cappedScheduledAccuracyProperBlock_countedMeasurable q I oracle hsigma2
+        (proposalCap + 1) properStride).1
+  rw [lintegral_add_left hmeasCost]
+  simp only [lintegral_const, one_mul]
+  calc
+    _ ≤ ((properStride : ENNReal) * (M * 2) + mu Set.univ) +
+        mu Set.univ := by
+      gcongr
+      exact lintegral_cappedScheduledAccuracyProperBlock_countedQueryCost_le_of_isWarm_submeasure
+        q I oracle hsigma2 hwarm (proposalCap + 1) properStride
+    _ = (properStride : ENNReal) * (M * 2) + 2 * mu Set.univ := by ring
+
 /-- The fixed-live-trial shadow for a warm scheduled phase has linear cost,
 with no dependence on the local proposal cap. -/
 theorem lintegral_scheduledFixedLiveTrialShadowCost_le_of_isWarm
@@ -189,6 +239,55 @@ theorem lintegral_scheduledFixedLiveTrialShadowCost_le_of_isWarm
       (lintegral_scheduledBalancedAccuracyLiveTrial_countedQueryCost_le_of_isWarm
         q I oracle hsigma2 hwarmNu proposalCap properStride).trans
         (add_le_add le_rfl (by gcongr))
+  · intro nu hwarmNu
+    exact bind_scheduledSuccessfulBlockEndpointLaw_isWarm q I sigma2
+      proposalCap properStride hwarmNu
+  · exact hwarm
+
+/-- Padded fixed-trial version used directly by the executable retry
+domination theorem. -/
+theorem lintegral_scheduledFixedPaddedTrialShadowCost_le_of_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {M : ENNReal} {mu : Measure (AmbientSpace q.n)}
+    (hwarm : _root_.Arlib.IsWarm M mu
+      (ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+        (figureOneScheduledProposalRadius q sigma2) sigma2))
+    (proposalCap properStride trials : ℕ) :
+    ∫⁻ current, finiteKilledChainExpectedCost
+        (scheduledSuccessfulBlockEndpointLaw q I sigma2 proposalCap properStride)
+        (scheduledPaddedTrialCost q I oracle sigma2 proposalCap properStride)
+        trials current ∂mu ≤
+      (trials : ENNReal) *
+        ((properStride : ENNReal) * (M * 2) + 2 * M) := by
+  let pi := ellGaussianProb (figureOneScheduledPhaseBody q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) sigma2
+  have hdelta : 0 < figureOneScheduledProposalRadius q sigma2 :=
+    figureOneScheduledProposalRadius_pos q hsigma2
+  have hmass0 := ellGaussianMeasure_univ_ne_zero
+    (figureOneScheduledPhaseBody_measurable q I sigma2)
+    (figureOneScheduledPhaseBody_convex q I sigma2)
+    (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+    (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+    hdelta sigma2
+  have hmasstop := ellGaussianMeasure_ne_top_cv18
+    (figureOneScheduledPhaseBody_volume_ne_top q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) hsigma2
+  let _ : IsProbabilityMeasure pi :=
+    isProbabilityMeasure_ellGaussianProb hmass0 hmasstop
+  apply lintegral_finiteKilledChainExpectedCost_le
+    (scheduledSuccessfulBlockEndpointLaw_measurable q I hsigma2 proposalCap
+      properStride)
+    (measurable_scheduledPaddedTrialCost q I oracle hsigma2 proposalCap
+      properStride)
+  · intro nu hwarmNu
+    have hmass : nu Set.univ ≤ M := by
+      calc
+        nu Set.univ ≤ M * pi Set.univ :=
+          hwarmNu Set.univ MeasurableSet.univ
+        _ = M := by rw [measure_univ, mul_one]
+    exact (lintegral_scheduledPaddedTrialCost_le_of_isWarm q I oracle hsigma2
+      hwarmNu proposalCap properStride).trans (add_le_add le_rfl (by gcongr))
   · intro nu hwarmNu
     exact bind_scheduledSuccessfulBlockEndpointLaw_isWarm q I sigma2
       proposalCap properStride hwarmNu
