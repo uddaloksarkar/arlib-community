@@ -316,8 +316,114 @@ theorem figureOneChronologicalIdeal_exactIndependence
   exact IndepFun.approxIndepFun_zero
     (figureOneChronologicalIdealTruncatedProduct_indepFun q I i hi)
 
+/-! ## Concrete ideal iterated law -/
+
+/-- The ideal comparison history is stationary while executable coordinates
+are replaced.  Thus its exact-chance kernel is the identity kernel. -/
+noncomputable def figureOneChronologicalIdealKernel (q : VolumeParams) :
+    ℕ → FigureOneIdealExperimentSpace q →
+      Measure (FigureOneIdealExperimentSpace q) :=
+  fun _ samples => Measure.dirac samples
+
+theorem figureOneChronologicalIdealKernel_measurable
+    (q : VolumeParams) (i : ℕ) :
+    Measurable (figureOneChronologicalIdealKernel q i) :=
+  Measure.measurable_dirac
+
+theorem figureOneChronologicalIdealKernel_isProbabilityMeasure
+    (q : VolumeParams) (i : ℕ) (samples : FigureOneIdealExperimentSpace q) :
+    IsProbabilityMeasure (figureOneChronologicalIdealKernel q i samples) := by
+  unfold figureOneChronologicalIdealKernel
+  infer_instance
+
+theorem iteratedKernelLaw_figureOneChronologicalIdealKernel
+    (q : VolumeParams) (I : VolumeInput q.n) (t : ℕ) :
+    iteratedKernelLaw (figureOneChronologicalIdealKernel q)
+        (figureOneIdealExperimentLaw q I) t =
+      figureOneIdealExperimentLaw q I := by
+  induction t with
+  | zero => rfl
+  | succ t ih =>
+      rw [iteratedKernelLaw_succ, ih]
+      exact Measure.bind_dirac
+
+/-! ## Concrete balanced post-initial history law -/
+
+/-- Complete balanced history after a genuinely restricted-Gaussian initial
+point.  This is the actual post-initial probability space used by the direct
+failure argument. -/
+noncomputable def balancedFigureOnePostInitialHistoryLaw
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) : Measure (Option (BalancedCoolingHistory q.n)) :=
+  (truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+    (balancedFigureOneFullHistoryLaw parameters q I)
+
+theorem balancedFigureOnePostInitialHistoryLaw_isProbabilityMeasure
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) :
+    IsProbabilityMeasure
+      (balancedFigureOnePostInitialHistoryLaw parameters q I) := by
+  unfold balancedFigureOnePostInitialHistoryLaw
+  exact MeasureTheory.isProbabilityMeasure_bind
+    (balancedFigureOneFullHistoryLaw_measurable_and_probability
+      parameters q I).1.aemeasurable
+    (ae_of_all _ (balancedFigureOneFullHistoryLaw_measurable_and_probability
+      parameters q I).2)
+
+/-- The interpreter law of the balanced continuation is exactly the scalar
+map of the complete chronological history law. -/
+theorem bind_balancedFigureOnePointContinuation_eq_postInitialHistory_map
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+        (fun point =>
+          (balancedFigureOnePointContinuation parameters q point).runEstimate
+            oracle.query) =
+      (balancedFigureOnePostInitialHistoryLaw parameters q I).map
+        (balancedFigureOneHistoryEstimate q) := by
+  have hfull := balancedFigureOneFullHistoryLaw_measurable_and_probability
+    parameters q I
+  have hestimate := measurable_balancedFigureOneHistoryEstimate q
+  rw [show (fun point =>
+      (balancedFigureOnePointContinuation parameters q point).runEstimate
+        oracle.query) = fun point =>
+      (balancedFigureOneFullHistoryLaw parameters q I point).map
+        (balancedFigureOneHistoryEstimate q) by
+    funext point
+    exact balancedFigureOnePointContinuation_runEstimate_eq_history_map
+      parameters q I oracle point]
+  unfold balancedFigureOnePostInitialHistoryLaw
+  exact (map_bind_eq_bind_map_of_measurable _ hfull.1 hestimate).symm
+
+/-- Once the structural product invariant is known almost surely, the actual
+balanced scalar law is exactly the chronological sample-product law. -/
+theorem bind_balancedFigureOnePointContinuation_eq_sampleProduct_map
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (hproduct : ∀ᵐ history ∂balancedFigureOnePostInitialHistoryLaw parameters q I,
+      BalancedCoolingHistoryHasProduct
+        (figureOneDependentPhaseCount q) history) :
+    (truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+        (fun point =>
+          (balancedFigureOnePointContinuation parameters q point).runEstimate
+            oracle.query) =
+      (balancedFigureOnePostInitialHistoryLaw parameters q I).map
+        (fun history => initialGaussianIntegral q *
+          dependentPhaseSampleProduct
+            (balancedCoolingChronologicalPhaseVariable q)
+            (figureOneDependentPhaseCount q) history) := by
+  rw [bind_balancedFigureOnePointContinuation_eq_postInitialHistory_map]
+  apply Measure.map_congr
+  filter_upwards [hproduct] with history hhistory
+  exact balancedFigureOneHistoryEstimate_eq_sampleProduct q history hhistory
+
 #print axioms figureOneChronologicalIdealTruncatedFinCoordinates_iIndepFun
 #print axioms figureOneChronologicalIdeal_exactIndependence
+#print axioms iteratedKernelLaw_figureOneChronologicalIdealKernel
+#print axioms bind_balancedFigureOnePointContinuation_eq_sampleProduct_map
 
 #print axioms figureOneChronologicalIdealCoordinate_mean
 #print axioms figureOneChronologicalIdealCoordinate_secondMoment_le
