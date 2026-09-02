@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofCountedMeasurability
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedFullHistory
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedGlobalCap
 
 /-!
 # Counted semantics of the complete balanced Figure-One base program
@@ -380,5 +381,15 @@ theorem balancedFigureOneBaseVolumeCooling_countedStronglyMeasurable
   rw [hbase]
   exact (figureOneInitialSample_countedStronglyMeasurable q I oracle).bind
     htail htailRun
+
+/-- The concrete finite syntax underlying the globally capped Figure-One
+program has a measurable result-and-cost law. -/
+theorem figureOneGlobalBalancedBaseProgram_countedStronglyMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (figureOneGlobalBalancedBaseProgram q).CountedStronglyMeasurable
+      oracle.query := by
+  unfold figureOneGlobalBalancedBaseProgram
+  exact balancedFigureOneBaseVolumeCooling_countedStronglyMeasurable
+    figureOneGlobalBalancedParameters q I oracle
 
 end ArlibCommunity.Algorithms.CV18
