@@ -189,14 +189,15 @@ covers exhausting all attempts; `targetBudget` covers the KLS target change.
 The final field is precisely the compatibility condition with the chosen
 per-sample exact-chance budget. -/
 structure BalancedTransitionErrorAllocation
-    (q : VolumeParams) (rejectMass : ENNReal) (attempts : ℕ) where
+    (q : VolumeParams) (rejectMass : ENNReal) (attempts : ℕ)
+    (targetError : ENNReal := balancedStationaryTargetError q) where
   totalBudget : ENNReal
   blockBudget : ENNReal
   retryTailBudget : ENNReal
   targetBudget : ENNReal
   reject_le_one : rejectMass ≤ 1
   retryTail_le : rejectMass ^ (attempts + 1) ≤ retryTailBudget
-  targetError_le : balancedStationaryTargetError q ≤ targetBudget
+  targetError_le : targetError ≤ targetBudget
   components_le :
     (attempts + 1) • blockBudget + retryTailBudget + targetBudget ≤
       totalBudget
@@ -223,25 +224,26 @@ noncomputable def figureOneCorrectedErrorAllocation
 
 theorem balancedTransitionError_le_allocation
     {rejectMass : ENNReal} {attempts : ℕ}
+    {targetError : ENNReal}
     (allocation : BalancedTransitionErrorAllocation
-      (q := q) rejectMass attempts) :
+      (q := q) rejectMass attempts targetError) :
     allocation.blockBudget + rejectMass *
         balancedRetryError allocation.blockBudget rejectMass attempts +
-      balancedStationaryTargetError q ≤ allocation.totalBudget := by
+      targetError ≤ allocation.totalBudget := by
   have hretry := reject_mul_balancedRetryError_le
     (blockError := allocation.blockBudget)
     allocation.reject_le_one attempts
   calc
     allocation.blockBudget + rejectMass *
           balancedRetryError allocation.blockBudget rejectMass attempts +
-        balancedStationaryTargetError q ≤
+        targetError ≤
       allocation.blockBudget +
           (attempts • allocation.blockBudget +
             rejectMass ^ (attempts + 1)) +
-        balancedStationaryTargetError q := by gcongr
+        targetError := by gcongr
     _ = (attempts + 1) • allocation.blockBudget +
           rejectMass ^ (attempts + 1) +
-        balancedStationaryTargetError q := by
+        targetError := by
       rw [add_nsmul]
       simp only [one_nsmul]
       ac_rfl
