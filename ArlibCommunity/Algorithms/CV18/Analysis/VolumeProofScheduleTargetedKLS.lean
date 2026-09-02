@@ -113,6 +113,10 @@ noncomputable def figureOneScheduledPhaseBody
   truncatedBody q I ∩
     Metric.closedBall 0 (figureOneScheduledPhaseRadius q sigma2)
 
+noncomputable def figureOneScheduledPhaseInradius
+    (q : VolumeParams) (sigma2 : ℝ) : ℝ :=
+  min 1 (figureOneScheduledPhaseRadius q sigma2)
+
 noncomputable def figureOneScheduledProposalRadius
     (q : VolumeParams) (sigma2 : ℝ) : ℝ :=
   min (Real.sqrt sigma2) 1 /
@@ -157,6 +161,79 @@ theorem figureOneScheduledPhaseBody_isCompact
     (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
     IsCompact (figureOneScheduledPhaseBody q I sigma2) :=
   (truncatedVolumeInput q I).body.isCompact.inter_right isClosed_closedBall
+
+theorem figureOneScheduledPhaseInradius_pos
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    0 < figureOneScheduledPhaseInradius q sigma2 := by
+  unfold figureOneScheduledPhaseInradius
+  exact lt_min one_pos (figureOneScheduledPhaseRadius_pos q hsigma2)
+
+theorem ball_scheduledPhaseInradius_subset
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
+    Metric.ball (0 : AmbientSpace q.n)
+      (figureOneScheduledPhaseInradius q sigma2) ⊆
+        figureOneScheduledPhaseBody q I sigma2 := by
+  intro x hx
+  have hdist : dist x 0 < figureOneScheduledPhaseInradius q sigma2 := by
+    simpa [dist_comm] using hx
+  refine ⟨unitBall_subset_truncatedBody q I ?_, ?_⟩
+  · simpa [unitBall, Metric.mem_closedBall, dist_zero_right] using
+      (le_of_lt hdist).trans (min_le_left _ _)
+  · rw [Metric.mem_closedBall, dist_zero_right]
+    simpa [dist_zero_right] using
+      (le_of_lt hdist).trans (min_le_right _ _)
+
+theorem figureOneScheduledPhaseBody_volume_ne_zero
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    volume (figureOneScheduledPhaseBody q I sigma2) ≠ 0 := by
+  apply ne_of_gt
+  exact (Metric.measure_ball_pos volume (0 : AmbientSpace q.n)
+    (figureOneScheduledPhaseInradius_pos q hsigma2)).trans_le
+      (measure_mono (ball_scheduledPhaseInradius_subset q I sigma2))
+
+theorem figureOneScheduledPhaseBody_volume_ne_top
+    (q : VolumeParams) (I : VolumeInput q.n) (sigma2 : ℝ) :
+    volume (figureOneScheduledPhaseBody q I sigma2) ≠ ∞ :=
+  (figureOneScheduledPhaseBody_isCompact q I sigma2).measure_lt_top.ne
+
+theorem figureOneScheduledProposalRadius_le_inradiusStep
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (hsmall : figureOneScheduledPhaseRadius q sigma2 ≤ 1) :
+    figureOneScheduledProposalRadius q sigma2 ≤
+      figureOneScheduledPhaseInradius q sigma2 / (2 * (q.n : ℝ)) := by
+  let sigma := Real.sqrt sigma2
+  let L := figureOneScheduledAccuracyLog q
+  let b := Real.sqrt ((q.n : ℝ) * L)
+  have hsigma : 0 < sigma := Real.sqrt_pos.2 hsigma2
+  have hn : (0 : ℝ) < q.n := by
+    exact_mod_cast (lt_of_lt_of_le (by norm_num : 0 < 3) q.dim_ok)
+  have hL : 1 ≤ L := by
+    simpa [L] using figureOneScheduledAccuracyLog_one_le q
+  have hb : 0 < b := by dsimp [b]; positivity
+  have hb2 : b ^ 2 = (q.n : ℝ) * L := by
+    dsimp [b]
+    rw [Real.sq_sqrt]
+    positivity
+  have hrho : figureOneScheduledPhaseInradius q sigma2 =
+      32 * sigma * b := by
+    rw [figureOneScheduledPhaseInradius, min_eq_right hsmall]
+    rfl
+  unfold figureOneScheduledProposalRadius
+  change min sigma 1 / (4096 * b) ≤
+    figureOneScheduledPhaseInradius q sigma2 / (2 * (q.n : ℝ))
+  rw [hrho]
+  apply (div_le_iff₀ (by positivity : 0 < 4096 * b)).2
+  rw [div_mul_eq_mul_div]
+  apply (le_div_iff₀ (by positivity : 0 < 2 * (q.n : ℝ))).2
+  calc
+    min sigma 1 * (2 * (q.n : ℝ)) ≤
+        sigma * (2 * (q.n : ℝ)) := by gcongr; exact min_le_left _ _
+    _ ≤ (32 * sigma * b) * (4096 * b) := by
+      rw [show (32 * sigma * b) * (4096 * b) =
+        sigma * (131072 * b ^ 2) by ring, hb2]
+      apply mul_le_mul_of_nonneg_left _ hsigma.le
+      nlinarith
 
 /-- The matched body/radius pair preserves the conductance product bound, so
 the old polynomial mixing-rate proof only acquires the new logarithm. -/
