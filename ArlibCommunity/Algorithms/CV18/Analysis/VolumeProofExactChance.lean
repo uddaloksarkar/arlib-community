@@ -68,6 +68,61 @@ theorem MeasureLeUpTo.bind_then_replace
     MeasureLeUpTo (actual.bind K) nextIdeal (oldError + stepError) := by
   exact (hold.bind_same hKmeas hKprob).trans hstep
 
+/-- Integrating pointwise transition TV estimates against a probability
+prefix loses no extra factor.  This converts the usual per-transition mixing
+statement into the integrated step premise of `iteratedKernelLaw_le`. -/
+theorem tvLe_bind_of_pointwise
+    {S T : Type*} [MeasurableSpace S] [MeasurableSpace T]
+    (prefixLaw : Measure S) [IsProbabilityMeasure prefixLaw]
+    (actualK idealK : S → Measure T)
+    (hactualMeas : Measurable actualK) (hidealMeas : Measurable idealK)
+    {nu : ENNReal}
+    (hpoint : ∀ state, Arlib.TVLe (actualK state) (idealK state) nu) :
+    Arlib.TVLe (prefixLaw.bind actualK) (prefixLaw.bind idealK) nu := by
+  intro event hevent
+  have hactualEvent : Measurable fun state => actualK state event :=
+    (Measure.measurable_coe hevent).comp hactualMeas
+  have hidealEvent : Measurable fun state => idealK state event :=
+    (Measure.measurable_coe hevent).comp hidealMeas
+  rw [Measure.bind_apply hevent hactualMeas.aemeasurable,
+    Measure.bind_apply hevent hidealMeas.aemeasurable]
+  constructor
+  · calc
+      (∫⁻ state, actualK state event ∂prefixLaw) ≤
+          ∫⁻ state, idealK state event + nu ∂prefixLaw :=
+        lintegral_mono fun state => (hpoint state event hevent).1
+      _ = (∫⁻ state, idealK state event ∂prefixLaw) +
+          ∫⁻ _state, nu ∂prefixLaw :=
+        lintegral_add_left hidealEvent _
+      _ = (∫⁻ state, idealK state event ∂prefixLaw) + nu := by simp
+  · calc
+      (∫⁻ state, idealK state event ∂prefixLaw) ≤
+          ∫⁻ state, actualK state event + nu ∂prefixLaw :=
+        lintegral_mono fun state => (hpoint state event hevent).2
+      _ = (∫⁻ state, actualK state event ∂prefixLaw) +
+          ∫⁻ _state, nu ∂prefixLaw :=
+        lintegral_add_left hactualEvent _
+      _ = (∫⁻ state, actualK state event ∂prefixLaw) + nu := by simp
+
+theorem MeasureLeUpTo.bind_of_pointwise_tvLe
+    {S T : Type*} [MeasurableSpace S] [MeasurableSpace T]
+    (prefixLaw : Measure S) [IsProbabilityMeasure prefixLaw]
+    (actualK idealK : S → Measure T)
+    (hactualMeas : Measurable actualK) (hidealMeas : Measurable idealK)
+    (hactualProb : ∀ state, IsProbabilityMeasure (actualK state))
+    (hidealProb : ∀ state, IsProbabilityMeasure (idealK state))
+    {nu : ENNReal}
+    (hpoint : ∀ state, Arlib.TVLe (actualK state) (idealK state) nu) :
+    MeasureLeUpTo (prefixLaw.bind actualK) (prefixLaw.bind idealK) nu := by
+  let _ : IsProbabilityMeasure (prefixLaw.bind actualK) :=
+    MeasureTheory.isProbabilityMeasure_bind hactualMeas.aemeasurable
+      (ae_of_all _ hactualProb)
+  let _ : IsProbabilityMeasure (prefixLaw.bind idealK) :=
+    MeasureTheory.isProbabilityMeasure_bind hidealMeas.aemeasurable
+      (ae_of_all _ hidealProb)
+  exact MeasureLeUpTo.of_tvLe <|
+    tvLe_bind_of_pointwise prefixLaw actualK idealK hactualMeas hidealMeas hpoint
+
 /-- Nonhomogeneous sequential exact-chance replacement.  At time `i`, the
 only required new estimate is the law obtained by applying the executable
 kernel to the *ideal* length-`i` prefix. -/
@@ -140,6 +195,33 @@ theorem MeasureLeUpTo.iteratedKernelLaw_exactChance
   simpa using MeasureLeUpTo.iteratedKernelLaw_const actualK idealK
     initial initial (MeasureLeUpTo.refl initial) hactualMeas hactualProb
       hstep t
+
+/-- Pointwise per-transition form of exact-chance replacement. -/
+theorem MeasureLeUpTo.iteratedKernelLaw_exactChance_of_pointwise
+    {S : Type*} [MeasurableSpace S]
+    (actualK idealK : ℕ → S → Measure S)
+    (initial : Measure S) [IsProbabilityMeasure initial]
+    {nu : ENNReal}
+    (hactualMeas : ∀ i, Measurable (actualK i))
+    (hactualProb : ∀ i state, IsProbabilityMeasure (actualK i state))
+    (hidealMeas : ∀ i, Measurable (idealK i))
+    (hidealProb : ∀ i state, IsProbabilityMeasure (idealK i state))
+    (hpoint : ∀ i state,
+      Arlib.TVLe (actualK i state) (idealK i state) nu)
+    (t : ℕ) :
+    MeasureLeUpTo
+      (iteratedKernelLaw actualK initial t)
+      (iteratedKernelLaw idealK initial t)
+      (t • nu) := by
+  apply MeasureLeUpTo.iteratedKernelLaw_exactChance actualK idealK initial
+    hactualMeas hactualProb
+  intro i
+  let _ : IsProbabilityMeasure (iteratedKernelLaw idealK initial i) :=
+    iteratedKernelLaw_isProbabilityMeasure idealK initial inferInstance
+      hidealMeas hidealProb i
+  exact MeasureLeUpTo.bind_of_pointwise_tvLe
+    (iteratedKernelLaw idealK initial i) (actualK i) (idealK i)
+      (hactualMeas i) (hidealMeas i) (hactualProb i) (hidealProb i) (hpoint i)
 
 /-- Deterministic postprocessing turns the history domination directly into
 the same domination for a phase average or accumulated product. -/
