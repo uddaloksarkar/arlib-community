@@ -352,6 +352,117 @@ theorem scheduledBalancedCoolingUniformTransitionLaw_measurable_and_probability
       hcollect.2 0 (accuracyScaleFactor q • current)
     exact Measure.isProbabilityMeasure_map havg.aemeasurable
 
+/-- One schedule-targeted phase appended to a chronological history. -/
+noncomputable def scheduledBalancedForwardPhaseKernel
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase : ℕ) :
+    Option (BalancedCoolingHistory q.n) →
+      Measure (Option (BalancedCoolingHistory q.n)) := fun history =>
+  match history with
+  | none => Measure.dirac none
+  | some history =>
+      if phase < terminalPhaseSteps q then
+        (scheduledBalancedCoolingRatioTransitionLaw parameters q I
+          (scheduleValue q phase) (scheduleValue q (phase + 1))
+          history.2.2.2).map (balancedCoolingHistorySnocTerminal history)
+      else
+        (scheduledBalancedCoolingUniformTransitionLaw parameters q I
+          (terminalVariance q) history.2.2.2).map
+            (balancedCoolingHistorySnocTerminal history)
+
+theorem scheduledBalancedForwardPhaseKernel_measurable_and_probability
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase : ℕ) :
+    Measurable (scheduledBalancedForwardPhaseKernel parameters q I phase) ∧
+    ∀ history, IsProbabilityMeasure
+      (scheduledBalancedForwardPhaseKernel parameters q I phase history) := by
+  have hgaussian :=
+    scheduledBalancedCoolingRatioTransitionLaw_measurable_and_probability
+      parameters q I (scheduleValue_pos q phase) (scheduleValue q (phase + 1))
+  have hterminal :=
+    scheduledBalancedCoolingUniformTransitionLaw_measurable_and_probability
+      parameters q I (terminalVariance_pos' q)
+  have hsome : Measurable fun history : BalancedCoolingHistory q.n =>
+      if phase < terminalPhaseSteps q then
+        (scheduledBalancedCoolingRatioTransitionLaw parameters q I
+          (scheduleValue q phase) (scheduleValue q (phase + 1))
+          history.2.2.2).map (balancedCoolingHistorySnocTerminal history)
+      else
+        (scheduledBalancedCoolingUniformTransitionLaw parameters q I
+          (terminalVariance q) history.2.2.2).map
+            (balancedCoolingHistorySnocTerminal history) := by
+    split_ifs
+    · apply measurable_measure_map_param_variable
+      · exact hgaussian.1.comp <|
+          measurable_snd.comp
+            (measurable_snd.comp (measurable_snd.comp measurable_id))
+      · intro history
+        exact hgaussian.2 history.2.2.2
+      · exact measurable_balancedCoolingHistorySnocTerminal.comp
+          (measurable_fst.prodMk measurable_snd)
+    · apply measurable_measure_map_param_variable
+      · exact hterminal.1.comp <|
+          measurable_snd.comp
+            (measurable_snd.comp (measurable_snd.comp measurable_id))
+      · intro history
+        exact hterminal.2 history.2.2.2
+      · exact measurable_balancedCoolingHistorySnocTerminal.comp
+          (measurable_fst.prodMk measurable_snd)
+  constructor
+  · convert Measurable.optionElim
+      (Measure.dirac (none : Option (BalancedCoolingHistory q.n))) hsome using 1
+    funext history
+    cases history <;> rfl
+  · intro history
+    cases history with
+    | none =>
+        change IsProbabilityMeasure
+          (Measure.dirac (none : Option (BalancedCoolingHistory q.n)))
+        infer_instance
+    | some history =>
+        unfold scheduledBalancedForwardPhaseKernel
+        split_ifs
+        · let _ : IsProbabilityMeasure
+              (scheduledBalancedCoolingRatioTransitionLaw parameters q I
+                (scheduleValue q phase) (scheduleValue q (phase + 1))
+                history.2.2.2) := hgaussian.2 _
+          exact Measure.isProbabilityMeasure_map
+            ((measurable_balancedCoolingHistorySnocTerminal (n := q.n)).comp
+              (measurable_const.prodMk measurable_id)).aemeasurable
+        · let _ : IsProbabilityMeasure
+              (scheduledBalancedCoolingUniformTransitionLaw parameters q I
+                (terminalVariance q) history.2.2.2) := hterminal.2 _
+          exact Measure.isProbabilityMeasure_map
+            ((measurable_balancedCoolingHistorySnocTerminal (n := q.n)).comp
+              (measurable_const.prodMk measurable_id)).aemeasurable
+
+/-- The chronological post-initial history law of the schedule-targeted
+transition model. -/
+noncomputable def scheduledBalancedForwardHistoryLaw
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phases : ℕ) :
+    Measure (Option (BalancedCoolingHistory q.n)) :=
+  iteratedKernelLaw (scheduledBalancedForwardPhaseKernel parameters q I)
+    ((truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q) : Measure (AmbientSpace q.n)).map
+        balancedCoolingInitialHistory) phases
+
+theorem scheduledBalancedForwardHistoryLaw_isProbabilityMeasure
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phases : ℕ) :
+    IsProbabilityMeasure
+      (scheduledBalancedForwardHistoryLaw parameters q I phases) := by
+  unfold scheduledBalancedForwardHistoryLaw
+  apply iteratedKernelLaw_isProbabilityMeasure
+  · exact Measure.isProbabilityMeasure_map
+      measurable_balancedCoolingInitialHistory.aemeasurable
+  · intro i
+    exact (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+      parameters q I i).1
+  · intro i history
+    exact (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+      parameters q I i).2 history
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
@@ -533,6 +644,8 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms measurable_figureOneIdealChronologicalAppend
 #print axioms figureOneIdealChronologicalAppend_coordinate
+#print axioms scheduledBalancedForwardPhaseKernel_measurable_and_probability
+#print axioms scheduledBalancedForwardHistoryLaw_isProbabilityMeasure
 
 end
 
