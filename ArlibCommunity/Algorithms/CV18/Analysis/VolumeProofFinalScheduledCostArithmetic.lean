@@ -395,10 +395,10 @@ theorem figureOneScheduledProperWork_cast_le_old
 /-- Even charging the complete fixed retry horizon, the scheduled proper-step
 work is bounded by a small absolute multiple of the scheduled soft-O rate.
 This deliberately does not use a local proposal cap. -/
-theorem figureOneSafeRetryCount_mul_scheduledProperWork_cast_le
+theorem figureOneSafeRetryCount_mul_scheduledProperWork_cast_le_sharp
     (q : VolumeParams) :
     ((figureOneSafeRetryCount q * figureOneScheduledProperWork q : ℕ) : ℝ) ≤
-      (3 * 10 ^ 27) * volumeScheduledBaseComplexityRate q := by
+      (2322 * 10 ^ 24) * volumeScheduledBaseComplexityRate q := by
   let N := figureOneSafeRetryCount q
   let work := figureOneScheduledProperWork q
   let oldWork := figureOneCoolingQueryBudget q
@@ -446,15 +446,46 @@ theorem figureOneSafeRetryCount_mul_scheduledProperWork_cast_le
     _ = (2322 * 10 ^ 24) * volumeScheduledBaseComplexityRate q := by
       dsimp only [volumeScheduledBaseComplexityRate, base, A, B, N]
       ring
+
+/-- Rounded decimal version of the sharp complete-retry work envelope. -/
+theorem figureOneSafeRetryCount_mul_scheduledProperWork_cast_le
+    (q : VolumeParams) :
+    ((figureOneSafeRetryCount q * figureOneScheduledProperWork q : ℕ) : ℝ) ≤
+      (3 * 10 ^ 27) * volumeScheduledBaseComplexityRate q := by
+  calc
+    _ ≤ (2322 * 10 ^ 24) * volumeScheduledBaseComplexityRate q :=
+      figureOneSafeRetryCount_mul_scheduledProperWork_cast_le_sharp q
     _ ≤ (3 * 10 ^ 27) * volumeScheduledBaseComplexityRate q := by
       apply mul_le_mul_of_nonneg_right _
         (volumeScheduledBaseComplexityRate_pos q).le
       norm_num
 
+/-- After multiplying by the worst scheduled warmness (`96`) and by the
+factor two that absorbs each trial's endpoint queries, the full fixed-shadow
+cost still fits below `9·10^29` times the scheduled rate. -/
+theorem figureOneWarmShadowScheduledWork_cast_le
+    (q : VolumeParams) :
+    ((384 * (figureOneSafeRetryCount q * figureOneScheduledProperWork q) : ℕ) : ℝ) ≤
+      (9 * 10 ^ 29) * volumeScheduledBaseComplexityRate q := by
+  calc
+    _ = 384 *
+        ((figureOneSafeRetryCount q * figureOneScheduledProperWork q : ℕ) : ℝ) := by
+      push_cast
+      ring
+    _ ≤ 384 * ((2322 * 10 ^ 24) *
+        volumeScheduledBaseComplexityRate q) := by
+      gcongr
+      exact figureOneSafeRetryCount_mul_scheduledProperWork_cast_le_sharp q
+    _ ≤ (9 * 10 ^ 29) * volumeScheduledBaseComplexityRate q := by
+      have hrate := (volumeScheduledBaseComplexityRate_pos q).le
+      nlinarith
+
 #print axioms figureOneSafeRetryCount_cast_le_correctedMixingLog
 #print axioms figureOneScheduledMixingDenominator_inv_sq_le
 #print axioms figureOneScheduledCorrectedProperStride_cast_le
 #print axioms figureOneScheduledProperWork_cast_le_old
+#print axioms figureOneSafeRetryCount_mul_scheduledProperWork_cast_le_sharp
 #print axioms figureOneSafeRetryCount_mul_scheduledProperWork_cast_le
+#print axioms figureOneWarmShadowScheduledWork_cast_le
 
 end ArlibCommunity.Algorithms.CV18
