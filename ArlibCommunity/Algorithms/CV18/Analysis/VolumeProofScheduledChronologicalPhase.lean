@@ -527,6 +527,128 @@ theorem scheduledBalancedForwardHistoryLaw_ae_hasProduct
         (scheduledBalancedForwardPhaseKernel_ae_hasProduct
           parameters q I phases phases history hhistory)
 
+/-! ## Common state for outer phase replacement -/
+
+/-- Carry an auxiliary ideal experiment unchanged while a history kernel
+updates the chronological executable component. -/
+noncomputable def carryHistoryKernel
+    {A B : Type*} [MeasurableSpace A] [MeasurableSpace B]
+    (K : ℕ → B → Measure B) : ℕ → A × B → Measure (A × B) :=
+  fun phase state => (K phase state.2).map fun next => (state.1, next)
+
+theorem carryHistoryKernel_measurable_and_probability
+    {A B : Type*} [MeasurableSpace A] [MeasurableSpace B]
+    (K : ℕ → B → Measure B)
+    (hKmeas : ∀ phase, Measurable (K phase))
+    (hKprob : ∀ phase state, IsProbabilityMeasure (K phase state))
+    (phase : ℕ) :
+    Measurable (carryHistoryKernel (A := A) K phase) ∧
+    ∀ state, IsProbabilityMeasure (carryHistoryKernel (A := A) K phase state) := by
+  constructor
+  · unfold carryHistoryKernel
+    apply measurable_measure_map_param_variable
+    · exact (hKmeas phase).comp measurable_snd
+    · intro state
+      exact hKprob phase state.2
+    · exact (measurable_fst.comp measurable_fst).prodMk measurable_snd
+  · intro state
+    unfold carryHistoryKernel
+    let _ : IsProbabilityMeasure (K phase state.2) := hKprob phase state.2
+    exact Measure.isProbabilityMeasure_map
+      (measurable_const.prodMk measurable_id).aemeasurable
+
+theorem map_snd_bind_carryHistoryKernel
+    {A B : Type*} [MeasurableSpace A] [MeasurableSpace B]
+    (K : ℕ → B → Measure B)
+    (hKmeas : ∀ phase, Measurable (K phase))
+    (hKprob : ∀ phase state, IsProbabilityMeasure (K phase state))
+    (mu : Measure (A × B)) (phase : ℕ) :
+    (mu.bind (carryHistoryKernel (A := A) K phase)).map Prod.snd =
+      (mu.map Prod.snd).bind (K phase) := by
+  have hcarry := carryHistoryKernel_measurable_and_probability
+    (A := A) K hKmeas hKprob phase
+  calc
+    (mu.bind (carryHistoryKernel (A := A) K phase)).map Prod.snd =
+        mu.bind fun state =>
+          (carryHistoryKernel (A := A) K phase state).map Prod.snd :=
+      map_bind_eq_bind_map_of_measurable _ hcarry.1 measurable_snd
+    _ = mu.bind (K phase ∘ Prod.snd) := by
+      apply Measure.bind_congr_right
+      filter_upwards with state
+      unfold carryHistoryKernel
+      have hpair : Measurable (fun next : B => (state.1, next)) :=
+        measurable_const.prodMk measurable_id
+      rw [Measure.map_map
+        (show Measurable (Prod.snd : A × B → B) from measurable_snd) hpair]
+      change Measure.map (Prod.snd ∘ fun next : B => (state.1, next))
+          (K phase state.2) = K phase state.2
+      calc
+        _ = Measure.map id (K phase state.2) := by
+          apply Measure.map_congr
+          filter_upwards with next
+          rfl
+        _ = _ := Measure.map_id
+    _ = (mu.map Prod.snd).bind (K phase) :=
+      (map_bind_eq_bind_comp _ Prod.snd measurable_snd (K phase)
+        (hKmeas phase)).symm
+
+theorem map_snd_iteratedKernelLaw_carryHistoryKernel
+    {A B : Type*} [MeasurableSpace A] [MeasurableSpace B]
+    (K : ℕ → B → Measure B)
+    (hKmeas : ∀ phase, Measurable (K phase))
+    (hKprob : ∀ phase state, IsProbabilityMeasure (K phase state))
+    (initial : Measure (A × B)) : ∀ phases,
+    (iteratedKernelLaw (carryHistoryKernel (A := A) K) initial phases).map
+        Prod.snd =
+      iteratedKernelLaw K (initial.map Prod.snd) phases := by
+  intro phases
+  induction phases with
+  | zero => rfl
+  | succ phases ih =>
+      rw [iteratedKernelLaw_succ, iteratedKernelLaw_succ,
+        map_snd_bind_carryHistoryKernel K hKmeas hKprob, ih]
+
+/-- Common initial state: an independent ideal experiment is carried beside
+the exact restricted-Gaussian starting history. -/
+noncomputable def scheduledChronologicalCommonInitial
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    Measure (FigureOneIdealExperimentSpace q ×
+      Option (BalancedCoolingHistory q.n)) :=
+  (figureOneIdealExperimentLaw q I).prod
+    ((truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q) : Measure (AmbientSpace q.n)).map
+        balancedCoolingInitialHistory)
+
+theorem scheduledChronologicalCommonInitial_map_snd
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    (scheduledChronologicalCommonInitial q I).map Prod.snd =
+      (truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).map
+          balancedCoolingInitialHistory := by
+  unfold scheduledChronologicalCommonInitial
+  let _ : IsProbabilityMeasure (figureOneIdealExperimentLaw q I) :=
+    figureOneIdealExperimentLaw_isProbabilityMeasure q I
+  simpa using Measure.map_snd_prod
+
+theorem scheduledChronologicalActualIteration_map_snd
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phases : ℕ) :
+    (iteratedKernelLaw
+        (carryHistoryKernel (A := FigureOneIdealExperimentSpace q)
+          (scheduledBalancedForwardPhaseKernel parameters q I))
+        (scheduledChronologicalCommonInitial q I) phases).map Prod.snd =
+      scheduledBalancedForwardHistoryLaw parameters q I phases := by
+  rw [map_snd_iteratedKernelLaw_carryHistoryKernel
+    (scheduledBalancedForwardPhaseKernel parameters q I)
+    (fun phase =>
+      (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+        parameters q I phase).1)
+    (fun phase history =>
+      (scheduledBalancedForwardPhaseKernel_measurable_and_probability
+        parameters q I phase).2 history),
+    scheduledChronologicalCommonInitial_map_snd]
+  rfl
+
 /-- A first scheduled endpoint replacement lifts through the whole remaining
 phase without increasing the error. -/
 theorem MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
@@ -710,6 +832,8 @@ theorem approxIndepFun_scheduledBalancedCompletePhase_of_warm_first
 #print axioms figureOneIdealChronologicalAppend_coordinate
 #print axioms scheduledBalancedForwardPhaseKernel_measurable_and_probability
 #print axioms scheduledBalancedForwardHistoryLaw_isProbabilityMeasure
+#print axioms map_snd_iteratedKernelLaw_carryHistoryKernel
+#print axioms scheduledChronologicalActualIteration_map_snd
 
 end
 
