@@ -241,4 +241,20 @@ theorem cappedAccuracyProperCollectWeightsAux_globalPrefix
   · omega
   · omega
 
+/-- The concrete finite base syntax inherits the generic structural expected
+cost bound.  This bound is deliberately not used for CV18's final rate: its
+local finiteness cap contains the global budget and must first be erased by
+the prefix theorem above. -/
+theorem figureOneGlobalBalancedBaseProgram_lintegral_queryCount_le_structural
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ∫⁻ outcome, (outcome.2 : ENNReal)
+        ∂((figureOneGlobalBalancedBaseProgram q).run oracle.query) ≤
+      (balancedFigureOneBaseQueryBudget figureOneGlobalBalancedParameters q :
+        ENNReal) := by
+  apply MembershipOracleProgram.QueryBound.lintegral_queryCount_le
+  · exact balancedFigureOneBaseVolumeCooling_queryBound
+      figureOneGlobalBalancedParameters q
+  · exact figureOneGlobalBalancedBaseProgram_countedStronglyMeasurable
+      q I oracle
+
 end ArlibCommunity.Algorithms.CV18
