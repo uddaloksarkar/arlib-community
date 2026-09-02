@@ -95,4 +95,50 @@ theorem finiteRetryExpectedCost_balanced_le
   gcongr
   exact sum_range_balancedRejectMass_pow_le attempts
 
+/-- Allowing one additional `1/128` mixing-error mass per rejection raises
+the geometric multiplier only from `128/7` to `64/3`. -/
+theorem sum_range_nearBalancedRejectMass_pow_le (attempts : ℕ) :
+    ∑ i ∈ Finset.range attempts,
+        ENNReal.ofReal (61 / 64 : ℝ) ^ i ≤
+      ENNReal.ofReal (64 / 3 : ℝ) := by
+  calc
+    ∑ i ∈ Finset.range attempts,
+        ENNReal.ofReal (61 / 64 : ℝ) ^ i ≤
+      ∑' i : ℕ, ENNReal.ofReal (61 / 64 : ℝ) ^ i :=
+        ENNReal.sum_le_tsum (Finset.range attempts)
+    _ = (1 - ENNReal.ofReal (61 / 64 : ℝ))⁻¹ :=
+      ENNReal.tsum_geometric _
+    _ = ENNReal.ofReal (64 / 3 : ℝ) := by
+      rw [← ENNReal.ofReal_one,
+        ← ENNReal.ofReal_sub (1 : ℝ) (by norm_num : (0 : ℝ) ≤ 61 / 64)]
+      have hpos : (0 : ℝ) < 3 / 64 := by norm_num
+      rw [show (1 - 61 / 64 : ℝ) = 3 / 64 by norm_num,
+        ← ENNReal.ofReal_inv_of_pos hpos]
+      congr 1
+      norm_num
+
+theorem finiteRetryExpectedCost_nearBalanced_le
+    (trialCost : ENNReal) (attempts : ℕ) :
+    finiteRetryExpectedCost trialCost
+        (ENNReal.ofReal (61 / 64 : ℝ)) attempts ≤
+      trialCost * ENNReal.ofReal (64 / 3 : ℝ) := by
+  rw [finiteRetryExpectedCost_eq_sum]
+  gcongr
+  exact sum_range_nearBalancedRejectMass_pow_le attempts
+
+/-- The exact arithmetic step used after adding at most `1/128` block error
+to the stationary `121/128` rejection mass. -/
+theorem balancedRejectMass_add_error_le_nearBalanced
+    {rejectMass blockError : ENNReal}
+    (hreject : rejectMass ≤ ENNReal.ofReal (121 / 128 : ℝ))
+    (herror : blockError ≤ ENNReal.ofReal (1 / 128 : ℝ)) :
+    rejectMass + blockError ≤ ENNReal.ofReal (61 / 64 : ℝ) := by
+  calc
+    rejectMass + blockError ≤
+        ENNReal.ofReal (121 / 128 : ℝ) +
+          ENNReal.ofReal (1 / 128 : ℝ) := add_le_add hreject herror
+    _ = ENNReal.ofReal (61 / 64 : ℝ) := by
+      rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 121 / 128)] <;>
+        norm_num
+
 end ArlibCommunity.Algorithms.CV18
