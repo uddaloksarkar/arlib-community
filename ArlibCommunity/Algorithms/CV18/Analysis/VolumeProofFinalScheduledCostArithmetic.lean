@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledParameters
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledRetryShadowDomination
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledConcreteTransition
 import Mathlib.Analysis.Complex.ExponentialBounds
 
 /-! # Arithmetic envelopes for the final scheduled expected-cost proof -/
@@ -152,7 +153,134 @@ theorem figureOneScheduledMixingDenominator_inv_sq_le
     rw [hrA2, hs2, hrn2]
     nlinarith
 
+/-- The corrected scheduled proper stride has exactly one accuracy-log and
+one corrected-mixing-log overhead over the legacy walk scale. -/
+theorem figureOneScheduledCorrectedProperStride_cast_le
+    (q : VolumeParams) {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let B := protectedLog
+      (1 / figureOneCorrectedBlockMixingError q
+        (figureOneSafeRetryCount q - 1))
+    (figureOneScheduledCorrectedProperStride q sigma2
+        (figureOneSafeRetryCount q - 1) : ℝ) ≤
+      10 ^ 19 * max 1 sigma2 * (q.n : ℝ) ^ 2 *
+        protectedLog ((q.n : ℝ) / q.eps) ^ 2 *
+        figureOneScheduledAccuracyLog q * B := by
+  dsimp only
+  let attempts := figureOneSafeRetryCount q - 1
+  let e := figureOneCorrectedBlockMixingError q attempts
+  let B := protectedLog (1 / e)
+  let A := figureOneScheduledAccuracyLog q
+  let L := protectedLog ((q.n : ℝ) / q.eps)
+  let X := max 1 sigma2 * (q.n : ℝ) ^ 2 * L ^ 2 * A
+  let d := figureOneScheduledProposalRadius q sigma2 * Real.log 2 /
+    (640 * Real.sqrt sigma2 * Real.sqrt q.n)
+  have he : 0 < e := by
+    simpa [e, attempts] using figureOneCorrectedBlockMixingError_pos q attempts
+  have hB : 1 ≤ B := by
+    dsimp only [B, protectedLog]
+    exact le_max_left _ _
+  have hA : 1 ≤ A := by
+    simpa [A] using figureOneScheduledAccuracyLog_one_le q
+  have hL : 1 ≤ L := by
+    dsimp only [L, protectedLog]
+    exact le_max_left _ _
+  have hn : (3 : ℝ) ≤ q.n := by exact_mod_cast q.dim_ok
+  have hX : 1 ≤ X := by
+    dsimp only [X]
+    have hm : (1 : ℝ) ≤ max 1 sigma2 := le_max_left _ _
+    have hn2 : 1 ≤ (q.n : ℝ) ^ 2 := one_le_pow₀ (by nlinarith)
+    have hL2 : 1 ≤ L ^ 2 := one_le_pow₀ hL
+    have hmul : ∀ {a b : ℝ}, 1 ≤ a → 1 ≤ b → 1 ≤ a * b := by
+      intro a b ha hb
+      nlinarith [mul_nonneg (sub_nonneg.mpr ha) (sub_nonneg.mpr hb)]
+    exact hmul (hmul (hmul hm hn2) hL2) hA
+  have hd : 0 < d := by
+    dsimp only [d]
+    positivity [figureOneScheduledProposalRadius_pos q hsigma2]
+  have hinv : 1 / d ^ 2 ≤ 10 ^ 15 * X := by
+    have h := figureOneScheduledMixingDenominator_inv_sq_le q hsigma2
+    dsimp only at h
+    dsimp only [d, X]
+    let Y := 10 ^ 15 * max 1 sigma2 * (q.n : ℝ) ^ 2 * A
+    have hY0 : 0 ≤ Y := by dsimp only [Y]; positivity
+    calc
+      1 / (figureOneScheduledProposalRadius q sigma2 * Real.log 2 /
+          (640 * Real.sqrt sigma2 * Real.sqrt ↑q.n)) ^ 2 ≤ Y := by
+        simpa [Y, A] using h
+      _ ≤ Y * L ^ 2 := by
+        have hL2 : 1 ≤ L ^ 2 := one_le_pow₀ hL
+        nlinarith [mul_nonneg hY0 (sub_nonneg.mpr hL2)]
+      _ = 10 ^ 15 * (max 1 sigma2 * ↑q.n ^ 2 * L ^ 2 * A) := by
+        dsimp only [Y]
+        ring
+  have hM : speedyAdjacentWarmConstant q ≤ 12 :=
+    speedyAdjacentWarmConstant_le_twelve q
+  have hMpos : 0 < speedyAdjacentWarmConstant q :=
+    speedyAdjacentWarmConstant_pos q
+  have hfirstLog : Real.log (16 * speedyAdjacentWarmConstant q) ≤ 191 := by
+    calc
+      Real.log (16 * speedyAdjacentWarmConstant q) ≤
+          16 * speedyAdjacentWarmConstant q - 1 :=
+        Real.log_le_sub_one_of_pos (by positivity)
+      _ ≤ 191 := by nlinarith
+  have hreLog : Real.log (1 / e) ≤ B := by
+    dsimp only [B, protectedLog]
+    exact le_max_right _ _
+  have hfirstNum : Real.log (16 * speedyAdjacentWarmConstant q) +
+      2 * Real.log (1 / e) ≤ 193 * B := by
+    nlinarith
+  have hretryNum : Real.log 2 + 2 * Real.log (1 / e) ≤ 3 * B := by
+    have hlogTwo : Real.log 2 ≤ 1 := by
+      nlinarith [Real.log_le_sub_one_of_pos (by norm_num : (0 : ℝ) < 2)]
+    nlinarith
+  have hfirstQuot :
+      (Real.log (16 * speedyAdjacentWarmConstant q) +
+          2 * Real.log (1 / e)) / d ^ 2 ≤
+        193 * B * (10 ^ 15 * X) := by
+    calc
+      _ ≤ (193 * B) / d ^ 2 := by gcongr
+      _ = (193 * B) * (1 / d ^ 2) := by ring
+      _ ≤ 193 * B * (10 ^ 15 * X) := by gcongr
+  have hretryQuot :
+      (Real.log 2 + 2 * Real.log (1 / e)) / d ^ 2 ≤
+        3 * B * (10 ^ 15 * X) := by
+    calc
+      _ ≤ (3 * B) / d ^ 2 := by gcongr
+      _ = (3 * B) * (1 / d ^ 2) := by ring
+      _ ≤ 3 * B * (10 ^ 15 * X) := by gcongr
+  have hfirst :
+      figureOneScheduledCorrectedFirstWalkRequirement q sigma2 attempts ≤
+        10 ^ 18 * X * B := by
+    rw [figureOneScheduledCorrectedFirstWalkRequirement_explicit]
+    change 4 * ((Real.log (16 * speedyAdjacentWarmConstant q) +
+      2 * Real.log (1 / e)) / d ^ 2) + 1 ≤ _
+    nlinarith [mul_nonneg (sub_nonneg.mpr hX) (sub_nonneg.mpr hB)]
+  have hretry :
+      figureOneScheduledCorrectedRetryWalkRequirement q sigma2 attempts ≤
+        10 ^ 18 * X * B := by
+    rw [figureOneScheduledCorrectedRetryWalkRequirement_explicit]
+    change 4 * ((Real.log 2 + 2 * Real.log (1 / e)) / d ^ 2) + 1 ≤ _
+    nlinarith [mul_nonneg (sub_nonneg.mpr hX) (sub_nonneg.mpr hB)]
+  have hrawNonneg : 0 ≤ max 1 (max
+      (figureOneScheduledCorrectedFirstWalkRequirement q sigma2 attempts)
+      (figureOneScheduledCorrectedRetryWalkRequirement q sigma2 attempts)) :=
+    le_trans zero_le_one (le_max_left _ _)
+  have hceil := Nat.ceil_lt_add_one hrawNonneg
+  change (figureOneScheduledCorrectedProperStride q sigma2 attempts : ℝ) ≤ _
+  unfold figureOneScheduledCorrectedProperStride
+  have hmax : max 1 (max
+      (figureOneScheduledCorrectedFirstWalkRequirement q sigma2 attempts)
+      (figureOneScheduledCorrectedRetryWalkRequirement q sigma2 attempts)) ≤
+      10 ^ 18 * X * B := by
+    apply max_le
+    · nlinarith [mul_nonneg (sub_nonneg.mpr hX) (sub_nonneg.mpr hB)]
+    · exact max_le hfirst hretry
+  dsimp only [attempts] at hceil ⊢
+  dsimp only [X, A, B, e, L] at hmax ⊢
+  nlinarith [mul_nonneg (sub_nonneg.mpr hX) (sub_nonneg.mpr hB)]
+
 #print axioms figureOneSafeRetryCount_cast_le_correctedMixingLog
 #print axioms figureOneScheduledMixingDenominator_inv_sq_le
+#print axioms figureOneScheduledCorrectedProperStride_cast_le
 
 end ArlibCommunity.Algorithms.CV18
