@@ -368,10 +368,48 @@ theorem ApproxIndepFun.integral_mul_le_mul_integral_add_thirdMoment_scaled
       gcongr
     _ = _ := by ring
 
+/-- Optimized third-moment covariance bound.  This is the `p = q = 3`
+Davydov rate, obtained here directly from CV18's rectangle coefficient by
+truncation and Hölder rather than importing a separate mixing framework. -/
+theorem ApproxIndepFun.integral_mul_le_mul_integral_add_three_cbrt_mul
+    {Omega : Type*} [MeasurableSpace Omega]
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    {X Y : Omega → ℝ} (hX : Measurable X) (hY : Measurable Y)
+    (hX3 : MemLp X 3 mu) (hY3 : MemLp Y 3 mu)
+    {A B epsilon : ℝ} (hA : 0 < A) (hB : 0 < B) (hepsilon : 0 < epsilon)
+    (hX0 : ∀ omega, 0 ≤ X omega) (hY0 : ∀ omega, 0 ≤ Y omega)
+    (hXcube : (∫ omega, X omega ^ 3 ∂mu) ≤ A ^ 3)
+    (hYcube : (∫ omega, Y omega ^ 3 ∂mu) ≤ B ^ 3)
+    (hind : ApproxIndepFun epsilon X Y mu) :
+    (∫ omega, X omega * Y omega ∂mu) ≤
+      (∫ omega, X omega ∂mu) * (∫ omega, Y omega ∂mu) +
+        3 * epsilon ^ (1 / 3 : ℝ) * A * B := by
+  let d : ℝ := epsilon ^ (1 / 3 : ℝ)
+  have hd : 0 < d := by dsimp [d]; positivity
+  have hepsilonCube : d ^ 3 = epsilon := by
+    dsimp [d]
+    convert Real.rpow_inv_natCast_pow hepsilon.le (by norm_num : (3 : ℕ) ≠ 0) using 1
+    norm_num
+  have hraw := hind.integral_mul_le_mul_integral_add_thirdMoment_scaled
+    mu hX hY hX3 hY3 hA hB (inv_pos.mpr hd) hepsilon.le hX0 hY0
+      hXcube hYcube
+  calc
+    (∫ omega, X omega * Y omega ∂mu) ≤
+        (∫ omega, X omega ∂mu) * (∫ omega, Y omega ∂mu) +
+          epsilon * A * B * d⁻¹ ^ 2 + 2 * A * B / d⁻¹ := hraw
+    _ = (∫ omega, X omega ∂mu) * (∫ omega, Y omega ∂mu) +
+          3 * d * A * B := by
+      rw [← hepsilonCube]
+      field_simp [hd.ne']
+      ring
+    _ = _ := by rfl
+
 #print axioms sub_min_rpow_three_halves_le_cube_div_rpow
 #print axioms
   ApproxIndepFun.integral_mul_le_mul_integral_add_thirdMoment_tails
 #print axioms
   ApproxIndepFun.integral_mul_le_mul_integral_add_thirdMoment_scaled
+#print axioms
+  ApproxIndepFun.integral_mul_le_mul_integral_add_three_cbrt_mul
 
 end ArlibCommunity.Algorithms.CV18
