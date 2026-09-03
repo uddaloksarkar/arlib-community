@@ -151,8 +151,200 @@ theorem scheduledPhase_speedyStationary_isWarm_target
     truncatedGaussianProbability_toMeasure q I hsigma2,
     truncatedGaussianMeasure_apply_univ q I hsigma2] using hw
 
+/-- Applying the schedule-targeted KLS acceptance density to the exact
+Gaussian and expanding the accepted point produces a submeasure of the same
+exact Gaussian. -/
+theorem truncatedGaussianProbability_scheduledAcceptance_map_le_self
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let nu : Measure (AmbientSpace q.n) :=
+      truncatedGaussianProbability q I sigma2 hsigma2
+    (nu.withDensity
+      (scheduledAccuracyGaussianRejectionAcceptance q I sigma2)).map
+        (fun x => (accuracyScaleFactor q)⁻¹ • x) ≤ nu := by
+  dsimp only
+  let K := figureOneScheduledPhaseBody q I sigma2
+  let c := accuracyScaleFactor q
+  let core := c • K
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x => c⁻¹ • x
+  let g : AmbientSpace q.n → ENNReal := gaussianScaleAcceptance sigma2 c
+  let gaussian : Measure (AmbientSpace q.n) :=
+    (volume : Measure (AmbientSpace q.n)).withDensity (gaussianWeight sigma2)
+  let proposalGaussian : Measure (AmbientSpace q.n) :=
+    (volume : Measure (AmbientSpace q.n)).withDensity
+      (gaussianWeight (sigma2 / c ^ 2))
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  have hc0 : 0 < c := by simpa [c] using accuracyScaleFactor_pos q
+  have hc1 : c ≤ 1 := by simpa [c] using accuracyScaleFactor_le_one q
+  have hK : MeasurableSet K :=
+    figureOneScheduledPhaseBody_measurable q I sigma2
+  have hcore : MeasurableSet core := by
+    dsimp [core]
+    exact measurableSet_smul_set_cv18 hK hc0.ne'
+  have hscale : Measurable scale := by dsimp [scale]; fun_prop
+  have hzero : (0 : AmbientSpace q.n) ∈ K := by
+    refine ⟨unitBall_subset_truncatedBody q I
+      (Metric.mem_closedBall_self zero_le_one), ?_⟩
+    exact Metric.mem_closedBall_self
+      (figureOneScheduledPhaseRadius_pos q hsigma2).le
+  have hcoreK : core ⊆ K := by
+    rintro _ ⟨x, hx, rfl⟩
+    exact (figureOneScheduledPhaseBody_convex q I sigma2).smul_mem_of_zero_mem
+      hzero hx ⟨hc0.le, hc1⟩
+  have hKfull : K ⊆ truncatedBody q I := fun _ hx => hx.1
+  have hcoreFull : core ⊆ truncatedBody q I := hcoreK.trans hKfull
+  have hgaussianCore0 : gaussian core ≠ 0 := by
+    have hvol0 : volume core ≠ 0 := by
+      dsimp [core]
+      rw [Arlib.volume_smul_euclidean hc0.le]
+      exact mul_ne_zero
+        (ENNReal.ofReal_ne_zero_iff.mpr (pow_pos hc0 q.n))
+        (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+    exact withDensity_gaussianWeight_ne_zero sigma2 hvol0
+  have hgaussianCoreTop : gaussian core ≠ ⊤ := by
+    have hvolTop : volume core ≠ ⊤ := by
+      exact ne_top_of_le_ne_top
+        (figureOneScheduledPhaseBody_volume_ne_top q I sigma2)
+        (measure_mono hcoreK)
+    exact withDensity_gaussianWeight_ne_top hsigma2 hcore hvolTop
+  have hnuCore0 : nu core ≠ 0 := by
+    rw [truncatedGaussianProbability_apply q I hsigma2 hcore]
+    rw [Set.inter_eq_left.2 hcoreFull]
+    exact mul_ne_zero (ENNReal.inv_ne_zero.mpr ENNReal.ofReal_ne_top) (by
+      rw [show (fun x : AmbientSpace q.n =>
+          ENNReal.ofReal (gaussianDensity sigma2 x)) = gaussianWeight sigma2 by
+        funext x
+        simp [gaussianWeight, gaussianWeightReal, gaussianDensity_eq]]
+      simpa [gaussian, withDensity_apply _ hcore] using hgaussianCore0)
+  have hnuCoreTop : nu core ≠ ⊤ := measure_ne_top nu core
+  have hraw : truncatedGaussianMeasure q I sigma2 =
+      gaussian.restrict (truncatedBody q I) := by
+    unfold truncatedGaussianMeasure
+    change (volume.restrict (truncatedBody q I)).withDensity
+        (fun x => ENNReal.ofReal (gaussianDensity sigma2 x)) = _
+    rw [show (fun x : AmbientSpace q.n =>
+        ENNReal.ofReal (gaussianDensity sigma2 x)) = gaussianWeight sigma2 by
+      funext x
+      simp [gaussianWeight, gaussianWeightReal, gaussianDensity_eq]]
+    dsimp [gaussian]
+    exact (restrict_withDensity (f := gaussianWeight sigma2)
+      (truncatedBody_measurable q I)).symm
+  have hnuEq : nu =
+      (ENNReal.ofReal
+        (gaussianIntegral (truncatedBody q I) sigma2))⁻¹ •
+          gaussian.restrict (truncatedBody q I) := by
+    rw [show nu =
+        (truncatedGaussianProbability q I sigma2 hsigma2 :
+          Measure (AmbientSpace q.n)) by rfl,
+      truncatedGaussianProbability_toMeasure q I hsigma2, hraw]
+  have hcondNu : Arlib.condOn nu core = Arlib.condOn gaussian core := by
+    rw [hnuEq]
+    calc
+      Arlib.condOn
+          ((ENNReal.ofReal
+            (gaussianIntegral (truncatedBody q I) sigma2))⁻¹ •
+              gaussian.restrict (truncatedBody q I)) core =
+          Arlib.condOn (gaussian.restrict (truncatedBody q I)) core :=
+        condOn_smul_cv18 _ hcore
+          (ENNReal.inv_ne_zero.mpr ENNReal.ofReal_ne_top)
+          (ENNReal.inv_ne_top.mpr <|
+            ENNReal.ofReal_ne_zero_iff.mpr
+              (gaussianIntegral_pos q (truncatedVolumeInput q I) hsigma2))
+      _ = Arlib.condOn gaussian core :=
+        condOn_restrict_eq_condOn_of_subset_cv18 gaussian hcore hcoreFull
+  have hmapCond : (Arlib.condOn nu core).map scale =
+      Arlib.condOn proposalGaussian K := by
+    rw [hcondNu]
+    simpa [scale, core, gaussian, proposalGaussian] using
+      map_condOn_gaussian_smul_cv18 hK hc0 (variance := sigma2)
+  have hrestrict : nu.restrict core = nu core • Arlib.condOn nu core := by
+    rw [Arlib.condOn_def, smul_smul,
+      ENNReal.mul_inv_cancel hnuCore0 hnuCoreTop, one_smul]
+  have hsource := map_withDensity_scheduledAccuracyRejectionAcceptance
+    q I sigma2 nu
+  change (nu.withDensity
+      (scheduledAccuracyGaussianRejectionAcceptance q I sigma2)).map scale ≤ nu
+  rw [hsource, hrestrict, Measure.map_smul, withDensity_smul_measure,
+    hmapCond]
+  have hproposalDensity :
+      (Arlib.condOn proposalGaussian K).withDensity g =
+        (proposalGaussian K)⁻¹ • gaussian.restrict K := by
+    simpa [proposalGaussian, gaussian, g, c] using
+      condOn_gaussian_withDensity_scaleAcceptance_cv18 hK sigma2 c
+  rw [hproposalDensity, smul_smul]
+  apply Measure.le_iff.mpr
+  intro A hA
+  rw [Measure.smul_apply, Measure.restrict_apply hA,
+    truncatedGaussianProbability_apply q I hsigma2 hA]
+  have hAK : A ∩ K ⊆ A ∩ truncatedBody q I :=
+    fun _ hx => ⟨hx.1, hKfull hx.2⟩
+  have hgaussianAK : gaussian (A ∩ K) =
+      ∫⁻ x in A ∩ K, gaussianWeight sigma2 x := by
+    rw [show gaussian =
+        (volume : Measure (AmbientSpace q.n)).withDensity
+          (gaussianWeight sigma2) by rfl,
+      withDensity_apply _ (hA.inter hK)]
+  rw [hgaussianAK]
+  have hweightEq : (fun x : AmbientSpace q.n =>
+      ENNReal.ofReal (gaussianDensity sigma2 x)) = gaussianWeight sigma2 := by
+    funext x
+    simp [gaussianWeight, gaussianWeightReal, gaussianDensity_eq]
+  rw [hweightEq]
+  have hcoreMass : nu core ≤
+      (ENNReal.ofReal
+        (gaussianIntegral (truncatedBody q I) sigma2))⁻¹ *
+        proposalGaussian K := by
+    rw [truncatedGaussianProbability_apply q I hsigma2 hcore,
+      Set.inter_eq_left.2 hcoreFull, hweightEq]
+    apply mul_le_mul' le_rfl
+    rw [show proposalGaussian K =
+        ∫⁻ x in K, gaussianWeight (sigma2 / c ^ 2) x by
+      dsimp [proposalGaussian]
+      rw [withDensity_apply _ hK]]
+    rw [show core = c • K by rfl,
+      lintegral_gaussianWeight_smul_set_cv18 hK hc0 sigma2]
+    exact mul_le_of_le_one_left bot_le <|
+      ENNReal.ofReal_le_one.mpr <| pow_le_one₀ hc0.le hc1
+  calc
+    (nu core * (proposalGaussian K)⁻¹) *
+          (∫⁻ x in A ∩ K, gaussianWeight sigma2 x) ≤
+        (((ENNReal.ofReal
+          (gaussianIntegral (truncatedBody q I) sigma2))⁻¹ *
+            proposalGaussian K) * (proposalGaussian K)⁻¹) *
+          (∫⁻ x in A ∩ K, gaussianWeight sigma2 x) := by
+      gcongr
+    _ = (ENNReal.ofReal
+          (gaussianIntegral (truncatedBody q I) sigma2))⁻¹ *
+          (∫⁻ x in A ∩ K, gaussianWeight sigma2 x) := by
+      have hp0 : proposalGaussian K ≠ 0 := by
+        dsimp [proposalGaussian]
+        exact withDensity_gaussianWeight_ne_zero (sigma2 / c ^ 2)
+          (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+      have hpTop : proposalGaussian K ≠ ⊤ := by
+        dsimp [proposalGaussian]
+        exact withDensity_gaussianWeight_ne_top (by positivity) hK
+          (figureOneScheduledPhaseBody_volume_ne_top q I sigma2)
+      calc
+        (ENNReal.ofReal
+              (gaussianIntegral (truncatedBody q I) sigma2))⁻¹ *
+              proposalGaussian K * (proposalGaussian K)⁻¹ *
+              (∫⁻ x in A ∩ K, gaussianWeight sigma2 x) =
+            (ENNReal.ofReal
+              (gaussianIntegral (truncatedBody q I) sigma2))⁻¹ *
+              (proposalGaussian K * (proposalGaussian K)⁻¹) *
+              (∫⁻ x in A ∩ K, gaussianWeight sigma2 x) := by ac_rfl
+        _ = _ := by rw [ENNReal.mul_inv_cancel hp0 hpTop, mul_one]
+    _ ≤ (ENNReal.ofReal
+          (gaussianIntegral (truncatedBody q I) sigma2))⁻¹ *
+          (∫⁻ x in A ∩ truncatedBody q I,
+            gaussianWeight sigma2 x) := by
+      exact mul_le_mul' le_rfl <|
+        lintegral_mono' (Measure.restrict_mono hAK le_rfl) le_rfl
+
 #print axioms scheduledPhase_ellGaussianMeasure_le_truncatedGaussianMeasure
 #print axioms scheduledPhase_gaussianMass_le_four_ellGaussianMass
 #print axioms scheduledPhase_speedyStationary_isWarm_target
+#print axioms truncatedGaussianProbability_scheduledAcceptance_map_le_self
 
 end ArlibCommunity.Algorithms.CV18
