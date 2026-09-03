@@ -3,6 +3,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledPhaseL2
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedHistoryMomentBridge
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofActualMeanTruncation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceCapstoneExecutable
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalRetainedInduction
 
 /-!
 # Actual-mean moment assembly for the executable scheduled trace
@@ -377,6 +378,182 @@ theorem scheduledBalancedForwardTraceLaw_ae_liveCoordinatesPositive
       exact MeasureTheory.mem_ae_iff.mp <|
         scheduledBalancedTracePhaseKernel_ae_liveCoordinatesPositive
           parameters q I phases phases trace htrace
+
+/-! ## Positive live mass of the complete finite trace -/
+
+theorem figureOneScheduledRetainedError_toReal_le_for_moments
+    (q : VolumeParams) (phases : ℕ) :
+    (figureOneScheduledRetainedError q phases).toReal ≤
+      figureOnePerSampleMixingError q / 4 +
+        (phases : ℝ) * (figureOneDependentMaxSampleCount q : ℝ) *
+          figureOnePerSampleMixingError q := by
+  have hnu : 0 ≤ figureOnePerSampleMixingError q :=
+    (figureOnePerSampleMixingError_pos q).le
+  have htarget := scheduledBalancedStationaryTargetError_le_targetBudget q
+  have htargetBudgetTop : figureOneCorrectedTargetBudget q ≠ ⊤ :=
+    ENNReal.div_ne_top ENNReal.ofReal_ne_top (by norm_num)
+  have htargetTop : scheduledBalancedStationaryTargetError q ≠ ⊤ :=
+    ne_top_of_le_ne_top htargetBudgetTop htarget
+  have htermTop : ∀ phase,
+      figureOnePhaseSampleCount q (scheduleValue q phase) •
+          figureOneCorrectedTransitionBudget q ≠ ⊤ := by
+    intro phase
+    rw [nsmul_eq_mul]
+    exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+      ENNReal.ofReal_ne_top
+  have hsumTop : (∑ phase ∈ Finset.range phases,
+      figureOnePhaseSampleCount q (scheduleValue q phase) •
+        figureOneCorrectedTransitionBudget q) ≠ ⊤ :=
+    ENNReal.sum_ne_top.2 fun phase _ => htermTop phase
+  rw [figureOneScheduledRetainedError,
+    ENNReal.toReal_add htargetTop hsumTop]
+  calc
+    (scheduledBalancedStationaryTargetError q).toReal +
+        (∑ phase ∈ Finset.range phases,
+          figureOnePhaseSampleCount q (scheduleValue q phase) •
+            figureOneCorrectedTransitionBudget q).toReal ≤
+      (figureOneCorrectedTargetBudget q).toReal +
+        ∑ phase ∈ Finset.range phases,
+          (figureOnePhaseSampleCount q (scheduleValue q phase) : ℝ) *
+            figureOnePerSampleMixingError q := by
+      apply add_le_add
+      · exact ENNReal.toReal_mono htargetBudgetTop htarget
+      · rw [ENNReal.toReal_sum fun phase _ => htermTop phase]
+        apply Finset.sum_le_sum
+        intro phase hphase
+        rw [ENNReal.toReal_nsmul,
+          figureOneCorrectedTransitionBudget,
+          ENNReal.toReal_ofReal hnu]
+        simp [nsmul_eq_mul]
+    _ ≤ figureOnePerSampleMixingError q / 4 +
+        ∑ _phase ∈ Finset.range phases,
+          (figureOneDependentMaxSampleCount q : ℝ) *
+            figureOnePerSampleMixingError q := by
+      apply add_le_add
+      · simp [figureOneCorrectedTargetBudget,
+          figureOneCorrectedTransitionBudget, ENNReal.toReal_div,
+          ENNReal.toReal_ofReal hnu]
+      · apply Finset.sum_le_sum
+        intro phase hphase
+        have hcount :
+            (figureOnePhaseSampleCount q (scheduleValue q phase) : ℝ) ≤
+              (figureOneDependentMaxSampleCount q : ℝ) := by
+          exact_mod_cast figureOnePhaseSampleCount_le_dependentMax
+            q (scheduleValue q phase)
+        exact mul_le_mul_of_nonneg_right hcount hnu
+    _ = figureOnePerSampleMixingError q / 4 +
+        (phases : ℝ) * (figureOneDependentMaxSampleCount q : ℝ) *
+          figureOnePerSampleMixingError q := by
+      rw [Finset.sum_const, Finset.card_range, nsmul_eq_mul]
+      ring
+
+theorem figureOneScheduledFullRetainedError_ne_top (q : VolumeParams) :
+    figureOneScheduledFullRetainedError q ≠ ⊤ := by
+  unfold figureOneScheduledFullRetainedError
+  apply ENNReal.add_ne_top.mpr
+  constructor
+  · unfold figureOneScheduledRetainedError
+    apply ENNReal.add_ne_top.mpr
+    constructor
+    · exact ne_top_of_le_ne_top
+        (ENNReal.div_ne_top ENNReal.ofReal_ne_top (by norm_num))
+        (scheduledBalancedStationaryTargetError_le_targetBudget q)
+    · exact ENNReal.sum_ne_top.2 fun phase _ => by
+        rw [nsmul_eq_mul]
+        exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+          ENNReal.ofReal_ne_top
+  · rw [nsmul_eq_mul]
+    exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+      ENNReal.ofReal_ne_top
+
+/-- The complete exact-chance loss is strictly below one.  This is much
+weaker than the accuracy budget and is used only to prove that the live
+branch has positive probability. -/
+theorem figureOneScheduledFullRetainedError_lt_one (q : VolumeParams) :
+    figureOneScheduledFullRetainedError q < 1 := by
+  have hnu0 : 0 ≤ figureOnePerSampleMixingError q :=
+    (figureOnePerSampleMixingError_pos q).le
+  have hretTop : figureOneScheduledRetainedError q
+      (terminalPhaseSteps q) ≠ ⊤ := by
+    unfold figureOneScheduledRetainedError
+    apply ENNReal.add_ne_top.mpr
+    constructor
+    · exact ne_top_of_le_ne_top
+        (ENNReal.div_ne_top ENNReal.ofReal_ne_top (by norm_num))
+        (scheduledBalancedStationaryTargetError_le_targetBudget q)
+    · exact ENNReal.sum_ne_top.2 fun phase _ => by
+        rw [nsmul_eq_mul]
+        exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+          ENNReal.ofReal_ne_top
+  have hterminalTop : figureOneSampleCount q •
+      figureOneCorrectedTransitionBudget q ≠ ⊤ := by
+    rw [nsmul_eq_mul]
+    exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+      ENNReal.ofReal_ne_top
+  have hret := figureOneScheduledRetainedError_toReal_le_for_moments q
+    (terminalPhaseSteps q)
+  have hsample : (figureOneSampleCount q : ℝ) ≤
+      figureOneDependentMaxSampleCount q := by
+    exact_mod_cast figureOneTerminalSampleCount_le_dependentMax q
+  have hphase : (terminalPhaseSteps q : ℝ) + 1 =
+      figureOneDependentPhaseCount q := by
+    rw [figureOneDependentPhaseCount]
+    norm_num
+  have hdependent : figureOneDependentEpsilon q ≤ 1 / 4 := by
+    have hsmall := figureOneDependent_smallness q
+    have ha3 : 1 ≤ figureOneDependentAlpha q ^ 3 :=
+      one_le_pow₀ (figureOneDependentAlpha_one_le q)
+    have he0 := figureOneDependentEpsilon_nonneg q
+    have hfour : 4 * figureOneDependentEpsilon q ≤
+        4 * figureOneDependentEpsilon q *
+          figureOneDependentAlpha q ^ 3 := by
+      nlinarith [mul_nonneg he0 (sub_nonneg.mpr ha3)]
+    nlinarith
+  have hnu : figureOnePerSampleMixingError q < 1 :=
+    (figureOnePerSampleMixingError_le_eps q).trans_lt q.heps.2
+  have hbudget := figureOne_lemma717c_budget q
+  have hreal :
+      (figureOneScheduledFullRetainedError q).toReal =
+        (figureOneScheduledRetainedError q
+          (terminalPhaseSteps q)).toReal +
+          (figureOneSampleCount q : ℝ) *
+            figureOnePerSampleMixingError q := by
+    rw [figureOneScheduledFullRetainedError,
+      ENNReal.toReal_add hretTop hterminalTop,
+      ENNReal.toReal_nsmul,
+      figureOneCorrectedTransitionBudget,
+      ENNReal.toReal_ofReal hnu0,
+      nsmul_eq_mul]
+  have hrealLt : (figureOneScheduledFullRetainedError q).toReal < 1 := by
+    rw [hreal]
+    calc
+      _ ≤ figureOnePerSampleMixingError q / 4 +
+          (terminalPhaseSteps q : ℝ) *
+            (figureOneDependentMaxSampleCount q : ℝ) *
+              figureOnePerSampleMixingError q +
+          (figureOneSampleCount q : ℝ) *
+            figureOnePerSampleMixingError q := by linarith
+      _ ≤ figureOnePerSampleMixingError q / 4 +
+          (terminalPhaseSteps q : ℝ) *
+            (figureOneDependentMaxSampleCount q : ℝ) *
+              figureOnePerSampleMixingError q +
+          (figureOneDependentMaxSampleCount q : ℝ) *
+            figureOnePerSampleMixingError q := by
+        gcongr
+      _ = figureOnePerSampleMixingError q / 4 +
+          (figureOneDependentPhaseCount q : ℝ) *
+            (figureOneDependentMaxSampleCount q : ℝ) *
+              figureOnePerSampleMixingError q := by
+        rw [← hphase]
+        ring
+      _ = figureOnePerSampleMixingError q / 4 +
+          figureOneDependentEpsilon q / 3 := by
+        rw [← hbudget]
+        ring
+      _ < 1 := by nlinarith
+  exact (ENNReal.toReal_lt_toReal
+    (figureOneScheduledFullRetainedError_ne_top q) ENNReal.one_ne_top).mp <| by
+      simpa using hrealLt
 
 /-- The ideal factor attached to the actual chronological phase is at most
 two. -/
