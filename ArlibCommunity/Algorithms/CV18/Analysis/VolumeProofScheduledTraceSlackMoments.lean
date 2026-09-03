@@ -124,6 +124,126 @@ theorem scheduledFigureOneTrace_rawMeanProduct_le_pow_mul_truncatedMeanProduct_o
       rw [Finset.prod_mul_distrib]
       simp
 
+/-- A phase-factor version of the empirical-average calculation in CV18
+Lemma 7.15, Eq. (6).  It keeps the executable phase factors abstract so the
+finite-walk collector estimate can include its explicit mixing slack. -/
+theorem scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor
+    (q : VolumeParams) (I : VolumeInput q.n) (factor : ℕ → ℝ)
+    (hrawPos : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      0 < scheduledFigureOneTraceRawMean q I j)
+    (hsecond : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        factor j * scheduledFigureOneTraceRawMean q I j ^ 2)
+    {i : ℕ} (hi : i ≤ figureOneDependentPhaseCount q) :
+    dependentPhaseMeanProduct
+        (scheduledFigureOneTraceTruncatedSecond q I) i ≤
+      dependentPhaseMeanProduct factor i *
+        dependentPhaseMeanProduct
+          (scheduledFigureOneTraceRawMean q I) i ^ 2 := by
+  unfold dependentPhaseMeanProduct
+  rw [← Finset.prod_pow, ← Finset.prod_mul_distrib]
+  apply Finset.prod_le_prod
+  · intro j hj
+    exact integral_nonneg fun _ => sq_nonneg _
+  · intro j hj
+    have hjm : j + 1 ≤ figureOneDependentPhaseCount q := by
+      have := Finset.mem_range.mp hj
+      omega
+    exact (scheduledFigureOneTrace_truncatedSecond_le_rawSecond
+      q I (j + 1) (hrawPos (j + 1) (by omega) hjm)
+      (memLp_scheduledBalancedForwardTrace_phaseVariable
+        q I (j + 1) (by omega) hjm)).trans
+          (hsecond (j + 1) (by omega) hjm)
+
+/-- The exact finite-prefix budget needed after the phasewise empirical
+second-moment estimate.  This isolates the chunk-product arithmetic in the
+middle of CV18 Lemma 7.15 from the Markov-chain collector proof. -/
+theorem scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor_budget
+    (q : VolumeParams) (I : VolumeInput q.n) (factor : ℕ → ℝ)
+    (hfactor0 : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      0 ≤ factor j)
+    (hsecondTwo : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        2 * scheduledFigureOneTraceRawMean q I j ^ 2)
+    (hsecondFactor : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        factor j * scheduledFigureOneTraceRawMean q I j ^ 2)
+    (hbudget : ∀ i, i ≤ figureOneDependentPhaseCount q →
+      dependentPhaseMeanProduct factor i *
+          ((1 + 1 / figureOneDependentAlpha q) ^ i) ^ 2 ≤
+        1 + q.eps ^ 2 / 32) :
+    ∀ i, i ≤ figureOneDependentPhaseCount q →
+      dependentPhaseMeanProduct
+          (scheduledFigureOneTraceTruncatedSecond q I) i ≤
+        (1 + q.eps ^ 2 / 32) *
+          dependentPhaseMeanProduct
+            (scheduledFigureOneTraceTruncatedMean q I) i ^ 2 := by
+  intro i hi
+  let raw := dependentPhaseMeanProduct
+    (scheduledFigureOneTraceRawMean q I) i
+  let truncated := dependentPhaseMeanProduct
+    (scheduledFigureOneTraceTruncatedMean q I) i
+  let factorProduct := dependentPhaseMeanProduct factor i
+  have hrawPos : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      0 < scheduledFigureOneTraceRawMean q I j :=
+    fun j hj1 hjm => scheduledFigureOneTraceRawMean_pos q I j hj1 hjm
+  have hfactorProduct0 : 0 ≤ factorProduct := by
+    dsimp only [factorProduct, dependentPhaseMeanProduct]
+    apply Finset.prod_nonneg
+    intro j hj
+    exact hfactor0 (j + 1) (by omega) (by
+      have := Finset.mem_range.mp hj
+      omega)
+  have htruncated0 : 0 ≤ truncated :=
+    dependentPhaseMeanProduct_nonneg _ (fun j =>
+      scheduledFigureOneTraceTruncatedMean_nonnegative q I j <| by
+        unfold scheduledFigureOneTraceRawMean
+        exact integral_nonneg fun trace =>
+          scheduledBalancedTracePhaseVariable_nonnegative q j trace) i
+  have hraw0 : 0 ≤ raw :=
+    dependentPhaseMeanProduct_nonneg _ (fun j => by
+      unfold scheduledFigureOneTraceRawMean
+      exact integral_nonneg fun trace =>
+        scheduledBalancedTracePhaseVariable_nonnegative q j trace) i
+  have hraw :=
+    scheduledFigureOneTrace_rawMeanProduct_le_pow_mul_truncatedMeanProduct_of_two
+      q I hsecondTwo hi
+  have hcoefficient0 :
+      0 ≤ (1 + 1 / figureOneDependentAlpha q) ^ i := by
+    apply pow_nonneg
+    have halpha := figureOneDependentAlpha_pos q
+    have hinv : 0 ≤ 1 / figureOneDependentAlpha q :=
+      (one_div_pos.mpr halpha).le
+    linarith
+  have hrawSq : raw ^ 2 ≤
+      (((1 + 1 / figureOneDependentAlpha q) ^ i) * truncated) ^ 2 :=
+    (sq_le_sq₀ hraw0
+      (mul_nonneg hcoefficient0 htruncated0)).2 hraw
+  have hsecondProduct :=
+    scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor
+      q I factor hrawPos hsecondFactor hi
+  calc
+    dependentPhaseMeanProduct
+        (scheduledFigureOneTraceTruncatedSecond q I) i ≤
+        factorProduct * raw ^ 2 := hsecondProduct
+    _ ≤ factorProduct *
+        (((1 + 1 / figureOneDependentAlpha q) ^ i) * truncated) ^ 2 :=
+      mul_le_mul_of_nonneg_left hrawSq hfactorProduct0
+    _ = (factorProduct *
+          ((1 + 1 / figureOneDependentAlpha q) ^ i) ^ 2) *
+        truncated ^ 2 := by ring
+    _ ≤ (1 + q.eps ^ 2 / 32) * truncated ^ 2 :=
+      mul_le_mul_of_nonneg_right (hbudget i hi) (sq_nonneg truncated)
+
 /-- A coarse local second moment is enough to turn raw-product bias into the
 truncated-product bias consumed by Lemma 7.15. -/
 theorem scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal_of_two
@@ -298,13 +418,62 @@ theorem figureOneFinalScheduledAbortBase_failure_le_of_slack_trace_moments
   · exact scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal_of_two
       q I hsecondTwo hrawApprox
 
+/-- Final executable accuracy in the precise factor language of CV18
+Lemma 7.15, Eq. (6): the analytic collector proof supplies one phase factor,
+and the paper's chunk calculation supplies its finite-prefix budget. -/
+theorem figureOneFinalScheduledAbortBase_failure_le_of_phase_factor_budget
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (factor : ℕ → ℝ)
+    (hfactor0 : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      0 ≤ factor j)
+    (hfactorTwo : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      factor j ≤ 2)
+    (hsecondFactor : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        factor j * scheduledFigureOneTraceRawMean q I j ^ 2)
+    (hbudget : ∀ i, i ≤ figureOneDependentPhaseCount q →
+      dependentPhaseMeanProduct factor i *
+          ((1 + 1 / figureOneDependentAlpha q) ^ i) ^ 2 ≤
+        1 + q.eps ^ 2 / 32)
+    (hrawApprox : RelativeApprox (q.eps / 64)
+      (∏ phase, figureOneIdealPhaseMean q I phase)
+      (dependentPhaseMeanProduct (scheduledFigureOneTraceRawMean q I)
+        (figureOneDependentPhaseCount q))) :
+    (figureOneFinalScheduledAbortBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  have hsecondTwo : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        2 * scheduledFigureOneTraceRawMean q I j ^ 2 := by
+    intro j hj1 hjm
+    exact (hsecondFactor j hj1 hjm).trans <|
+      mul_le_mul_of_nonneg_right (hfactorTwo j hj1 hjm) (sq_nonneg _)
+  apply figureOneFinalScheduledAbortBase_failure_le_of_slack_trace_moments
+    q I oracle hrounded hsecondTwo
+  · exact
+      scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor_budget
+        q I factor hfactor0 hsecondTwo hsecondFactor hbudget
+  · exact hrawApprox
+
 #print axioms
   scheduledFigureOneTrace_rawMean_le_one_add_inv_alpha_mul_truncatedMean_of_two
 #print axioms
   scheduledFigureOneTrace_rawMeanProduct_le_pow_mul_truncatedMeanProduct_of_two
 #print axioms
+  scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor
+#print axioms
+  scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor_budget
+#print axioms
   scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal_of_two
 #print axioms
   figureOneFinalScheduledAbortBase_failure_le_of_slack_trace_moments
+#print axioms
+  figureOneFinalScheduledAbortBase_failure_le_of_phase_factor_budget
 
 end ArlibCommunity.Algorithms.CV18
