@@ -2,6 +2,7 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.FiniteReferenceSequence
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.HistoryPreservingReset
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.SequentialRecordedKernelReset
+import ArlibCommunity.Algorithms.CV18.Analysis.Background.SequentialRecordedKernelPreservation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofResetReferenceBaseCapstone
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianResetJoint
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalResetJoint
@@ -210,6 +211,93 @@ theorem scheduledBalancedTraceRetainedOption_resetAppend
   unfold scheduledResetTraceAppend
   rw [scheduledBalancedTraceRetainedOption_append]
   simp [hlive]
+
+/-- The finite vector of already completed chronological coordinates. -/
+def scheduledResetPrefixCoordinates (q : VolumeParams) (phase : ℕ)
+    (trace : ScheduledBalancedCoolingTrace q.n) (j : Fin phase) : ℝ :=
+  scheduledBalancedTracePhaseVariable q (j + 1) trace
+
+theorem measurable_scheduledResetPrefixCoordinates
+    (q : VolumeParams) (phase : ℕ) :
+    Measurable (scheduledResetPrefixCoordinates q phase) := by
+  exact measurable_pi_lambda _ fun j =>
+    measurable_scheduledBalancedTracePhaseVariable q (j + 1)
+
+/-- Support invariant for a reset score/endpoint pair.  It says that the
+stored score is nonnegative and is exactly the public live-raw observation of
+the reassembled optional result.  In particular, an absent endpoint carries
+score zero. -/
+def ScheduledResetPairGood (result : ℝ × Option (AmbientSpace n)) : Prop :=
+  0 ≤ result.1 ∧
+    figureOneScheduledTraceLiveRawOutput
+      (scheduledResetPairToResult result) = result.1
+
+theorem measurableSet_scheduledResetPairGood :
+    MeasurableSet {result : ℝ × Option (AmbientSpace n) |
+      ScheduledResetPairGood result} := by
+  exact (measurable_fst measurableSet_Ici).inter <|
+    measurableSet_eq_fun
+      (measurable_figureOneScheduledTraceLiveRawOutput.comp
+        measurable_scheduledResetPairToResult)
+      measurable_fst
+
+theorem scheduledResetPairOutput_good
+    (result : Option (ℝ × AmbientSpace n))
+    (hresult : ScheduledCollectedTotalNonnegative result) :
+    ScheduledResetPairGood (scheduledResetPairOutput result) := by
+  constructor
+  · cases result with
+    | none => simp [scheduledResetPairOutput,
+        figureOneScheduledTraceLiveRawOutput]
+    | some result =>
+        simpa [scheduledResetPairOutput,
+          figureOneScheduledTraceLiveRawOutput,
+          ScheduledCollectedTotalNonnegative] using hresult
+  · rw [scheduledResetPairToResult_pairOutput_eq result hresult]
+    rfl
+
+theorem scheduledResetPairToResult_nonnegative
+    (result : ℝ × Option (AmbientSpace n))
+    (hresult : ScheduledResetPairGood result) :
+    ScheduledCollectedTotalNonnegative
+      (scheduledResetPairToResult result) := by
+  unfold ScheduledResetPairGood at hresult
+  cases hpoint : result.2 with
+  | none => simp [scheduledResetPairToResult, hpoint,
+      ScheduledCollectedTotalNonnegative]
+  | some point =>
+      simpa [scheduledResetPairToResult, hpoint,
+        ScheduledCollectedTotalNonnegative] using hresult.1
+
+theorem scheduledBalancedTracePhaseVariable_resetAppend_eq_fst_of_good
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (trace : ScheduledBalancedCoolingTrace q.n)
+    (hvalid : ScheduledBalancedCoolingTraceValid phase trace)
+    (hlive : trace.2 = true)
+    (result : ℝ × Option (AmbientSpace q.n))
+    (hresult : ScheduledResetPairGood result) :
+    scheduledBalancedTracePhaseVariable q (phase + 1)
+        (scheduledResetTraceAppend (trace, result)) = result.1 := by
+  unfold scheduledResetTraceAppend
+  rw [scheduledBalancedTracePhaseVariable_append_eq_rawOutput q phase hphase
+    trace hvalid]
+  simp only [hlive, if_true]
+  exact hresult.2
+
+theorem scheduledResetPrefixCoordinates_resetAppend_eq
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (trace : ScheduledBalancedCoolingTrace q.n)
+    (hvalid : ScheduledBalancedCoolingTraceValid phase trace)
+    (result : ℝ × Option (AmbientSpace q.n)) :
+    scheduledResetPrefixCoordinates q phase
+        (scheduledResetTraceAppend (trace, result)) =
+      scheduledResetPrefixCoordinates q phase trace := by
+  funext j
+  unfold scheduledResetPrefixCoordinates scheduledResetTraceAppend
+  exact scheduledBalancedTracePhaseVariable_append_eq q hvalid hphase.le
+    (by omega) (by omega) (scheduledResetPairToResult result)
 
 /-- One chronological outer reset, stated at the public trace level.  It
 replaces the score/endpoint output marginal by `target`, preserves every
@@ -881,6 +969,9 @@ theorem exists_scheduledTerminalPairTarget
 #print axioms ae_trace_live_of_map_retainedOption_eq_map_some
 #print axioms scheduledBalancedTracePhaseVariable_resetAppend_eq_fst
 #print axioms scheduledBalancedTraceRetainedOption_resetAppend
+#print axioms scheduledResetPairOutput_good
+#print axioms scheduledBalancedTracePhaseVariable_resetAppend_eq_fst_of_good
+#print axioms scheduledResetPrefixCoordinates_resetAppend_eq
 #print axioms exists_scheduledTraceRecordedReset
 #print axioms exists_acceptedEndpointResetJoint
 #print axioms exists_acceptedEndpointResetJoint_of_joint
