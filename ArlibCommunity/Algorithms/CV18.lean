@@ -64,13 +64,16 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianPhase
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianDeathArithmetic
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCollectorAverageSecond
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofHistoryPreservingSampleReset
+import ArlibCommunity.Algorithms.CV18.Analysis.Background.RecordedKernelReset
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledShadowReference
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledResetAverageSecond
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledResetEventTransfer
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFixedThirdMoment
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAcceleratedThirdMoment
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianResetL3Budget
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofResetReferenceProduct
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalResetDeviation
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalTraceDeviation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceBoundaryMoments
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledCheapAbortCap
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledTheoremAssembly
@@ -85,14 +88,16 @@ all discharged analytic infrastructure are exposed here. Radial truncation,
 stationary sharp moments, proper-step cost at the advertised Figure-1 step,
 the executable lazy proper-step clock, speedy-Gaussian mixing, and amplification
 are unconditional. The current final scheduled assembly is
-`volumeTheorem_finalScheduled_of_phasewise_ideal_bounds`; its two remaining
-local inputs are the executable phase-mean comparison and the corresponding
-sharp phase-average second-moment bound. The counted-reference global-cap lane
-is unconditional. The concrete Lemma 7.17(c) dependence
-bridge, finite executable moment-factor budget, phasewise raw-mean product
-assembly, and counted-reference cap theorem are exposed here. The older
-`volumeTheorem_of_postInitialMixing` remains available as a compact legacy
-interface.
+`volumeTheorem_finalScheduled_of_baseFailure`; its sole remaining input is the
+uncapped executable base-accuracy bound. The counted-reference global-cap lane
+is unconditional. Equation-(6) reset-reference moment bounds for Gaussian and
+terminal phases, their event transfers (including the final terminal trace
+coordinate), the concrete Lemma 7.17(c) dependence bridge, finite executable
+moment-factor budget, phasewise raw-mean product assembly, and counted-reference
+cap theorem are exposed here. The remaining accuracy work is the single global
+history-preserving reference coupling and its mapped-product tail assembly.
+The older `volumeTheorem_of_postInitialMixing` remains available as a compact
+legacy interface.
 
 See `Analysis/README.md` for a module-level status and source audit.
 -/
