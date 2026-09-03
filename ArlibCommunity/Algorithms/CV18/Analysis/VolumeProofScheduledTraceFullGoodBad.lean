@@ -368,6 +368,110 @@ theorem figureOneScheduledTrace_deadState_mass_le_retainedError
     _ ≤ figureOneScheduledRetainedError q (phase + 1) := by
       simpa [law] using hevent
 
+/-- The shared retained-error witness split in the form needed by the
+live/dead transition lemma: the live marginal is good plus `liveBad`, and
+`liveBad` together with the absorbing dead mass costs only the one retained
+error budget. -/
+theorem exists_figureOneScheduledTraceScaledLive_good_bad
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < terminalPhaseSteps q) :
+    let law := scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I (phase + 1)
+    let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+      accuracyScaleFactor q • x
+    let good := (figureOneScheduledAcceptedTargetAt q I phase).map scale
+    ∃ liveBad : Measure (AmbientSpace q.n),
+      scheduledBalancedTraceLiveStateLaw law scale ≤ good + liveBad ∧
+      liveBad Set.univ +
+          scheduledBalancedTraceDeadStateLaw law scale Set.univ ≤
+        figureOneScheduledRetainedError q (phase + 1) := by
+  dsimp only
+  let law := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I (phase + 1)
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    accuracyScaleFactor q • x
+  let good := (figureOneScheduledAcceptedTargetAt q I phase).map scale
+  obtain ⟨error, herrorDom, herrorMass⟩ :=
+    scheduledBalancedForwardTraceLaw_retained_leUpTo_target
+      q I phase hphase
+  let someSet := scheduledRetainedSomeSet q.n
+  let get := scheduledRetainedGetDZero (n := q.n)
+  let liveBad0 := (error.restrict someSet).map get
+  let liveBad := liveBad0.map scale
+  refine ⟨liveBad, ?_, ?_⟩
+  · have hrestrict :
+        ((law.map scheduledBalancedTraceRetainedOption).restrict someSet) ≤
+          ((((figureOneScheduledAcceptedTargetAt q I phase).map some) +
+            error).restrict someSet) :=
+      Measure.restrict_mono Set.Subset.rfl herrorDom
+    have hmapped := Measure.map_mono hrestrict
+      (measurable_scheduledRetainedGetDZero (n := q.n))
+    rw [Measure.restrict_add,
+      Measure.map_add _ _
+        (measurable_scheduledRetainedGetDZero (n := q.n)),
+      map_some_restrict_extract_eq] at hmapped
+    have hlive0 : scheduledBalancedTraceLiveStateLaw law id ≤
+        figureOneScheduledAcceptedTargetAt q I phase + liveBad0 := by
+      rw [scheduledBalancedTraceLiveStateLaw_eq_retainedOptionSome]
+      exact hmapped
+    have hlive := Measure.map_mono hlive0 (by fun_prop : Measurable scale)
+    rw [Measure.map_add _ _ (by fun_prop : Measurable scale)] at hlive
+    unfold scheduledBalancedTraceLiveStateLaw at hlive ⊢
+    rw [Measure.map_map (by fun_prop : Measurable scale)
+      ((measurable_id : Measurable fun x : AmbientSpace q.n => x).comp
+        (measurable_scheduledBalancedTraceRetainedState (n := q.n)))] at hlive
+    simpa [good, liveBad, liveBad0, Function.comp_def] using hlive
+  · have hliveBadMass : liveBad Set.univ = error someSet := by
+      rw [show liveBad = liveBad0.map scale by rfl,
+        Measure.map_apply (by fun_prop : Measurable scale) MeasurableSet.univ,
+        Set.preimage_univ]
+      rw [show liveBad0 = (error.restrict someSet).map get by rfl,
+        Measure.map_apply
+          (measurable_scheduledRetainedGetDZero (n := q.n))
+          MeasurableSet.univ,
+        Set.preimage_univ, Measure.restrict_apply MeasurableSet.univ]
+      simp
+    have hnone :
+        ((figureOneScheduledAcceptedTargetAt q I phase).map some)
+            ({none} : Set (Option (AmbientSpace q.n))) = 0 := by
+      rw [Measure.map_apply measurable_some measurableSet_option_none]
+      have hpreSome : (some : AmbientSpace q.n →
+          Option (AmbientSpace q.n)) ⁻¹'
+            ({none} : Set (Option (AmbientSpace q.n))) = ∅ := by
+        ext point
+        simp
+      rw [hpreSome, measure_empty]
+    have hdeadMass :
+        scheduledBalancedTraceDeadStateLaw law scale Set.univ ≤
+          error ({none} : Set (Option (AmbientSpace q.n))) := by
+      have hevent := Measure.le_iff'.mp herrorDom
+        ({none} : Set (Option (AmbientSpace q.n)))
+      rw [Measure.add_apply, hnone, zero_add] at hevent
+      rw [scheduledBalancedTraceDeadStateLaw_apply_univ law scale
+        (by fun_prop : Measurable scale)]
+      rw [Measure.map_apply measurable_scheduledBalancedTraceRetainedOption
+        measurableSet_option_none] at hevent
+      have hpre : scheduledBalancedTraceRetainedOption ⁻¹'
+          ({none} : Set (Option (AmbientSpace q.n))) =
+            scheduledBalancedTraceDeadSet q.n := by
+        ext trace
+        rcases trace with ⟨history, live⟩
+        cases live <;> simp [scheduledBalancedTraceRetainedOption,
+          scheduledBalancedTraceDeadSet]
+      simpa [law, hpre] using hevent
+    calc
+      liveBad Set.univ +
+          scheduledBalancedTraceDeadStateLaw law scale Set.univ ≤
+        error someSet + error ({none} : Set (Option (AmbientSpace q.n))) := by
+          rw [hliveBadMass]
+          exact add_le_add le_rfl hdeadMass
+      _ = error Set.univ := by
+        rw [show someSet =
+            ({none} : Set (Option (AmbientSpace q.n)))ᶜ by rfl,
+          add_comm,
+          measure_add_measure_compl measurableSet_option_none]
+      _ ≤ figureOneScheduledRetainedError q (phase + 1) := herrorMass
+
 /-- Fold the absorbing dead-state marginal into the additive bad witness.
 The resulting full retained-state law, rather than merely its live
 restriction, is dominated by the scaled accepted target plus at most twice
