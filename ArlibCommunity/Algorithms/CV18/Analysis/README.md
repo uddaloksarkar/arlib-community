@@ -1,6 +1,6 @@
 # CV18 analysis
 
-This directory contains the currently discharged portion of Cousins and
+This directory contains the end-to-end formalization of Cousins and
 Vempala's accelerated Gaussian-cooling volume algorithm [CV18].
 
 The executable membership-oracle program, continuous semantics, cooling
@@ -8,12 +8,11 @@ schedule, query accounting, restricted-Gaussian stationarity, warm starts,
 fixed-rate and terminal moment bounds, ideal-product calculation, initial
 coupling, and median amplification are formalized.
 
-The strongest assembled result is `volumeTheorem_of_postInitialMixing`.  It
-contains both the advertised accuracy conclusion and the explicit
-membership-query bound, and is conditional on exactly one proposition:
-
-- `FigureOnePostInitialMixingBound` — the dependent lazy ball-walk sampling
-  error bound.
+The strongest assembled result is the premise-free theorem
+`volumeTheorem_finalScheduled`.  It contains both the advertised accuracy
+conclusion and the explicit membership-query bound for the executable
+scheduled program.  Its chronological reset-reference witness is the
+unconditional theorem `globalResetReferenceExists`.
 
 `FigureOneRadialTruncationBound` is now proved from `WellRounded` by
 `figureOneRadialTruncationBound`.  Thus radial truncation is no longer an
@@ -25,9 +24,15 @@ localization estimate, is now proved unconditionally in
 vendored under `ArlibCommunity/External/Kr25`; the adapter covers the exact
 first-hit schedule, including the terminally clipped accelerated step.
 
-The source snapshot in the original CV18 workspace asserted the former bundle
-with a `sorry`.  The unconditional capstone remains omitted so that
-arlib-community's no-`sorry` axiom invariant remains intact.
+The final recurrence constructs the accepted initial reference, performs the
+Gaussian equation-(6) resets, preserves the complete old-coordinate law and
+Lemma 7.17(c) facts, appends the terminal reset, and feeds the resulting global
+witness to the query-cap and amplification assembly.  The final axiom audit is
+`propext`, `Classical.choice`, and `Quot.sound`; there is no `sorryAx`.
+
+The discussion below records the dependency audit and intermediate gaps that
+guided the formalization.  Those gaps are now closed by the final scheduled
+assembly.
 
 ## Vempala optimization-book cross-check
 
@@ -260,15 +265,9 @@ volume, and radius obligations, and packages the resulting phase mixing
 theorem. This theorem currently covers `n >= 21`, matching the available
 sharp overlap theorem.
 
-These results still do not by themselves prove CV18 Theorem 1.1 with its
-advertised `O*(n^3)` complexity. The average-local-conductance and
-raw-proposal cutoff obligation at the advertised phase radius is now closed.
-The remaining work is:
-
-1. package the now-proved speedy-to-target measure identities as a capped
-   executable rejection sampler; and
-2. connect the fixed-body Figure-1 primitive to the phase-truncated
-   proper-step/rejection implementation (or replace the primitive with that
-   proved implementation), compose the phase errors into
-   `FigureOnePostInitialMixingBound`, and handle the finite range
-   `3 <= n < 21` separately.
+The final scheduled construction now composes these ingredients through the
+chronological history-preserving reset recurrence.  The Gaussian and terminal
+phase errors sum exactly to `figureOneScheduledGlobalOuterStepError`; the
+completed recurrence proves `globalResetReferenceExists`, and
+`volumeTheorem_finalScheduled` gives the unconditional end-to-end CV18
+Theorem 1.1 statement with the advertised scheduled complexity rate.
