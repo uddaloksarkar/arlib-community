@@ -1092,6 +1092,108 @@ theorem figureOneFinalScheduledRetainedCompleteCostEnvelope_le
       ac_rfl
     _ ≤ _ := one_add_figureOneWarmShadowScheduledWork_le q
 
+/-- The exact-chance budget is substantially smaller than the coarse
+`1/64` accuracy-transfer slot; this sharper form is used only for the global
+query-cap transfer. -/
+theorem figureOne_exactChance_countReference_budget_le
+    (q : VolumeParams) :
+    (figureOneDependentMaxSampleCount q *
+      figureOneDependentPhaseCount q) •
+        ENNReal.ofReal (figureOnePerSampleMixingError q) ≤
+      ENNReal.ofReal (1 / 1280 : ℝ) := by
+  let error := (figureOneDependentMaxSampleCount q *
+      figureOneDependentPhaseCount q) •
+        ENNReal.ofReal (figureOnePerSampleMixingError q)
+  have herrTop : error ≠ ⊤ := by
+    dsimp [error]
+    rw [nsmul_eq_mul]
+    exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+      ENNReal.ofReal_ne_top
+  rw [← ENNReal.toReal_le_toReal herrTop ENNReal.ofReal_ne_top]
+  rw [ENNReal.toReal_ofReal (by norm_num : (0 : ℝ) ≤ 1 / 1280)]
+  have heq : 3 * error.toReal = figureOneDependentEpsilon q := by
+    simpa [error] using figureOne_exactChance_budget q
+  have hdep0 := figureOneDependentEpsilon_nonneg q
+  have ha := figureOneDependentAlpha_ge_1024 q
+  have ha8 : (8 : ℝ) ≤ figureOneDependentAlpha q := by linarith
+  have hpow : (512 : ℝ) ≤ figureOneDependentAlpha q ^ 3 := by
+    calc
+      (512 : ℝ) = 8 ^ 3 := by norm_num
+      _ ≤ figureOneDependentAlpha q ^ 3 :=
+        pow_le_pow_left₀ (by norm_num) ha8 3
+  have hsmall := figureOneDependent_smallness q
+  have hscaled :
+      4 * figureOneDependentEpsilon q * (320 / 3 : ℝ) ≤
+        4 * figureOneDependentEpsilon q *
+          figureOneDependentAlpha q ^ 3 := by
+    have h320 : (320 / 3 : ℝ) ≤
+        figureOneDependentAlpha q ^ 3 := by
+      norm_num at hpow ⊢
+      linarith
+    exact mul_le_mul_of_nonneg_left h320
+      (mul_nonneg (by norm_num) hdep0)
+  have hdep : figureOneDependentEpsilon q ≤ (3 / 1280 : ℝ) := by
+    nlinarith
+  nlinarith
+
+/-- The stationary initial-target replacement plus every Gaussian phase
+replacement fits into the single exact-chance count-reference budget. -/
+theorem figureOneFinalScheduledCountReferenceError_le
+    (q : VolumeParams) :
+    scheduledBalancedStationaryTargetError q +
+        ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+          figureOnePhaseSampleCount q (scheduleValue q phase) •
+            figureOneCorrectedTransitionBudget q ≤
+      ENNReal.ofReal (1 / 1280 : ℝ) := by
+  let delta := figureOneCorrectedTransitionBudget q
+  let maxSamples := figureOneDependentMaxSampleCount q
+  have hstationary : scheduledBalancedStationaryTargetError q ≤ delta := by
+    calc
+      scheduledBalancedStationaryTargetError q ≤
+          figureOneCorrectedTargetBudget q :=
+        scheduledBalancedStationaryTargetError_le_targetBudget q
+      _ ≤ delta := by
+        unfold figureOneCorrectedTargetBudget
+        apply (ENNReal.div_le_iff_le_mul
+          (Or.inl (by norm_num)) (Or.inl (by norm_num))).2
+        calc
+          delta = delta * 1 := by simp
+          _ ≤ delta * 4 := by gcongr <;> norm_num
+  have hdeltaMax : delta ≤ maxSamples • delta := by
+    rw [nsmul_eq_mul]
+    calc
+      delta = 1 * delta := by simp
+      _ ≤ (maxSamples : ENNReal) * delta := by
+        gcongr
+        exact_mod_cast figureOneDependentMaxSampleCount_pos q
+  have hsum :
+      (∑ phase ∈ Finset.range (terminalPhaseSteps q),
+        figureOnePhaseSampleCount q (scheduleValue q phase) • delta) ≤
+      ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+        maxSamples • delta := by
+    apply Finset.sum_le_sum
+    intro phase hphase
+    gcongr
+    exact figureOnePhaseSampleCount_le_dependentMax q (scheduleValue q phase)
+  calc
+    scheduledBalancedStationaryTargetError q +
+        ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+          figureOnePhaseSampleCount q (scheduleValue q phase) •
+            figureOneCorrectedTransitionBudget q ≤
+      delta + ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+        maxSamples • delta := add_le_add hstationary hsum
+    _ ≤ maxSamples • delta +
+        ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+          maxSamples • delta := add_le_add hdeltaMax le_rfl
+    _ = (maxSamples * figureOneDependentPhaseCount q) • delta := by
+      simp only [Finset.sum_const, Finset.card_range, nsmul_eq_mul,
+        figureOneDependentPhaseCount]
+      push_cast
+      ring_nf
+    _ ≤ ENNReal.ofReal (1 / 1280 : ℝ) := by
+      simpa only [delta, maxSamples, figureOneCorrectedTransitionBudget] using
+        figureOne_exactChance_countReference_budget_le q
+
 /-- Forgetting the numerical volume output, the retained chronological
 interpreter and the actual aborting Figure-1 base program have exactly the
 same complete query-count distribution. -/
@@ -1212,6 +1314,8 @@ theorem figureOneFinalScheduledRetainedCompleteProgram_map_snd_eq_abortBase
 #print axioms
   exists_figureOneFinalScheduledRetainedComplete_countedReference
 #print axioms figureOneFinalScheduledRetainedCompleteCostEnvelope_le
+#print axioms figureOne_exactChance_countReference_budget_le
+#print axioms figureOneFinalScheduledCountReferenceError_le
 #print axioms
   figureOneFinalScheduledRetainedCompleteProgram_map_snd_eq_abortBase
 
