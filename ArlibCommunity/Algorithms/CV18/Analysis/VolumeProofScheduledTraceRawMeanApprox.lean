@@ -196,6 +196,121 @@ theorem map_scheduledBalancedForwardTraceLaw_rawPhase_eq_prefix
       rw [hsuccLaw, hstep]
       exact ih (by omega)
 
+/-! ## Concrete scalar `MeasureLeUpTo` comparisons -/
+
+/-- Any immediate complete-phase comparison transports unchanged to the raw
+coordinate of the final trace. -/
+theorem scheduledBalancedFinalTraceRawPhase_leUpTo_of_immediate
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (target : Measure (Option (ℝ × AmbientSpace q.n)))
+    {error : ENNReal}
+    (himmediate :
+      let rho := scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I phase
+      let outK := scheduledBalancedTracePhaseOutputLaw
+        figureOneFinalScheduledBalancedParameters q I phase
+        figureOneScheduledTraceLiveRawOutput 1
+      MeasureLeUpTo (rho.bind outK)
+        (target.map figureOneScheduledTraceLiveRawOutput) error) :
+    MeasureLeUpTo
+      ((scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)).map
+          (scheduledBalancedTracePhaseVariable q (phase + 1)))
+      (target.map figureOneScheduledTraceLiveRawOutput) error := by
+  have himmediateLaw :=
+    bind_scheduledBalancedTraceRawPhaseOutput_eq_forwardTrace_succ
+      q I phase hphase
+  have hfuture := map_scheduledBalancedForwardTraceLaw_rawPhase_eq_prefix
+    figureOneFinalScheduledBalancedParameters q I phase
+      (figureOneDependentPhaseCount q - (phase + 1)) (by omega)
+  have hhorizon : phase + 1 +
+      (figureOneDependentPhaseCount q - (phase + 1)) =
+        figureOneDependentPhaseCount q := by omega
+  rw [hhorizon] at hfuture
+  rw [hfuture, ← himmediateLaw]
+  exact himmediate
+
+/-- For every noninitial Gaussian phase, the final raw trace coordinate is
+within the accumulated retained loss plus one fresh transition budget of the
+paper-faithful complete-phase target (first point exact, common Markov tail). -/
+theorem scheduledBalancedFinalTraceRawGaussianPhase_leUpTo_target
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase0 : 0 < phase) (hphase : phase < terminalPhaseSteps q) :
+    MeasureLeUpTo
+      ((scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)).map
+          (scheduledBalancedTracePhaseVariable q (phase + 1)))
+      ((figureOneScheduledGaussianPhaseTarget q I phase).map
+        figureOneScheduledTraceLiveRawOutput)
+      (figureOneCorrectedTransitionBudget q +
+        figureOneScheduledRetainedError q phase) := by
+  let previous := phase - 1
+  have hprevious : previous < terminalPhaseSteps q := by
+    dsimp only [previous]
+    omega
+  have hpreviousSucc : previous + 1 = phase := by
+    dsimp only [previous]
+    omega
+  let rho := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I phase
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    accuracyScaleFactor q • x
+  let good := (figureOneScheduledAcceptedTargetAt q I previous).map scale
+  let eta := figureOneScheduledRetainedError q phase
+  obtain ⟨bad, hlive, herror⟩ :=
+    exists_figureOneScheduledTraceScaledLive_good_bad
+      q I previous hprevious
+  have hetaTop : eta ≠ ⊤ := by
+    dsimp only [eta]
+    unfold figureOneScheduledRetainedError
+    apply ENNReal.add_ne_top.mpr
+    constructor
+    · exact ne_top_of_le_ne_top
+        (ENNReal.div_ne_top ENNReal.ofReal_ne_top (by norm_num))
+        (scheduledBalancedStationaryTargetError_le_targetBudget q)
+    · exact ENNReal.sum_ne_top.2 fun index _ => by
+        rw [nsmul_eq_mul]
+        exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+          ENNReal.ofReal_ne_top
+  let _ : IsFiniteMeasure bad :=
+    { measure_univ_lt_top := by
+        apply lt_of_le_of_lt
+        · exact le_trans (le_add_right le_rfl) herror
+        · exact lt_top_iff_ne_top.mpr <| by
+            simpa [eta, hpreviousSucc] using hetaTop }
+  let _ : IsProbabilityMeasure rho :=
+    scheduledBalancedForwardTraceLaw_isProbabilityMeasure
+      figureOneFinalScheduledBalancedParameters q I phase
+  have hgood : Arlib.IsWarm
+      (ENNReal.ofReal (8 * speedyAdjacentWarmConstant q)) good
+      (figureOneScheduledSpeedyPiAt q I phase) := by
+    simpa [good, scale, previous, hpreviousSucc,
+      figureOneScheduledAcceptedTargetAt,
+      figureOneScheduledSpeedyPiAt] using
+      map_scheduledBalancedAcceptedTarget_scale_adjacent_isWarm
+        q I previous
+  have hM8 : (1 : ENNReal) ≤
+      ENNReal.ofReal (8 * speedyAdjacentWarmConstant q) := by
+    rw [← ENNReal.ofReal_one]
+    exact ENNReal.ofReal_le_ofReal <| by
+      nlinarith [speedyAdjacentWarmConstant_one_le q]
+  have hM8M16 : ENNReal.ofReal (8 * speedyAdjacentWarmConstant q) ≤
+      ENNReal.ofReal (16 * speedyAdjacentWarmConstant q) := by
+    exact ENNReal.ofReal_le_ofReal <| by
+      nlinarith [speedyAdjacentWarmConstant_one_le q]
+  apply scheduledBalancedFinalTraceRawPhase_leUpTo_of_immediate
+    q I phase (by rw [figureOneDependentPhaseCount]; omega)
+      (figureOneScheduledGaussianPhaseTarget q I phase)
+  apply bind_scheduledBalancedTracePhaseOutputLaw_leUpTo_of_live_good_bad
+    q I phase hphase rho good bad hM8 ENNReal.ofReal_ne_top hM8M16
+  · simpa [rho, good, scale, previous, hpreviousSucc] using hlive
+  · exact hgood
+  · simpa [rho, scale, eta, previous, hpreviousSucc] using herror
+  · exact measurable_figureOneScheduledTraceLiveRawOutput
+
 /-- Total variation transfers the first moment when the scalar observable is
 bounded only almost everywhere under the two probability measures. -/
 theorem Arlib.TVLe.integral_le_of_ae_nonnegative_le
