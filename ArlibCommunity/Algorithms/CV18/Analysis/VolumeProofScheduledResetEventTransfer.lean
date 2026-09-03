@@ -266,6 +266,64 @@ theorem measure_retainedLiveAverage_deviation_le_raw_add_dead
     (retainedLiveAverage_deviation_subset_raw_union_dead
       count target eps)).trans (measure_union_le _ _)
 
+/-- Scheduled collector form: any initialized-history raw-deviation bound
+becomes a completed phase bound after adding only the collector's final death
+mass. -/
+theorem retainedSum_liveDeviation_le_of_initializedHistory
+    (q : VolumeParams) (I : VolumeInput q.n) (phase count : ℕ)
+    (hcount : 0 < count) (target eps : ℝ) (bound : ENNReal)
+    (hhistory :
+      (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+          {history | eps * target ≤
+            |sequentialPrefixSum
+              (retainedSampleObservation
+                (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+                  (scheduleValue q (phase + 1)))) count history /
+                (count : ℝ) - target|} ≤ bound) :
+    let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+    let K := figureOneFinalScheduledRetainedOptionKernel q I
+      (scheduleValue q phase)
+    let initial :=
+      (truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+          (fun x => (weight x, some x))
+    let shadow := iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+      initial (count - 1)
+    shadow {state | eps * target ≤
+        |retainedLiveTotal state / (count : ℝ) - target|} ≤
+      bound + shadow {state | state.2 = none} := by
+  dsimp only
+  let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+    (scheduleValue q (phase + 1))
+  let K := figureOneFinalScheduledRetainedOptionKernel q I
+    (scheduleValue q phase)
+  let initial :=
+    (truncatedGaussianProbability q I (scheduleValue q phase)
+      (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+        (fun x => (weight x, some x))
+  let shadow := iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+    initial (count - 1)
+  have hrawEq := initializedScheduledRetainedHistory_deviation_eq_retainedSum
+    q I phase count hcount target eps
+  have hsplit := measure_retainedLiveAverage_deviation_le_raw_add_dead
+    shadow count target eps
+  calc
+    shadow {state | eps * target ≤
+        |retainedLiveTotal state / (count : ℝ) - target|} ≤
+      shadow {state | eps * target ≤
+          |state.1 / (count : ℝ) - target|} +
+        shadow {state | state.2 = none} := hsplit
+    _ = (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+          {history | eps * target ≤
+            |sequentialPrefixSum
+              (retainedSampleObservation weight) count history /
+                (count : ℝ) - target|} +
+        shadow {state | state.2 = none} := by
+      rw [hrawEq]
+    _ ≤ bound + shadow {state | state.2 = none} := by
+      gcongr
+
 #print axioms
   MeasureLeUpTo.measure_relativeDeviation_le_of_reference_moments
 #print axioms
@@ -276,5 +334,6 @@ theorem measure_retainedLiveAverage_deviation_le_raw_add_dead
   initializedScheduledRetainedHistory_deviation_eq_retainedSum
 #print axioms retainedLiveAverage_deviation_subset_raw_union_dead
 #print axioms measure_retainedLiveAverage_deviation_le_raw_add_dead
+#print axioms retainedSum_liveDeviation_le_of_initializedHistory
 
 end ArlibCommunity.Algorithms.CV18
