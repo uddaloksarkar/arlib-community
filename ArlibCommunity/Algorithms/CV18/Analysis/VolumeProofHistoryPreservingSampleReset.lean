@@ -1,5 +1,6 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofExactChance
+import ArlibCommunity.Algorithms.CV18.Analysis.Background.HistoryPreservingReset
 
 /-!
 # History-preserving reset before recording a sample
@@ -351,6 +352,66 @@ theorem integral_shadowRecorded_newCoordinate_eq_target
     _ = ∫ x, moment (observe x) ∂target := by
       exact integral_map hobserve.aemeasurable hmoment.aestronglyMeasurable
 
+/-- A state-marginal TV estimate constructs the paper-faithful next
+reference law: its new score is computed from an exact target shadow, while
+its operational next state is exactly the executable one. -/
+theorem exists_shadowRecordedReference_of_nextMarginal_tvLe
+    {H X Y : Type*} [MeasurableSpace H] [MeasurableSpace X]
+    [MeasurableSpace Y]
+    (prefixLaw : Measure (H × X)) [IsProbabilityMeasure prefixLaw]
+    (K : X → Measure X) (record : H → Y → H) (observe : X → Y)
+    (target : Measure X) [IsProbabilityMeasure target]
+    (readNew : H → Y)
+    (hK : Measurable K) (hKprob : ∀ x, IsProbabilityMeasure (K x))
+    (hrecord : Measurable (Function.uncurry record))
+    (hobserve : Measurable observe) (hreadNew : Measurable readNew)
+    (hreadRecord : ∀ history x,
+      readNew (record history (observe x)) = observe x)
+    {epsilon : ENNReal}
+    (hnext : Arlib.TVLe
+      ((prefixLaw.bind (historyRawNextWithCopyKernel K)).map Prod.snd)
+      target epsilon) :
+    ∃ reference : Measure (H × X),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (prefixLaw.bind (historyOperationalRecordKernel K record observe))
+        reference epsilon ∧
+      reference.map (readNew ∘ Prod.fst) = target.map observe ∧
+      reference.map Prod.snd =
+        (prefixLaw.bind
+          (historyOperationalRecordKernel K record observe)).map Prod.snd := by
+  let raw := prefixLaw.bind (historyRawNextWithCopyKernel K)
+  have hrawKernel := historyRawNextWithCopyKernel_measurable_and_probability
+    (H := H) K hK hKprob
+  let _ : IsProbabilityMeasure raw :=
+    isProbabilityMeasure_bind hrawKernel.1.aemeasurable
+      (ae_of_all _ hrawKernel.2)
+  obtain ⟨reset, hresetProb, hresetHistory, hresetTarget, hresetTV⟩ :=
+    exists_historyPreservingReset_of_tvLe raw target (by
+      simpa only [raw] using hnext)
+  let _ : IsProbabilityMeasure reset := hresetProb
+  let reference := reset.map (historyRecordShadowState record observe)
+  have hrecordShadow := measurable_historyRecordShadowState
+    record observe hrecord hobserve
+  have hreferenceProb : IsProbabilityMeasure reference := by
+    exact Measure.isProbabilityMeasure_map hrecordShadow.aemeasurable
+  refine ⟨reference, hreferenceProb, ?_, ?_, ?_⟩
+  · have hresetMlu : MeasureLeUpTo raw reset epsilon :=
+      MeasureLeUpTo.of_tvLe hresetTV
+    simpa only [raw, reference] using
+      (MeasureLeUpTo.historyOperationalRecord_of_shadowReset
+        prefixLaw reset K record observe hK hKprob hrecord hobserve
+        hresetMlu)
+  · simpa only [reference] using
+      map_shadowRecorded_newCoordinate_eq_of_reset_marginal
+        reset target record observe readNew hrecord hobserve hreadNew
+        hreadRecord hresetTarget
+  · have hop := map_shadowRecorded_operationalState_eq_of_reset_history
+      raw reset record observe hrecord hobserve hresetHistory
+    rw [bind_historyRawNextWithCopy_map_recordShadow_eq
+      prefixLaw K record observe hK hKprob hrecord hobserve] at hop
+    simpa only [reference] using hop
+
 #print axioms historyRawNextKernel_measurable_and_probability
 #print axioms historyOperationalRecordKernel_measurable_and_probability
 #print axioms bind_historyRawNextKernel_map_record_eq
@@ -362,6 +423,7 @@ theorem integral_shadowRecorded_newCoordinate_eq_target
 #print axioms map_shadowRecorded_newCoordinate_eq_of_reset_marginal
 #print axioms map_shadowRecorded_operationalState_eq_of_reset_history
 #print axioms integral_shadowRecorded_newCoordinate_eq_target
+#print axioms exists_shadowRecordedReference_of_nextMarginal_tvLe
 
 end
 
