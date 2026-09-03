@@ -68,6 +68,24 @@ theorem measurable_scheduledResetPairToResult :
   unfold scheduledResetPairToResult
   cases result.2 <;> rfl
 
+theorem ae_fst_nonnegative_of_map_eq_liveRaw
+    (joint : Measure (Option (ℝ × AmbientSpace n)))
+    (target : Measure (ℝ × Option (AmbientSpace n)))
+    (hscore : target.map Prod.fst =
+      joint.map figureOneScheduledTraceLiveRawOutput) :
+    ∀ᵐ result ∂target, 0 ≤ result.1 := by
+  have hlive : ∀ᵐ result ∂joint,
+      0 ≤ figureOneScheduledTraceLiveRawOutput result :=
+    ae_of_all _ fun result => by
+      cases result <;> simp [figureOneScheduledTraceLiveRawOutput]
+  have hmapped : ∀ᵐ value
+      ∂(joint.map figureOneScheduledTraceLiveRawOutput), 0 ≤ value :=
+    (ae_map_iff
+      measurable_figureOneScheduledTraceLiveRawOutput.aemeasurable
+      measurableSet_Ici).2 hlive
+  rw [← hscore] at hmapped
+  exact (ae_map_iff measurable_fst.aemeasurable measurableSet_Ici).1 hmapped
+
 /-- The exact Gaussian and normalized accepted endpoint laws differ by the
 single stationary-target error already allocated in the scheduled boundary
 budget. -/
@@ -152,6 +170,7 @@ theorem exists_acceptedEndpointResetJoint_of_joint
         (resetError + scheduledBalancedStationaryTargetError q) ∧
       target.map Prod.snd =
         (figureOneScheduledAcceptedTargetAt q I phase).map some ∧
+      (∀ᵐ result ∂target, 0 ≤ result.1) ∧
       MemLp Prod.fst 2 target ∧
       (∫ result, result.1 ∂target) = mean ∧
       (∫ result, result.1 ^ 2 ∂target) ≤ secondBound := by
@@ -171,6 +190,8 @@ theorem exists_acceptedEndpointResetJoint_of_joint
     exact (memLp_map_measure_iff measurable_id.aestronglyMeasurable
       measurable_fst.aemeasurable).1
         (by convert hmemId using 1 <;> rfl)
+  have hnonneg : ∀ᵐ result ∂target, 0 ≤ result.1 :=
+    ae_fst_nonnegative_of_map_eq_liveRaw joint target hscore
   have hmeanTarget : (∫ result, result.1 ∂target) = mean := by
     calc
       (∫ result, result.1 ∂target) =
@@ -200,7 +221,7 @@ theorem exists_acceptedEndpointResetJoint_of_joint
           measurable_figureOneScheduledTraceLiveRawOutput.aemeasurable
           (measurable_id.pow_const 2).aestronglyMeasurable
       _ ≤ secondBound := hsecond
-  exact ⟨target, htargetProb, hcomparison, htargetState, hmemFst,
+  exact ⟨target, htargetProb, hcomparison, htargetState, hnonneg, hmemFst,
     hmeanTarget, hsecondTarget⟩
 
 /-- Fully instantiated Gaussian phase target on the accepted-endpoint pair
@@ -220,6 +241,7 @@ theorem exists_scheduledGaussianAcceptedPairTarget
           scheduledBalancedStationaryTargetError q) ∧
       target.map Prod.snd =
         (figureOneScheduledAcceptedTargetAt q I phase).map some ∧
+      (∀ᵐ result ∂target, 0 ≤ result.1) ∧
       MemLp Prod.fst 2 target ∧
       (∫ result, result.1 ∂target) =
         figureOneChronologicalRawMean q I (phase + 1) ∧
@@ -290,7 +312,7 @@ theorem exists_scheduledGaussianAcceptedPairTarget
   let _ : IsProbabilityMeasure
       (figureOneScheduledGaussianPhaseTarget q I phase) :=
     figureOneScheduledGaussianPhaseTarget_isProbabilityMeasure q I phase
-  obtain ⟨target, htargetProb, hcomparison, htargetState, htargetMem,
+  obtain ⟨target, htargetProb, hcomparison, htargetState, htargetNonneg, htargetMem,
       htargetMean, htargetSecond⟩ :=
     exists_acceptedEndpointResetJoint_of_joint q I phase
       (figureOneScheduledGaussianPhaseTarget q I phase) joint hjoint
@@ -315,7 +337,8 @@ theorem exists_scheduledGaussianAcceptedPairTarget
         gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
     · simp [hs, figureOneIdealPhaseMean, mean,
         gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
-  refine ⟨target, htargetProb, ?_, htargetState, htargetMem, ?_, ?_⟩
+  refine ⟨target, htargetProb, ?_, htargetState, htargetNonneg,
+    htargetMem, ?_, ?_⟩
   · simpa [count] using hcomparison
   · exact htargetMean.trans hmeanChronological
   · rw [← hmeanChronological]
@@ -337,6 +360,7 @@ theorem exists_scheduledGaussianExactPairTarget
         (scheduledResetReferenceError q
           (figureOnePhaseSampleCount q (scheduleValue q phase) - 1)) ∧
       target.map Prod.snd = scheduledRetainedExactSome q I phase ∧
+      (∀ᵐ result ∂target, 0 ≤ result.1) ∧
       MemLp Prod.fst 2 target ∧
       (∫ result, result.1 ∂target) =
         figureOneChronologicalRawMean q I (phase + 1) ∧
@@ -419,6 +443,10 @@ theorem exists_scheduledGaussianExactPairTarget
     apply (memLp_map_measure_iff measurable_fst.aestronglyMeasurable
       houtput.aemeasurable).2
     convert hmem using 1 <;> rfl
+  have hnonnegTarget : ∀ᵐ result ∂target, 0 ≤ result.1 := by
+    apply ae_fst_nonnegative_of_map_eq_liveRaw joint target
+    rw [Measure.map_map measurable_fst houtput]
+    rfl
   have hmeanTarget : (∫ result, result.1 ∂target) = mean := by
     rw [show target = joint.map scheduledResetPairOutput by rfl,
       integral_map houtput.aemeasurable measurable_fst.aestronglyMeasurable]
@@ -450,7 +478,8 @@ theorem exists_scheduledGaussianExactPairTarget
         gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
     · simp [hs, figureOneIdealPhaseMean, mean,
         gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
-  refine ⟨target, htargetProb, ?_, hstateTarget, hmemTarget, ?_, ?_⟩
+  refine ⟨target, htargetProb, ?_, hstateTarget, hnonnegTarget,
+    hmemTarget, ?_, ?_⟩
   · simpa [target, count] using hjoint.map houtput
   · exact hmeanTarget.trans hmeanChronological
   · rw [← hmeanChronological]
@@ -469,6 +498,7 @@ theorem exists_scheduledTerminalPairTarget
         (scheduledResetReferenceError q (figureOneSampleCount q - 1)) ∧
       target.map Prod.snd =
         scheduledRetainedExactSome q I (terminalPhaseSteps q) ∧
+      (∀ᵐ result ∂target, 0 ≤ result.1) ∧
       MemLp Prod.fst 2 target ∧
       (∫ result, result.1 ∂target) =
         figureOneChronologicalRawMean q I (terminalPhaseSteps q + 1) ∧
@@ -495,6 +525,10 @@ theorem exists_scheduledTerminalPairTarget
     apply (memLp_map_measure_iff measurable_fst.aestronglyMeasurable
       houtput.aemeasurable).2
     convert hmem using 1 <;> rfl
+  have hnonnegTarget : ∀ᵐ result ∂target, 0 ≤ result.1 := by
+    apply ae_fst_nonnegative_of_map_eq_liveRaw joint target
+    rw [Measure.map_map measurable_fst houtput]
+    rfl
   have hmeanTarget : (∫ result, result.1 ∂target) =
       figureOneIdealPhaseMean q I .terminal := by
     rw [show target = joint.map scheduledResetPairOutput by rfl,
@@ -526,7 +560,8 @@ theorem exists_scheduledTerminalPairTarget
         1 + (Real.exp (1 / 2) - 1) / (figureOneSampleCount q : ℝ) := by
     rw [figureOneChronologicalMomentFactor, hterminal]
     rfl
-  refine ⟨target, htargetProb, ?_, hstateTarget, hmemTarget, ?_, ?_⟩
+  refine ⟨target, htargetProb, ?_, hstateTarget, hnonnegTarget,
+    hmemTarget, ?_, ?_⟩
   · simpa [target] using hjoint.map houtput
   · simpa [hmeanChronological] using hmeanTarget
   · simpa [hmeanChronological, hfactorChronological, add_assoc] using
