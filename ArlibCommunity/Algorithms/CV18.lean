@@ -51,6 +51,9 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKLSCore
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.Convexity.SpeedyGaussianMixing
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceMomentAssembly
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceLemma717Capstone
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceSlackMoments
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceRawMeanApprox
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofCountedHybridCap
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledTheoremAssembly
 
 /-!
@@ -64,7 +67,9 @@ the executable lazy proper-step clock, speedy-Gaussian mixing, and amplification
 are unconditional. The current final scheduled assembly is
 `volumeTheorem_finalScheduled_of_baseFailure_and_capFailure`; its two premises
 are the conclusions of the executable trace-accuracy lane and the
-counted-reference global-cap lane. The older
+counted-reference global-cap lane. The concrete Lemma 7.17(c) dependence
+bridge, finite executable moment-factor budget, phasewise raw-mean product
+assembly, and counted-reference cap theorem are exposed here. The older
 `volumeTheorem_of_postInitialMixing` remains available as a compact legacy
 interface.
 
