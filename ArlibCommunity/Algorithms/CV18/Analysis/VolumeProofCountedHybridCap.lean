@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofMeasureApproximation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofGlobalQueryCap
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledParameters
 
 /-! # Transferring a global query cutoff through a counted hybrid
 
@@ -44,7 +45,7 @@ theorem MembershipOracleProgram.mul_runEstimate_withQueryCap_none_le_of_run_leUp
   have hexpensive : expensive = {outcome : Result × ℕ |
       (budget + 1 : ENNReal) ≤ (outcome.2 : ENNReal)} := by
     ext outcome
-    simp only [expensive, Set.mem_setOf_eq]
+    simp only [expensive, Set.mem_ofPred_eq]
     exact_mod_cast Nat.add_one_le_iff
   rw [← hexpensive] at hmarkov
   calc
@@ -70,9 +71,124 @@ theorem MembershipOracleProgram.runEstimate_withQueryCap_none_le_reference_tail
   rw [program.runEstimate_withQueryCap_apply_none oracle budget hmeas]
   exact hdom.event_le _
 
+/-- Numerical final-schedule specialization.  A counted reference using at
+most nine tenths of the selected expected-cost constant and a hybrid loss of
+at most `1/640` makes the shared global cutoff fail with probability at most
+`1/64`.  This is the exact replacement for the invalid attempt to bound the
+unrestricted bad branch by every local syntactic cap. -/
+theorem figureOneFinalScheduledQueryCap_failure_le_of_countedReference
+    {n : ℕ} {Result : Type} [MeasurableSpace Result]
+    (q : VolumeParams) (oracle : AmbientSpace n → Bool)
+    (program : MembershipOracleProgram n Result)
+    (hmeas : program.ExecutionMeasurable oracle)
+    (reference : Measure (Result × ℕ)) {delta : ENNReal}
+    (hdom : MeasureLeUpTo (program.run oracle) reference delta)
+    (href : ∫⁻ outcome, (outcome.2 : ENNReal) ∂reference ≤
+      ENNReal.ofReal ((9 * 10 ^ 29) *
+        volumeScheduledBaseComplexityRate q))
+    (hdelta : delta ≤ ENNReal.ofReal (1 / 640 : ℝ)) :
+    (program.withQueryCap (figureOneFinalScheduledQueryBudget q)).runEstimate
+        oracle {none} ≤ ENNReal.ofReal (1 / 64 : ℝ) := by
+  let budget := figureOneFinalScheduledQueryBudget q
+  let tail := reference {outcome | budget < outcome.2}
+  let base := ENNReal.ofReal
+    (figureOneFinalScheduledExpectedCostConstant *
+      volumeScheduledBaseComplexityRate q)
+  have hbase0 : base ≠ 0 := by
+    exact ENNReal.ofReal_ne_zero_iff.mpr <|
+      mul_pos figureOneFinalScheduledExpectedCostConstant_pos
+        (volumeScheduledBaseComplexityRate_pos q)
+  have hbaseTop : base ≠ ∞ := ENNReal.ofReal_ne_top
+  have hbudget : ENNReal.ofReal (64 : ℝ) * base ≤
+      (budget + 1 : ENNReal) := by
+    have hceil : 64 * figureOneFinalScheduledExpectedCostConstant *
+        volumeScheduledBaseComplexityRate q ≤ (budget : ℝ) := by
+      simpa [budget, figureOneFinalScheduledQueryBudget,
+        globalQueryBudgetOfRate] using Nat.le_ceil
+          (64 * figureOneFinalScheduledExpectedCostConstant *
+            volumeScheduledBaseComplexityRate q)
+    have h := ENNReal.ofReal_le_ofReal hceil
+    rw [ENNReal.ofReal_natCast] at h
+    calc
+      ENNReal.ofReal (64 : ℝ) * base =
+          ENNReal.ofReal (64 *
+            (figureOneFinalScheduledExpectedCostConstant *
+              volumeScheduledBaseComplexityRate q)) := by
+        rw [ENNReal.ofReal_mul (by norm_num : (0 : ℝ) ≤ 64)]
+      _ = ENNReal.ofReal (64 *
+          figureOneFinalScheduledExpectedCostConstant *
+            volumeScheduledBaseComplexityRate q) := by ring_nf
+      _ ≤ (budget : ENNReal) := h
+      _ ≤ (budget + 1 : ENNReal) := by
+        exact_mod_cast Nat.le_add_right budget 1
+  have hmarkov := mul_meas_ge_le_lintegral
+    (show Measurable fun outcome : Result × ℕ =>
+      (outcome.2 : ENNReal) by fun_prop)
+    (budget + 1 : ENNReal) (μ := reference)
+  have hevent : ({outcome : Result × ℕ | budget < outcome.2}) =
+      {outcome : Result × ℕ |
+        (budget + 1 : ENNReal) ≤ (outcome.2 : ENNReal)} := by
+    ext outcome
+    simp only [Set.mem_ofPred_eq]
+    exact_mod_cast Nat.add_one_le_iff
+  rw [← hevent] at hmarkov
+  have hwarmEq : ENNReal.ofReal ((9 * 10 ^ 29) *
+      volumeScheduledBaseComplexityRate q) =
+      base * ENNReal.ofReal (9 / 10 : ℝ) := by
+    rw [← ENNReal.ofReal_mul
+      (by positivity [figureOneFinalScheduledExpectedCostConstant_pos,
+        volumeScheduledBaseComplexityRate_pos q] :
+        0 ≤ figureOneFinalScheduledExpectedCostConstant *
+          volumeScheduledBaseComplexityRate q)]
+    congr 1
+    simp only [figureOneFinalScheduledExpectedCostConstant]
+    ring
+  have hscaled : base * (tail * ENNReal.ofReal (64 : ℝ)) ≤
+      base * ENNReal.ofReal (9 / 10 : ℝ) := by
+    calc
+      base * (tail * ENNReal.ofReal (64 : ℝ)) =
+          (ENNReal.ofReal (64 : ℝ) * base) * tail := by ring
+      _ ≤ (budget + 1 : ENNReal) * tail := by gcongr
+      _ ≤ ∫⁻ outcome, (outcome.2 : ENNReal) ∂reference := hmarkov
+      _ ≤ ENNReal.ofReal ((9 * 10 ^ 29) *
+          volumeScheduledBaseComplexityRate q) := href
+      _ = base * ENNReal.ofReal (9 / 10 : ℝ) := hwarmEq
+  have htailScaled : tail * ENNReal.ofReal (64 : ℝ) ≤
+      ENNReal.ofReal (9 / 10 : ℝ) := by
+    have hdiv : tail * ENNReal.ofReal (64 : ℝ) ≤
+        (base * ENNReal.ofReal (9 / 10 : ℝ)) / base :=
+      (ENNReal.le_div_iff_mul_le (Or.inl hbase0)
+        (Or.inl hbaseTop)).2 (by
+          simpa [mul_comm, mul_left_comm, mul_assoc] using hscaled)
+    have hcancel : (base * ENNReal.ofReal (9 / 10 : ℝ)) / base =
+        ENNReal.ofReal (9 / 10 : ℝ) := by
+      rw [ENNReal.div_eq_inv_mul, ← mul_assoc,
+        ENNReal.inv_mul_cancel hbase0 hbaseTop, one_mul]
+    simpa only [hcancel] using hdiv
+  have htail : tail ≤ ENNReal.ofReal (9 / 640 : ℝ) := by
+    have h := (ENNReal.le_div_iff_mul_le
+      (Or.inl (by norm_num)) (Or.inl ENNReal.ofReal_ne_top)).2 htailScaled
+    rw [← ENNReal.ofReal_div_of_pos (by norm_num : (0 : ℝ) < 64)] at h
+    norm_num at h
+    exact h
+  calc
+    (program.withQueryCap budget).runEstimate oracle {none} ≤
+        tail + delta := by
+      simpa only [budget, tail] using
+        program.runEstimate_withQueryCap_none_le_reference_tail oracle budget
+          hmeas reference hdom
+    _ ≤ ENNReal.ofReal (9 / 640 : ℝ) +
+        ENNReal.ofReal (1 / 640 : ℝ) := add_le_add htail hdelta
+    _ = ENNReal.ofReal (1 / 64 : ℝ) := by
+      rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 9 / 640)
+        (by norm_num : (0 : ℝ) ≤ 1 / 640)]
+      congr 1
+      norm_num
+
 #print axioms
   MembershipOracleProgram.mul_runEstimate_withQueryCap_none_le_of_run_leUpTo
 #print axioms
   MembershipOracleProgram.runEstimate_withQueryCap_none_le_reference_tail
+#print axioms figureOneFinalScheduledQueryCap_failure_le_of_countedReference
 
 end ArlibCommunity.Algorithms.CV18
