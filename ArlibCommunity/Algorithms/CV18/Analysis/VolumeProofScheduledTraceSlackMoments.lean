@@ -244,6 +244,132 @@ theorem scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor_budget
     _ ≤ (1 + q.eps ^ 2 / 32) * truncated ^ 2 :=
       mul_le_mul_of_nonneg_right (hbudget i hi) (sq_nonneg truncated)
 
+/-! ## An explicit per-phase finite-walk slack budget -/
+
+/-- Multiplicative slack available to the executable collector in each
+phase after reserving the paper's ideal moment and truncation budgets. -/
+noncomputable def figureOneExecutableMomentSlack (q : VolumeParams) : ℝ :=
+  q.eps ^ 2 / (4096 * (figureOneDependentPhaseCount q : ℝ))
+
+/-- The chronological ideal factor enlarged by the available executable
+finite-walk slack. -/
+noncomputable def figureOneExecutableMomentFactor
+    (q : VolumeParams) (j : ℕ) : ℝ :=
+  figureOneChronologicalMomentFactor q j *
+    (1 + figureOneExecutableMomentSlack q)
+
+theorem figureOneExecutableMomentSlack_nonneg (q : VolumeParams) :
+    0 ≤ figureOneExecutableMomentSlack q := by
+  unfold figureOneExecutableMomentSlack
+  positivity
+
+theorem figureOne_one_add_executableMomentSlack_pow_le_exp
+    (q : VolumeParams) {i : ℕ} (hi : i ≤ figureOneDependentPhaseCount q) :
+    (1 + figureOneExecutableMomentSlack q) ^ i ≤
+      Real.exp (q.eps ^ 2 / 4096) := by
+  let delta := figureOneExecutableMomentSlack q
+  have hdelta0 : 0 ≤ delta := figureOneExecutableMomentSlack_nonneg q
+  have hbase : 1 + delta ≤ Real.exp delta := by
+    simpa [add_comm] using Real.add_one_le_exp delta
+  have hpow : (1 + delta) ^ i ≤ Real.exp delta ^ i :=
+    pow_le_pow_left₀ (by positivity) hbase i
+  rw [← Real.exp_nat_mul] at hpow
+  have hiR : (i : ℝ) ≤ figureOneDependentPhaseCount q := by
+    exact_mod_cast hi
+  have hmR : (0 : ℝ) < figureOneDependentPhaseCount q := by
+    exact_mod_cast figureOneDependentPhaseCount_pos q
+  have hdelta : (i : ℝ) * delta ≤ q.eps ^ 2 / 4096 := by
+    dsimp only [delta, figureOneExecutableMomentSlack]
+    calc
+      (i : ℝ) *
+          (q.eps ^ 2 / (4096 * figureOneDependentPhaseCount q)) ≤
+          figureOneDependentPhaseCount q *
+            (q.eps ^ 2 / (4096 * figureOneDependentPhaseCount q)) :=
+        mul_le_mul_of_nonneg_right hiR (by positivity)
+      _ = q.eps ^ 2 / 4096 := by
+        field_simp [hmR.ne']
+  change (1 + delta) ^ i ≤ _
+  exact hpow.trans (Real.exp_le_exp.mpr hdelta)
+
+theorem figureOneExecutableMomentFactor_partialProduct_le_exp
+    (q : VolumeParams) {i : ℕ} (hi : i ≤ figureOneDependentPhaseCount q) :
+    dependentPhaseMeanProduct (figureOneExecutableMomentFactor q) i ≤
+      Real.exp (105 * q.eps ^ 2 / 4096) := by
+  have hideal := figureOneChronologicalMomentFactor_partialProduct_le_exp q hi
+  have hslack := figureOne_one_add_executableMomentSlack_pow_le_exp q hi
+  have hideal0 : 0 ≤ dependentPhaseMeanProduct
+      (figureOneChronologicalMomentFactor q) i :=
+    dependentPhaseMeanProduct_nonneg _ (fun j =>
+      zero_le_one.trans (figureOneChronologicalMomentFactor_one_le q j)) i
+  have hslack0 : 0 ≤ (1 + figureOneExecutableMomentSlack q) ^ i :=
+    pow_nonneg (by linarith [figureOneExecutableMomentSlack_nonneg q]) i
+  rw [show dependentPhaseMeanProduct (figureOneExecutableMomentFactor q) i =
+      dependentPhaseMeanProduct (figureOneChronologicalMomentFactor q) i *
+        (1 + figureOneExecutableMomentSlack q) ^ i by
+    unfold dependentPhaseMeanProduct figureOneExecutableMomentFactor
+    rw [Finset.prod_mul_distrib]
+    simp]
+  calc
+    _ ≤ Real.exp (13 * q.eps ^ 2 / 512) *
+        Real.exp (q.eps ^ 2 / 4096) :=
+      mul_le_mul hideal hslack hslack0 (Real.exp_pos _).le
+    _ = Real.exp (105 * q.eps ^ 2 / 4096) := by
+      rw [← Real.exp_add]
+      congr 1
+      ring
+
+theorem figureOne_exp_113_eps_sq_div_4096_le (q : VolumeParams) :
+    Real.exp (113 * q.eps ^ 2 / 4096) ≤ 1 + q.eps ^ 2 / 32 := by
+  let y := q.eps ^ 2
+  let x := 113 * y / 4096
+  have hy0 : 0 ≤ y := sq_nonneg q.eps
+  have hy1 : y ≤ 1 := by
+    dsimp [y]
+    nlinarith [q.heps.1, q.heps.2]
+  have hx0 : 0 ≤ x := by dsimp [x]; positivity
+  have hx2 : x < 2 := by dsimp [x]; nlinarith
+  have hexp : Real.exp x ≤ (2 + x) / (2 - x) :=
+    Real.exp_le_two_add_div_two_sub hx0 hx2
+  have hrational : (2 + x) / (2 - x) ≤ 1 + y / 32 := by
+    rw [div_le_iff₀ (sub_pos.mpr hx2)]
+    dsimp [x]
+    nlinarith [mul_nonneg hy0 (sub_nonneg.mpr hy1)]
+  change Real.exp x ≤ 1 + y / 32
+  exact hexp.trans hrational
+
+/-- The explicit enlarged factors fit every finite prefix of the exact
+budget consumed by the executable Lemma 7.15 capstone. -/
+theorem figureOneExecutableMomentFactor_budget
+    (q : VolumeParams) {i : ℕ} (hi : i ≤ figureOneDependentPhaseCount q) :
+    dependentPhaseMeanProduct (figureOneExecutableMomentFactor q) i *
+        ((1 + 1 / figureOneDependentAlpha q) ^ i) ^ 2 ≤
+      1 + q.eps ^ 2 / 32 := by
+  have hfactor := figureOneExecutableMomentFactor_partialProduct_le_exp q hi
+  have htrunc := figureOne_one_add_inv_alpha_pow_le_exp q hi
+  have htrunc0 : 0 ≤ (1 + 1 / figureOneDependentAlpha q) ^ i := by
+    apply pow_nonneg
+    have ha := figureOneDependentAlpha_pos q
+    have hinv : 0 ≤ 1 / figureOneDependentAlpha q :=
+      (one_div_pos.mpr ha).le
+    linarith
+  have htruncSq : ((1 + 1 / figureOneDependentAlpha q) ^ i) ^ 2 ≤
+      Real.exp (q.eps ^ 2 / 1024) ^ 2 :=
+    (sq_le_sq₀ htrunc0 (Real.exp_pos _).le).2 htrunc
+  calc
+    _ ≤ Real.exp (105 * q.eps ^ 2 / 4096) *
+        Real.exp (q.eps ^ 2 / 1024) ^ 2 :=
+      mul_le_mul hfactor htruncSq (sq_nonneg _) (Real.exp_pos _).le
+    _ = Real.exp (113 * q.eps ^ 2 / 4096) := by
+      rw [show Real.exp (q.eps ^ 2 / 1024) ^ 2 =
+        Real.exp (2 * (q.eps ^ 2 / 1024)) by
+          rw [pow_two, ← Real.exp_add]
+          congr 1
+          ring,
+        ← Real.exp_add]
+      congr 1
+      ring
+    _ ≤ _ := figureOne_exp_113_eps_sq_div_4096_le q
+
 /-- A coarse local second moment is enough to turn raw-product bias into the
 truncated-product bias consumed by Lemma 7.15. -/
 theorem scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal_of_two
@@ -469,6 +595,10 @@ theorem figureOneFinalScheduledAbortBase_failure_le_of_phase_factor_budget
   scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor
 #print axioms
   scheduledFigureOneTrace_truncatedSecondProduct_le_of_factor_budget
+#print axioms figureOne_one_add_executableMomentSlack_pow_le_exp
+#print axioms figureOneExecutableMomentFactor_partialProduct_le_exp
+#print axioms figureOne_exp_113_eps_sq_div_4096_le
+#print axioms figureOneExecutableMomentFactor_budget
 #print axioms
   scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal_of_two
 #print axioms
