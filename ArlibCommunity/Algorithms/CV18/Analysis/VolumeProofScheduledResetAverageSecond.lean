@@ -18,7 +18,7 @@ noncomputable section
 /-- A scheduled Gaussian phase admits a fixed-cost reference whose empirical
 average satisfies equation (6) with the explicit transported dependence
 coefficient. -/
-theorem exists_scheduledRetainedResetReference_average_secondMoment
+theorem exists_scheduledRetainedResetReference_average_secondMoment_with_state
     (q : VolumeParams) (I : VolumeInput q.n) (phase count : ℕ)
     (hcount : 0 < count)
     (hcountMax : count ≤ figureOneDependentMaxSampleCount q)
@@ -44,6 +44,8 @@ theorem exists_scheduledRetainedResetReference_average_secondMoment
       MeasureLeUpTo
         (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
         reference (scheduledResetReferenceError q (count - 1)) ∧
+      reference.map retainedSampleHistoryState =
+        scheduledRetainedExactSome q I phase ∧
       MemLp (fun history =>
         sequentialPrefixSum
           (retainedSampleObservation
@@ -71,8 +73,8 @@ theorem exists_scheduledRetainedResetReference_average_secondMoment
               3 * (scheduledResetReferenceError q (count - 1)).toReal) ^
                 (1 / 3 : ℝ) *
             (1 - 1 / (count : ℝ)) * A ^ 2 := by
-  obtain ⟨reference, hreferenceProb, hmlu, hcoordinates, hind⟩ :=
-    exists_scheduledRetainedResetReference_all_approxIndep
+  obtain ⟨reference, hreferenceProb, hmlu, hcoordinates, hstate, hind⟩ :=
+    exists_scheduledRetainedResetReference_all_approxIndep_with_state
       q I phase count hcount hcountMax
   let _ : IsProbabilityMeasure reference := hreferenceProb
   let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
@@ -150,11 +152,74 @@ theorem exists_scheduledRetainedResetReference_average_secondMoment
       hYsecond (fun i hi => (hprefix i hi).1)
       (fun i hi => by simpa [Y, weight] using (hprefix i hi).2)
       hYcube (by simpa [epsilon, Y, weight] using hind)
-  refine ⟨reference, hreferenceProb, hmlu, ?_, ?_, ?_⟩
+  refine ⟨reference, hreferenceProb, hmlu, hstate, ?_, ?_, ?_⟩
   · simpa [Y, weight, sequentialPrefixSum] using havgMem
   · simpa [Y, weight, sequentialPrefixSum] using havgMean
   · simpa [epsilon, Y, weight] using havg
 
+/-- Compatibility form of the Gaussian reset reference when its exact final
+retained-state marginal is not needed by the caller. -/
+theorem exists_scheduledRetainedResetReference_average_secondMoment
+    (q : VolumeParams) (I : VolumeInput q.n) (phase count : ℕ)
+    (hcount : 0 < count)
+    (hcountMax : count ≤ figureOneDependentMaxSampleCount q)
+    {A mean factor : ℝ} (hA : 0 < A) (hmean0 : 0 ≤ mean)
+    (hcoordinateMean :
+      (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) ≤ mean)
+    (hcoordinateSecond :
+      (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x ^ 2
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) ≤
+        factor * mean ^ 2)
+    (hcoordinateThird :
+      (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x ^ 3
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) ≤ A ^ 3) :
+    ∃ reference : Measure (RetainedSampleHistory (AmbientSpace q.n)),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+        reference (scheduledResetReferenceError q (count - 1)) ∧
+      MemLp (fun history =>
+        sequentialPrefixSum
+          (retainedSampleObservation
+            (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+              (scheduleValue q (phase + 1)))) count history /
+            (count : ℝ)) 2 reference ∧
+      (∫ history,
+          sequentialPrefixSum
+            (retainedSampleObservation
+              (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+                (scheduleValue q (phase + 1)))) count history /
+              (count : ℝ) ∂reference) =
+        ∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+            (scheduleValue q (phase + 1)) x
+          ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+            (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)) ∧
+      (∫ history,
+          (sequentialPrefixSum
+            (retainedSampleObservation
+              (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+                (scheduleValue q (phase + 1)))) count history /
+              (count : ℝ)) ^ 2 ∂reference) ≤
+        (1 + (factor - 1) / (count : ℝ)) * mean ^ 2 +
+          3 * (figureOneDependentEpsilon q +
+              3 * (scheduledResetReferenceError q (count - 1)).toReal) ^
+                (1 / 3 : ℝ) *
+            (1 - 1 / (count : ℝ)) * A ^ 2 := by
+  obtain ⟨reference, hprob, hmlu, _hstate, hmem, hmean, hsecond⟩ :=
+    exists_scheduledRetainedResetReference_average_secondMoment_with_state
+      q I phase count hcount hcountMax hA hmean0 hcoordinateMean
+        hcoordinateSecond hcoordinateThird
+  exact ⟨reference, hprob, hmlu, hmem, hmean, hsecond⟩
+
+#print axioms
+  exists_scheduledRetainedResetReference_average_secondMoment_with_state
 #print axioms exists_scheduledRetainedResetReference_average_secondMoment
 
 end
