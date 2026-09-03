@@ -2,6 +2,8 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofGlobalResetReferenceWitnessConstructor
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledChronologicalPreservation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledInitialAcceptedReference
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledLocalResetDependenceBudget
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalTraceReset
 
 /-!
 # Finite invariant for the global chronological reset reference
@@ -188,6 +190,99 @@ theorem ScheduledGlobalResetPrefixInvariant.extend
         q I phase i hphase.le (by omega) source reference hprefix
           (hsource.approxIndep i (by omega))
 
+/-- Apply the terminal equation-(6) reset to a completed Gaussian-prefix
+invariant.  This is the final induction step, including all old joint
+independence facts and the newly created terminal-coordinate fact. -/
+theorem exists_scheduledTerminalReference_of_gaussianPrefixInvariant
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (source : Measure (ScheduledBalancedCoolingTrace q.n))
+    [IsProbabilityMeasure source]
+    (hsource : ScheduledGlobalGaussianPrefixInvariant q I
+      (terminalPhaseSteps q) source) :
+    ∃ reference : Measure (ScheduledBalancedCoolingTrace q.n),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (source.bind (scheduledBalancedTracePhaseKernel
+          figureOneFinalScheduledBalancedParameters q I
+            (terminalPhaseSteps q)))
+        reference
+        (figureOneCorrectedTransitionBudget q +
+          scheduledResetReferenceError q (figureOneSampleCount q - 1)) ∧
+      ScheduledGlobalResetPrefixInvariant q I
+        (figureOneDependentPhaseCount q) reference := by
+  let phase := terminalPhaseSteps q
+  let W := figureOneScheduledReferenceCoordinateExtension q I
+  let mean := figureOneChronologicalTruncatedMean q I source W
+  let oldStatistic := dependentTruncatedProduct
+    (figureOneDependentAlpha q) mean
+      (figureOneChronologicalTruncatedPhase q I W) phase
+  have hphase : phase < figureOneDependentPhaseCount q := by
+    dsimp only [phase]
+    rw [figureOneDependentPhaseCount]
+    omega
+  have holdMeas : Measurable oldStatistic := by
+    dsimp only [oldStatistic]
+    exact measurable_dependentTruncatedProduct
+      (figureOneDependentAlpha q) mean
+      (figureOneChronologicalTruncatedPhase q I W)
+      (fun j => figureOneChronologicalTruncatedPhase_measurable q I W
+        (fun k => measurable_figureOneScheduledReferenceCoordinateExtension
+          q I k) j) phase
+  have holdAppend : ∀ trace result,
+      ScheduledBalancedCoolingTraceValid phase trace → trace.2 = true →
+      ScheduledResetPairGood result →
+      oldStatistic (scheduledResetTraceAppend (trace, result)) =
+        oldStatistic trace := by
+    intro trace result hvalid _ _
+    have hfactor :=
+      dependentTruncatedProduct_chronological_extension_factor_prefix
+        q I phase phase hphase.le le_rfl mean
+    have hfactor' :
+        dependentTruncatedProduct (figureOneDependentAlpha q) mean
+            (figureOneChronologicalTruncatedPhase q I W) phase =
+          scheduledResetPrefixChronologicalTruncatedProduct
+              q I phase mean phase ∘
+            scheduledResetPrefixCoordinates q phase := by
+      simpa only [W] using hfactor
+    dsimp only [oldStatistic]
+    rw [hfactor']
+    simp only [Function.comp_apply]
+    rw [scheduledResetPrefixCoordinates_resetAppend_eq q phase hphase
+      trace hvalid result]
+  obtain ⟨reference, hreferenceProb, hcomparison, _, hprefix,
+      hnewMem, hnewMean, hnewSecond, hnewRawInd, hsupport⟩ :=
+    exists_scheduledTerminalTraceRecordedReset_with_prefix
+      q I source hsource.toScheduledGlobalResetPrefixInvariant.valid
+      hsource.toScheduledGlobalResetPrefixInvariant.coordinates_nonnegative
+      (by simpa only [phase] using hsource.retained)
+      oldStatistic holdMeas (by simpa only [phase] using holdAppend)
+  let _ : IsProbabilityMeasure reference := hreferenceProb
+  have hcreated :=
+    ApproxIndepFun.chronological_extension_created_of_resetPrefix_map_eq
+      q I phase hphase source reference (by simpa only [phase] using hprefix)
+      (by simpa only [oldStatistic, mean, W, phase] using hnewRawInd)
+  have hnewInd : ApproxIndepFun
+      ((5 / 2 : ℝ) * figureOneDependentEpsilon q)
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I reference W)
+        (figureOneChronologicalTruncatedPhase q I W) phase)
+      (figureOneChronologicalTruncatedPhase q I W (phase + 1))
+      reference :=
+    hcreated.mono (figureOne_localTransitionReset_dependence_le q
+      (figureOneTerminalSampleCount_le_dependentMax q))
+  have hinvariant : ScheduledGlobalResetPrefixInvariant q I (phase + 1)
+      reference :=
+    hsource.toScheduledGlobalResetPrefixInvariant.extend q I phase hphase
+      source reference (by simpa only [phase] using hprefix)
+      (by simpa only [phase] using hnewMem)
+      (by simpa only [phase] using hnewMean)
+      (by simpa only [phase] using hnewSecond)
+      (by simpa only [W] using hnewInd)
+      (by simpa only [phase] using hsupport)
+  refine ⟨reference, hreferenceProb, ?_, ?_⟩
+  · simpa only [phase] using hcomparison
+  · simpa only [phase, figureOneDependentPhaseCount] using hinvariant
+
 /-- Once the finite recurrence has supplied all chronological coordinates,
 the remaining global trace comparison is exactly the input expected by the
 single final witness constructor. -/
@@ -212,6 +307,8 @@ noncomputable def GlobalResetReferenceWitness.of_completed_prefixInvariant
 #print axioms
   scheduledBalancedInitialAcceptedTraceReference_prefixInvariant
 #print axioms ScheduledGlobalResetPrefixInvariant.extend
+#print axioms
+  exists_scheduledTerminalReference_of_gaussianPrefixInvariant
 #print axioms GlobalResetReferenceWitness.of_completed_prefixInvariant
 
 end
