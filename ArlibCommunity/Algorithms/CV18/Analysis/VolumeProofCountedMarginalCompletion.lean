@@ -1,5 +1,5 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
-import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofMeasureApproximation
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofExactChance
 import Mathlib.Probability.Kernel.Disintegration.Integral
 
 /-! # Cost-preserving completion of an approximate endpoint marginal -/
@@ -18,6 +18,19 @@ private theorem compProd_mono_left_cv18
   intro A hA
   rw [Measure.compProd_apply hA, Measure.compProd_apply hA]
   exact lintegral_mono' h le_rfl
+
+private theorem isFiniteMeasure_bind_probability_cv18
+    {S T : Type*} [MeasurableSpace S] [MeasurableSpace T]
+    (mu : Measure S) [IsFiniteMeasure mu] (K : S → Measure T)
+    (hKmeas : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state)) :
+    IsFiniteMeasure (mu.bind K) := by
+  refine ⟨?_⟩
+  rw [Measure.bind_apply MeasurableSet.univ hKmeas.aemeasurable]
+  have hmass : ∀ state, K state Set.univ = 1 := fun state =>
+    @measure_univ _ _ (K state) (hKprob state)
+  simp_rw [hmass]
+  simp
 
 /-- A small additive error in the endpoint marginal of a counted law can be
 lifted to the full counted law without paying a syntactic cost cap.
@@ -113,6 +126,79 @@ theorem exists_countedReference_of_fst_leUpTo
       _ ≤ ∫⁻ outcome, (outcome.2 : ENNReal) ∂joint :=
         lintegral_mono' hgoodLe le_rfl
 
+/-- Chronological counted-reference induction.
+
+At each stage, the executable counted kernel is run from the already
+completed reference prefix.  The only state-distribution fact exposed to the
+next phase is the exact first marginal.  `exists_countedReference_of_fst_leUpTo`
+then discards the new endpoint error and fills its missing mass at count zero.
+Thus errors add as probabilities, while expected query counts add only the
+per-phase reference costs; there is no `cost cap * error` term. -/
+theorem exists_countedReference_iteratedKernelLaw
+    {S : Type*} [MeasurableSpace S] [StandardBorelSpace S]
+    (actualK : ℕ → (S × ℕ) → Measure (S × ℕ))
+    (actualInitial : Measure (S × ℕ)) [IsFiniteMeasure actualInitial]
+    (ideal : ℕ → Measure S)
+    {initialError : ENNReal} (stepError phaseCost : ℕ → ENNReal)
+    (hidealFinite : ∀ i, IsFiniteMeasure (ideal i))
+    (hinitial : MeasureLeUpTo actualInitial.fst (ideal 0) initialError)
+    (hKmeas : ∀ i, Measurable (actualK i))
+    (hKprob : ∀ i state, IsProbabilityMeasure (actualK i state))
+    (hstep : ∀ i (rho : Measure (S × ℕ)),
+      IsFiniteMeasure rho → rho.fst = ideal i →
+      MeasureLeUpTo ((rho.bind (actualK i)).fst) (ideal (i + 1))
+          (stepError i) ∧
+      (∫⁻ outcome, (outcome.2 : ENNReal) ∂rho.bind (actualK i)) ≤
+        (∫⁻ outcome, (outcome.2 : ENNReal) ∂rho) + phaseCost i) :
+    ∀ t, ∃ reference : Measure (S × ℕ),
+      MeasureLeUpTo (iteratedKernelLaw actualK actualInitial t) reference
+        (initialError + ∑ i ∈ Finset.range t, stepError i) ∧
+      reference.fst = ideal t ∧
+      (∫⁻ outcome, (outcome.2 : ENNReal) ∂reference) ≤
+        (∫⁻ outcome, (outcome.2 : ENNReal) ∂actualInitial) +
+          ∑ i ∈ Finset.range t, phaseCost i := by
+  intro t
+  induction t with
+  | zero =>
+      let _ : IsFiniteMeasure (ideal 0) := hidealFinite 0
+      obtain ⟨reference, hdom, hmarginal, hcost⟩ :=
+        exists_countedReference_of_fst_leUpTo actualInitial (ideal 0) hinitial
+      refine ⟨reference, ?_, hmarginal, ?_⟩
+      · simpa using hdom
+      · simpa using hcost
+  | succ t ih =>
+      obtain ⟨reference, hdom, hmarginal, hcost⟩ := ih
+      have hreferenceFinite : IsFiniteMeasure reference := ⟨by
+        rw [← Measure.fst_univ, hmarginal]
+        exact measure_lt_top (ideal t) Set.univ⟩
+      let _ : IsFiniteMeasure reference := hreferenceFinite
+      let _ : IsFiniteMeasure (ideal (t + 1)) := hidealFinite (t + 1)
+      have hphase := hstep t reference hreferenceFinite hmarginal
+      let _ : IsFiniteMeasure (reference.bind (actualK t)) :=
+        isFiniteMeasure_bind_probability_cv18 reference (actualK t)
+          (hKmeas t) (hKprob t)
+      obtain ⟨nextReference, hnextDom, hnextMarginal, hnextCost⟩ :=
+        exists_countedReference_of_fst_leUpTo
+          (reference.bind (actualK t)) (ideal (t + 1)) hphase.1
+      refine ⟨nextReference, ?_, hnextMarginal, ?_⟩
+      · have hbind := hdom.bind_same (hKmeas t) (hKprob t)
+        simpa only [iteratedKernelLaw_succ, Finset.sum_range_succ,
+          add_assoc] using hbind.trans hnextDom
+      · calc
+          (∫⁻ outcome, (outcome.2 : ENNReal) ∂nextReference) ≤
+              ∫⁻ outcome, (outcome.2 : ENNReal)
+                ∂reference.bind (actualK t) := hnextCost
+          _ ≤ (∫⁻ outcome, (outcome.2 : ENNReal) ∂reference) +
+              phaseCost t := hphase.2
+          _ ≤ ((∫⁻ outcome, (outcome.2 : ENNReal) ∂actualInitial) +
+                ∑ i ∈ Finset.range t, phaseCost i) + phaseCost t := by
+              gcongr
+          _ = (∫⁻ outcome, (outcome.2 : ENNReal) ∂actualInitial) +
+                ∑ i ∈ Finset.range (t + 1), phaseCost i := by
+              rw [Finset.sum_range_succ]
+              exact add_assoc _ _ _
+
 #print axioms exists_countedReference_of_fst_leUpTo
+#print axioms exists_countedReference_iteratedKernelLaw
 
 end ArlibCommunity.Algorithms.CV18
