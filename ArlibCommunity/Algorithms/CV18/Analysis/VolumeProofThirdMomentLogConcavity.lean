@@ -1,5 +1,6 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofLogConcavity
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofStationary
 
 open MeasureTheory
 open scoped ENNReal
@@ -250,8 +251,127 @@ theorem integral_gaussianPerspective_mul_sq_le_cube {n : ℕ}
     ← ENNReal.ofReal_pow hIm0] at hcubeLift
   exact (ENNReal.ofReal_le_ofReal_iff (by positivity)).mp hcubeLift
 
+/-- Weighted Gaussian partition log-concavity at weights `1/3,2/3`. -/
+def GaussianPartitionOneThirdLogConcave {n : ℕ}
+    (K : Set (AmbientSpace n)) : Prop :=
+  ∀ ⦃a b : ℝ⦄, 0 < a → 0 < b →
+    (a ^ (n + 1) * gaussianIntegral K (1 / a)) *
+        (b ^ (n + 1) * gaussianIntegral K (1 / b)) ^ 2 ≤
+      (((a + 2 * b) / 3) ^ (n + 1) *
+        gaussianIntegral K (3 / (a + 2 * b))) ^ 3
+
+/-- Prékopa--Leindler proves weighted one-third Gaussian partition
+log-concavity for every measurable convex set. -/
+theorem gaussianPartitionOneThirdLogConcave {n : ℕ}
+    (K : Set (AmbientSpace n)) (hKmeas : MeasurableSet K)
+    (hKconv : Convex ℝ K) : GaussianPartitionOneThirdLogConcave K := by
+  intro a b ha hb
+  have hm : 0 < (a + 2 * b) / 3 := by positivity
+  have h := integral_gaussianPerspective_mul_sq_le_cube
+    K hKmeas hKconv ha hb
+  rw [integral_gaussianPerspective_eq K ha,
+    integral_gaussianPerspective_eq K hb,
+    integral_gaussianPerspective_eq K hm] at h
+  have hvariance : 1 / ((a + 2 * b) / 3) = 3 / (a + 2 * b) := by
+    field_simp [(by positivity : 0 < a + 2 * b).ne']
+  rw [hvariance] at h
+  exact h
+
+theorem truncatedBody_gaussianPartitionOneThirdLogConcave
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    GaussianPartitionOneThirdLogConcave (truncatedBody q I) :=
+  gaussianPartitionOneThirdLogConcave (truncatedBody q I)
+    (truncatedBody_measurable q I) (truncatedVolumeInput q I).body.convex
+
+/-- The one-third partition inequality bounds the relative third moment by
+the explicit precision-ratio factor. -/
+theorem gaussianRatioWeight_relativeThirdMoment_le_of_oneThird
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (honeThird : GaussianPartitionOneThirdLogConcave (truncatedBody q I))
+    {s t : ℝ} (hs : 0 < s) (hst : s ≤ t) (hthree : 2 * t < 3 * s) :
+    ((∫ x, gaussianRatioWeight s t x ^ 3
+        ∂(truncatedGaussianProbability q I s hs : Measure (AmbientSpace q.n))) /
+      (∫ x, gaussianRatioWeight s t x
+        ∂(truncatedGaussianProbability q I s hs : Measure (AmbientSpace q.n))) ^ 3) ≤
+      (s ^ 3 / (t ^ 2 * (3 * s - 2 * t))) ^ (q.n + 1) := by
+  let a : ℝ := 3 / t - 2 / s
+  let b : ℝ := 1 / s
+  let m : ℝ := 1 / t
+  let u : ℝ := s * t / (3 * s - 2 * t)
+  have ht : 0 < t := hs.trans_le hst
+  have hden : 0 < 3 * s - 2 * t := by linarith
+  have ha : 0 < a := by
+    dsimp [a]
+    rw [sub_pos]
+    apply (div_lt_div_iff₀ hs ht).2
+    nlinarith
+  have hb : 0 < b := by dsimp [b]; positivity
+  have hm : 0 < m := by dsimp [m]; positivity
+  have hu : 0 < u := by dsimp [u]; positivity
+  have hau : 1 / a = u := by
+    dsimp [a, u]
+    field_simp [hs.ne', ht.ne', hden.ne']
+  have hbs : 1 / b = s := by dsimp [b]; field_simp
+  have habm : (a + 2 * b) / 3 = m := by
+    dsimp [a, b, m]
+    field_simp [hs.ne', ht.ne']
+    ring
+  have habt : 3 / (a + 2 * b) = t := by
+    rw [show a + 2 * b = 3 * m by linarith [habm]]
+    dsimp [m]
+    field_simp [ht.ne']
+  have hpartition := honeThird ha hb
+  rw [hau, hbs, habm, habt] at hpartition
+  let Zs := gaussianIntegral (truncatedBody q I) s
+  let Zt := gaussianIntegral (truncatedBody q I) t
+  let Zu := gaussianIntegral (truncatedBody q I) u
+  have hZs : 0 < Zs := by
+    simpa [Zs] using gaussianIntegral_pos q (truncatedVolumeInput q I) hs
+  have hZt : 0 < Zt := by
+    simpa [Zt] using gaussianIntegral_pos q (truncatedVolumeInput q I) ht
+  have hZu : 0 < Zu := by
+    simpa [Zu] using gaussianIntegral_pos q (truncatedVolumeInput q I) hu
+  have hquotient : Zu * Zs ^ 2 / Zt ^ 3 ≤
+      (m ^ 3 / (a * b ^ 2)) ^ (q.n + 1) := by
+    rw [div_le_iff₀ (pow_pos hZt 3)]
+    have habpow : 0 < a ^ (q.n + 1) * (b ^ (q.n + 1)) ^ 2 := by positivity
+    have hraw : Zu * Zs ^ 2 ≤
+        (m ^ (q.n + 1) * Zt) ^ 3 /
+          (a ^ (q.n + 1) * (b ^ (q.n + 1)) ^ 2) := by
+      apply (le_div_iff₀ habpow).2
+      change (a ^ (q.n + 1) * Zu) *
+          (b ^ (q.n + 1) * Zs) ^ 2 ≤
+        (m ^ (q.n + 1) * Zt) ^ 3 at hpartition
+      calc
+        (Zu * Zs ^ 2) *
+              (a ^ (q.n + 1) * (b ^ (q.n + 1)) ^ 2) =
+            (a ^ (q.n + 1) * Zu) *
+              (b ^ (q.n + 1) * Zs) ^ 2 := by ring
+        _ ≤ (m ^ (q.n + 1) * Zt) ^ 3 := hpartition
+    calc
+      Zu * Zs ^ 2 ≤
+          (m ^ (q.n + 1) * Zt) ^ 3 /
+            (a ^ (q.n + 1) * (b ^ (q.n + 1)) ^ 2) := hraw
+      _ = (m ^ 3 / (a * b ^ 2)) ^ (q.n + 1) * Zt ^ 3 := by
+        simp only [div_pow, mul_pow]
+        ring
+  rw [gaussianRatioWeight_thirdMoment_eq q I hs ht,
+    gaussianRatioWeight_mean_eq q I hs]
+  change (Zu / Zs) / (Zt / Zs) ^ 3 ≤ _
+  have hrewrite : (Zu / Zs) / (Zt / Zs) ^ 3 = Zu * Zs ^ 2 / Zt ^ 3 := by
+    field_simp [hZs.ne', hZt.ne']
+  rw [hrewrite]
+  have hfactor : m ^ 3 / (a * b ^ 2) =
+      s ^ 3 / (t ^ 2 * (3 * s - 2 * t)) := by
+    dsimp [m, a, b]
+    field_simp [hs.ne', ht.ne', hden.ne']
+  rwa [hfactor] at hquotient
+
 #print axioms gaussianPerspective_mul_sq_le_cube
 #print axioms gaussianPerspective_oneThirdGeomMean_le
 #print axioms integral_gaussianPerspective_mul_sq_le_cube
+#print axioms gaussianPartitionOneThirdLogConcave
+#print axioms truncatedBody_gaussianPartitionOneThirdLogConcave
+#print axioms gaussianRatioWeight_relativeThirdMoment_le_of_oneThird
 
 end ArlibCommunity.Algorithms.CV18
