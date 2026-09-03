@@ -68,6 +68,52 @@ theorem map_retainedSampleHistoryWithFirst_state
     measurable_retainedSampleHistoryWithFirst]
   rfl
 
+/-- Shifting the coordinate written at each step does not change the retained
+optional-state chain. -/
+theorem map_iterated_initializedRetainedSampleHistoryKernel_state
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (initial : Measure (RetainedSampleHistory S)) : ∀ tail,
+    (iteratedKernelLaw
+      (fun i => retainedSampleHistoryKernel K (i + 1))
+      initial tail).map retainedSampleHistoryState =
+      iteratedKernelLaw (fun _ => K)
+        (initial.map retainedSampleHistoryState) tail := by
+  intro tail
+  induction tail with
+  | zero => rfl
+  | succ tail ih =>
+      rw [iteratedKernelLaw_succ, iteratedKernelLaw_succ]
+      let old := iteratedKernelLaw
+        (fun i => retainedSampleHistoryKernel K (i + 1)) initial tail
+      have hrecord := retainedSampleHistoryKernel_measurable_and_probability
+        K hK hKprob (tail + 1)
+      have hpoint : (fun history : RetainedSampleHistory S =>
+          (retainedSampleHistoryKernel K (tail + 1) history).map
+            retainedSampleHistoryState) =
+          K ∘ retainedSampleHistoryState := by
+        funext history
+        unfold retainedSampleHistoryKernel retainedSampleHistoryState
+        have hupdate : Measurable fun next : Option S =>
+            retainedSampleHistoryUpdate (tail + 1) history next :=
+          (measurable_retainedSampleHistoryUpdate (tail + 1)).comp
+            (measurable_const.prodMk measurable_id)
+        rw [Measure.map_map measurable_snd hupdate]
+        simpa [retainedSampleHistoryUpdate, Function.comp_def]
+      calc
+        (old.bind (retainedSampleHistoryKernel K (tail + 1))).map
+              retainedSampleHistoryState =
+            old.bind fun history =>
+              (retainedSampleHistoryKernel K (tail + 1) history).map
+                retainedSampleHistoryState :=
+          map_bind_eq_bind_map_of_measurable old hrecord.1 measurable_snd
+        _ = old.bind (K ∘ retainedSampleHistoryState) := by rw [hpoint]
+        _ = (old.map retainedSampleHistoryState).bind K :=
+          (map_bind_eq_bind_comp_state old measurable_snd hK).symm
+        _ = (iteratedKernelLaw (fun _ => K)
+            (initial.map retainedSampleHistoryState) tail).bind K := by rw [ih]
+
 /-- The shifted history shadow and the retained-sum shadow have exactly the
 same law.  This is the law identity needed for a phase containing an exact
 first sample followed by `tail` executable samples. -/
@@ -340,6 +386,7 @@ theorem initializedRetainedSampleHistory_approxIndep_prefix_next_final
 
 #print axioms measurable_retainedSampleHistoryWithFirst
 #print axioms map_retainedSampleHistoryWithFirst_state
+#print axioms map_iterated_initializedRetainedSampleHistoryKernel_state
 #print axioms map_iterated_initializedRetainedSampleHistoryKernel_sum
 #print axioms
   map_initializedRetainedSample_prefix_next_succ_eq_sequentialPairLaw
