@@ -620,6 +620,55 @@ theorem scheduledBalancedFullForwardTraceLaw_live_mass_pos
   rw [hlive, zero_add] at hsum
   exact hdead.ne hsum
 
+/-- Every chronological coordinate has positive executable raw mean.  The
+only point omitted by the paper is that a finite retry implementation can
+abort; the retained-error bound above guarantees a positive live branch,
+and successful collectors have strictly positive observations there. -/
+theorem scheduledFigureOneTraceRawMean_pos
+    (q : VolumeParams) (I : VolumeInput q.n) (j : ℕ)
+    (hj1 : 1 ≤ j) (hjm : j ≤ figureOneDependentPhaseCount q) :
+    0 < scheduledFigureOneTraceRawMean q I j := by
+  let law := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I
+      (figureOneDependentPhaseCount q)
+  let W := scheduledBalancedTracePhaseVariable q j
+  let _ : IsProbabilityMeasure law :=
+    scheduledBalancedForwardTraceLaw_isProbabilityMeasure
+      figureOneFinalScheduledBalancedParameters q I _
+  have hWint : Integrable W law :=
+    (memLp_scheduledBalancedForwardTrace_phaseVariable q I j hj1 hjm).integrable
+      (by norm_num)
+  have hlive : 0 < law (scheduledBalancedTraceLiveSet q.n) :=
+    scheduledBalancedFullForwardTraceLaw_live_mass_pos q I
+  have hliveSupport : law (scheduledBalancedTraceLiveSet q.n) ≤
+      law (Function.support W) := by
+    apply measure_mono_ae
+    filter_upwards [scheduledBalancedForwardTraceLaw_ae_liveCoordinatesPositive
+      figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)] with trace hcoordinates
+    intro htraceLive
+    have hliveBool : trace.2 = true := htraceLive
+    have hhistory : BalancedCoolingHistoryHasPositiveCoordinates
+        (figureOneDependentPhaseCount q) (some trace.1) := by
+      rcases hcoordinates with hdead | hpositive
+      · rw [hliveBool] at hdead
+        contradiction
+      · exact hpositive
+    have hjrepr : j = (j - 1) + 1 := by omega
+    have hraw : 0 <
+        scheduledBalancedTraceChronologicalPhaseVariable q j trace := by
+      rw [hjrepr]
+      unfold scheduledBalancedTraceChronologicalPhaseVariable
+      rw [balancedCoolingChronologicalPhaseVariable_apply_succ q (j - 1)
+        (by omega) (some trace.1)]
+      exact hhistory.2 (j - 1) (by omega)
+    change W trace ≠ 0
+    exact (lt_of_lt_of_le hraw (le_max_right 0 _)).ne'
+  unfold scheduledFigureOneTraceRawMean
+  apply (integral_pos_iff_support_of_nonneg
+    (scheduledBalancedTracePhaseVariable_nonnegative q j) hWint).2
+  exact hlive.trans_le hliveSupport
+
 /-- The ideal factor attached to the actual chronological phase is at most
 two. -/
 theorem figureOneChronologicalMomentFactor_le_two
@@ -1302,6 +1351,9 @@ theorem figureOneFinalScheduledAbortBase_failure_le_of_sharp_trace_moments
 #print axioms scheduledBalancedCoolingUniformTransitionLaw_ae_ratio_positive
 #print axioms scheduledBalancedTracePhaseObservationLaw_ae_total_positive
 #print axioms scheduledBalancedForwardTraceLaw_ae_liveCoordinatesPositive
+#print axioms scheduledBalancedFullForwardTraceLaw_dead_mass_le
+#print axioms scheduledBalancedFullForwardTraceLaw_live_mass_pos
+#print axioms scheduledFigureOneTraceRawMean_pos
 #print axioms scheduledFigureOneTrace_truncatedSecond_le_rawSecond
 #print axioms scheduledFigureOneTrace_rawMean_le_one_add_inv_alpha_mul_truncatedMean
 #print axioms scheduledFigureOneTrace_rawMeanProduct_le_pow_mul_truncatedMeanProduct
