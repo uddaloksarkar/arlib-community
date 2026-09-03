@@ -1640,6 +1640,103 @@ theorem approxIndepFun_figureOneScheduledTrace_gaussianPhaseOutput
     rw [figureOneDependentPhaseCount]
     omega)
 
+/-- The same Gaussian-phase estimate on the trace immediately after the
+coordinate has been appended. -/
+theorem approxIndepFun_figureOneScheduledForwardTrace_gaussian_succ
+    (q : VolumeParams) (I : VolumeInput q.n) (previous : ℕ)
+    (hnext : previous + 1 < terminalPhaseSteps q) :
+    let i := previous + 1
+    let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) i
+    let Y := scheduledFigureOneTraceTruncatedPhase q I (i + 1)
+    ApproxIndepFun (figureOneDependentEpsilon q) X Y
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I (i + 1)) := by
+  dsimp only
+  let i := previous + 1
+  let rho := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I i
+  let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+    (scheduledFigureOneTraceTruncatedMean q I)
+    (scheduledFigureOneTraceTruncatedPhase q I) i
+  let Y := scheduledFigureOneTraceTruncatedPhase q I (i + 1)
+  let liveOutput := figureOneScheduledTraceLiveTruncatedOutput q I (i + 1)
+  let deadOutput := figureOneScheduledTraceDeadTruncatedOutput q I (i + 1)
+  let outK := scheduledBalancedTracePhaseOutputLaw
+    figureOneFinalScheduledBalancedParameters q I i liveOutput deadOutput
+  have hV : ∀ j, Measurable
+      (scheduledFigureOneTraceTruncatedPhase q I j) := fun j =>
+    (measurable_scheduledBalancedTracePhaseVariable q j).min measurable_const
+  have hX : Measurable X :=
+    measurable_dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) hV i
+  have hY : Measurable Y := hV (i + 1)
+  have himmediate := approxIndepFun_figureOneScheduledTrace_gaussianPhaseOutput
+    q I previous hnext
+  apply ApproxIndepFun.of_map_pair_eq
+    (hX.comp measurable_fst) measurable_snd hX hY
+  · simpa [i, rho, X, Y, outK, liveOutput, deadOutput,
+      Function.comp_def] using
+        map_pair_sequentialTracePhaseOutput_eq_forwardTrace_succ
+          q I i (by
+            rw [figureOneDependentPhaseCount]
+            omega)
+  · simpa [i, rho, X, outK, liveOutput, deadOutput] using himmediate
+
+/-- Later trace phases preserve the Gaussian Lemma 7.17(c) joint law. -/
+theorem approxIndepFun_figureOneScheduledFinalTrace_gaussian
+    (q : VolumeParams) (I : VolumeInput q.n) (previous : ℕ)
+    (hnext : previous + 1 < terminalPhaseSteps q) :
+    let i := previous + 1
+    let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) i
+    let Y := scheduledFigureOneTraceTruncatedPhase q I (i + 1)
+    ApproxIndepFun (figureOneDependentEpsilon q) X Y
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) := by
+  dsimp only
+  let i := previous + 1
+  let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+    (scheduledFigureOneTraceTruncatedMean q I)
+    (scheduledFigureOneTraceTruncatedPhase q I) i
+  let Y := scheduledFigureOneTraceTruncatedPhase q I (i + 1)
+  let future := figureOneDependentPhaseCount q - (i + 1)
+  have hcount : i + 1 ≤ figureOneDependentPhaseCount q := by
+    dsimp only [i]
+    rw [figureOneDependentPhaseCount]
+    omega
+  have hhorizon : i + 1 + future = figureOneDependentPhaseCount q := by
+    dsimp only [future]
+    omega
+  have hV : ∀ j, Measurable
+      (scheduledFigureOneTraceTruncatedPhase q I j) := fun j =>
+    (measurable_scheduledBalancedTracePhaseVariable q j).min measurable_const
+  have hX : Measurable X :=
+    measurable_dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) hV i
+  have hY : Measurable Y := hV (i + 1)
+  have hpref := approxIndepFun_figureOneScheduledForwardTrace_gaussian_succ
+    q I previous hnext
+  have hlaw :
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I (i + 1)).map
+          (fun trace => (X trace, Y trace)) =
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)).map
+          (fun trace => (X trace, Y trace)) := by
+    rw [← hhorizon]
+    symm
+    exact map_pair_scheduledBalancedForwardTraceLaw_eq_prefix
+      figureOneFinalScheduledBalancedParameters q I i future (by omega)
+  exact ApproxIndepFun.of_map_pair_eq hX hY hX hY hlaw
+    (by simpa [i, X, Y] using hpref)
+
 #print axioms figureOneScheduledTrace_deadState_mass_le_retainedError
 #print axioms exists_figureOneScheduledTraceScaledState_good_bad
 
