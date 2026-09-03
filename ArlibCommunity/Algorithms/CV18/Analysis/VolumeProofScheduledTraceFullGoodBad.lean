@@ -1737,6 +1737,51 @@ theorem approxIndepFun_figureOneScheduledFinalTrace_gaussian
   exact ApproxIndepFun.of_map_pair_eq hX hY hX hY hlaw
     (by simpa [i, X, Y] using hpref)
 
+theorem approxIndepFun_const_left_of_nonneg
+    {Omega S T : Type*} [MeasurableSpace Omega] [MeasurableSpace S]
+    [MeasurableSpace T] (mu : Measure Omega) [IsProbabilityMeasure mu]
+    (c : S) (Y : Omega → T) {epsilon : ℝ} (hepsilon : 0 ≤ epsilon) :
+    ApproxIndepFun epsilon (fun _ => c) Y mu := by
+  intro A hA B hB
+  by_cases hc : c ∈ A
+  · have hpre : (fun _ : Omega => c) ⁻¹' A = Set.univ := by
+      ext omega
+      simp [hc]
+    rw [hpre, Set.univ_inter]
+    simp only [probReal_univ, one_mul, sub_self, abs_zero]
+    exact hepsilon
+  · have hpre : (fun _ : Omega => c) ⁻¹' A = ∅ := by
+      ext omega
+      simp [hc]
+    rw [hpre, Set.empty_inter]
+    simp only [measureReal_empty, zero_mul, sub_zero, abs_zero]
+    exact hepsilon
+
+/-- The `i=0` instance of Lemma 7.17(c) is exact because the empty prefix
+product is the constant one. -/
+theorem approxIndepFun_figureOneScheduledFinalTrace_zero
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    ApproxIndepFun (figureOneDependentEpsilon q)
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (scheduledFigureOneTraceTruncatedMean q I)
+        (scheduledFigureOneTraceTruncatedPhase q I) 0)
+      (scheduledFigureOneTraceTruncatedPhase q I 1)
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) := by
+  let law := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I
+      (figureOneDependentPhaseCount q)
+  let _ : IsProbabilityMeasure law :=
+    scheduledBalancedForwardTraceLaw_isProbabilityMeasure
+      figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)
+  change ApproxIndepFun (figureOneDependentEpsilon q) (fun _ => (1 : ℝ))
+    (scheduledFigureOneTraceTruncatedPhase q I 1) law
+  exact approxIndepFun_const_left_of_nonneg law (1 : ℝ)
+    (scheduledFigureOneTraceTruncatedPhase q I 1)
+    (figureOneDependentEpsilon_nonneg q)
+
 #print axioms figureOneScheduledTrace_deadState_mass_le_retainedError
 #print axioms exists_figureOneScheduledTraceScaledState_good_bad
 
