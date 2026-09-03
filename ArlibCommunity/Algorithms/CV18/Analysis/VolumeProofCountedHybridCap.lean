@@ -2,6 +2,7 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofMeasureApproximation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofGlobalQueryCap
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledParameters
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledAbortCost
 
 /-! # Transferring a global query cutoff through a counted hybrid
 
@@ -185,10 +186,34 @@ theorem figureOneFinalScheduledQueryCap_failure_le_of_countedReference
       congr 1
       norm_num
 
+/-- Exact final-program wrapper: after a counted chronological reference is
+constructed, only its domination, expected-count, and total replacement-loss
+bounds remain. -/
+theorem figureOneFinalScheduledAbortQueryCap_failure_le_of_countedReference
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (reference : Measure (ℝ × ℕ)) {delta : ENNReal}
+    (hdom : MeasureLeUpTo
+      ((figureOneFinalScheduledAbortBaseProgram q).run oracle.query)
+      reference delta)
+    (href : ∫⁻ outcome, (outcome.2 : ENNReal) ∂reference ≤
+      ENNReal.ofReal ((9 * 10 ^ 29) *
+        volumeScheduledBaseComplexityRate q))
+    (hdelta : delta ≤ ENNReal.ofReal (1 / 640 : ℝ)) :
+    ((figureOneFinalScheduledAbortBaseProgram q).withQueryCap
+        (figureOneFinalScheduledQueryBudget q)).runEstimate oracle.query
+          {none} ≤ ENNReal.ofReal (1 / 64 : ℝ) := by
+  exact figureOneFinalScheduledQueryCap_failure_le_of_countedReference
+    q oracle.query (figureOneFinalScheduledAbortBaseProgram q)
+      (figureOneFinalScheduledAbortBaseProgram_countedStronglyMeasurable
+        q I oracle).executionMeasurable
+      reference hdom href hdelta
+
 #print axioms
   MembershipOracleProgram.mul_runEstimate_withQueryCap_none_le_of_run_leUpTo
 #print axioms
   MembershipOracleProgram.runEstimate_withQueryCap_none_le_reference_tail
 #print axioms figureOneFinalScheduledQueryCap_failure_le_of_countedReference
+#print axioms
+  figureOneFinalScheduledAbortQueryCap_failure_le_of_countedReference
 
 end ArlibCommunity.Algorithms.CV18
