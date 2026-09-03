@@ -1,5 +1,6 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofCountedHybridCap
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledCheapAbortCap
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofGenericRateAmplification
 
 /-! # Final assembly for the counted-reference scheduled executable
@@ -184,9 +185,35 @@ theorem volumeTheorem_finalScheduled_of_baseFailure_and_capFailure
       figureOneFinalScheduledCappedValueProgram_queryBound q, ?_⟩
     exact le_rfl
 
+/-- Final scheduled amplification after the counted runtime lane has been
+closed unconditionally.  The sole remaining premise is the analytic accuracy
+bound for the uncapped executable base estimator. -/
+theorem volumeTheorem_finalScheduled_of_baseFailure
+    (hbase : ∀ (q : VolumeParams) (I : VolumeInput q.n)
+      (oracle : MembershipOracle I), WellRounded q I →
+        (figureOneFinalScheduledAbortBaseProgram q).runEstimate oracle.query
+          (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ)) :
+    ∃ C : ℝ, 0 < C ∧
+      ∀ (q : VolumeParams) (I : VolumeInput q.n)
+        (oracle : MembershipOracle I), WellRounded q I →
+          1 - q.p ≤ outcomeProbability
+            (volumeAlgorithmLaw
+              (amplifyOracleProgram figureOneFinalScheduledCappedValueProgram)
+              q I oracle) (accurateOutcome q I) ∧
+          ∃ calls,
+            (amplifyOracleProgram
+              figureOneFinalScheduledCappedValueProgram q).QueryBound calls ∧
+            calls ≤ Nat.ceil
+              (C * (volumeScheduledBaseComplexityRate q *
+                protectedLog (1 / q.p))) := by
+  apply volumeTheorem_finalScheduled_of_baseFailure_and_capFailure hbase
+  intro q I oracle
+  exact figureOneFinalScheduledAbortQueryCap_failure_le q I oracle
+
 #print axioms figureOneFinalScheduledCappedValueProgram_failure_le
 #print axioms
   figureOneFinalScheduledCappedValueProgram_failure_le_of_countedReference
 #print axioms volumeTheorem_finalScheduled_of_baseFailure_and_capFailure
+#print axioms volumeTheorem_finalScheduled_of_baseFailure
 
 end ArlibCommunity.Algorithms.CV18
