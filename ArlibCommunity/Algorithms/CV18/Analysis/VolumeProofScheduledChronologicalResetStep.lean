@@ -58,6 +58,43 @@ theorem scheduledResetPairKernel_ae_good
       with result hresult
   exact scheduledResetPairOutput_good result hresult
 
+/-- Running the mapped pair kernel is the same as running the public phase
+observation kernel and then mapping its returned result. -/
+theorem sequentialPairLaw_scheduledResetPairKernel_eq_map
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (source : Measure (ScheduledBalancedCoolingTrace q.n)) :
+    sequentialPairLaw source (scheduledResetPairKernel q I phase) =
+      (sequentialPairLaw source
+        (scheduledBalancedTracePhaseObservationLaw
+          figureOneFinalScheduledBalancedParameters q I phase)).map
+        (fun state => (state.1, scheduledResetPairOutput state.2)) := by
+  let observation := scheduledBalancedTracePhaseObservationLaw
+    figureOneFinalScheduledBalancedParameters q I phase
+  have hobs :=
+    scheduledBalancedTracePhaseObservationLaw_measurable_and_probability
+      figureOneFinalScheduledBalancedParameters q I phase
+  have hpair : Measurable fun state : ScheduledBalancedCoolingTrace q.n ×
+      Option (ℝ × AmbientSpace q.n) =>
+      (state.1, scheduledResetPairOutput state.2) :=
+    measurable_fst.prodMk
+      (measurable_scheduledResetPairOutput.comp measurable_snd)
+  have hlift : Measurable fun trace : ScheduledBalancedCoolingTrace q.n =>
+      (observation trace).map fun result => (trace, result) :=
+    measurable_sequentialPairKernel (rho := source) hobs.1 hobs.2
+  unfold sequentialPairLaw
+  rw [map_bind_eq_bind_map_of_measurable source hlift hpair]
+  apply Measure.bind_congr_right
+  filter_upwards with trace
+  have hconst : Measurable fun result : Option (ℝ × AmbientSpace q.n) =>
+      (trace, result) := measurable_const.prodMk measurable_id
+  have hconstPair : Measurable fun result : ℝ × Option (AmbientSpace q.n) =>
+      (trace, result) := measurable_const.prodMk measurable_id
+  rw [show scheduledResetPairKernel q I phase trace =
+    (observation trace).map scheduledResetPairOutput by rfl,
+    Measure.map_map hconstPair measurable_scheduledResetPairOutput,
+    Measure.map_map hpair hconst]
+  rfl
+
 theorem sequentialRecordedOutputLaw_scheduledResetPairKernel_eq_bind
     (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
     (source : Measure (ScheduledBalancedCoolingTrace q.n)) :
@@ -260,6 +297,7 @@ theorem exists_scheduledTraceRecordedReset_with_approxIndep
     holdPrefix, hindScore, hgood⟩
 
 #print axioms sequentialRecordedOutputLaw_scheduledResetPairKernel_eq_bind
+#print axioms sequentialPairLaw_scheduledResetPairKernel_eq_map
 #print axioms exists_scheduledTraceRecordedReset_with_approxIndep
 
 end
