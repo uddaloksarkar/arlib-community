@@ -137,4 +137,286 @@ theorem exists_figureOneFinalScheduledIdealGaussianCountedReference
     rw [figureOneFinalScheduledIdealCountedInitial_cost] at hcost
     exact hcost
 
+/-- Exact-ideal counted law after all Gaussian phases and the terminal
+Gaussian-to-uniform collector. -/
+noncomputable def figureOneFinalScheduledIdealCompleteCountedLaw
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    Measure (Option (AmbientSpace q.n) × ℕ) :=
+  (iteratedKernelLaw
+      (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+      (figureOneFinalScheduledIdealCountedInitial q I)
+      (terminalPhaseSteps q)).bind
+    (countedContinuation oracle.query
+      (figureOneFinalScheduledRetainedTerminalProgram q))
+
+/-- Complete chronological reference from the exact ideal initializer.  Its
+error omits the cheap rejected-initial branch. -/
+theorem exists_figureOneFinalScheduledIdealCompleteCountedReference
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ∃ reference : Measure (Option (AmbientSpace q.n) × ℕ),
+      MeasureLeUpTo
+        (figureOneFinalScheduledIdealCompleteCountedLaw q I oracle)
+        reference
+        (∑ phase ∈ Finset.range (terminalPhaseSteps q),
+          figureOnePhaseSampleCount q (scheduleValue q phase) •
+            figureOneCorrectedTransitionBudget q) ∧
+      countedQueryCost reference ≤
+        1 + ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+          ((384 * (figureOnePhaseSampleCount q (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.retryLimit q
+              (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.properStride q
+              (scheduleValue q phase)) : ℕ) : ENNReal) +
+          ((384 * (figureOneSampleCount q *
+            figureOneFinalScheduledBalancedParameters.retryLimit q
+              (terminalVariance q) *
+            figureOneFinalScheduledBalancedParameters.properStride q
+              (terminalVariance q)) : ℕ) : ENNReal) := by
+  obtain ⟨gaussianReference, hgaussianDom, hgaussianMarginal,
+      hgaussianCost⟩ :=
+    exists_figureOneFinalScheduledIdealGaussianCountedReference
+      q I oracle (terminalPhaseSteps q)
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable
+      q I oracle
+  let terminalContinuation := countedContinuation oracle.query
+    (figureOneFinalScheduledRetainedTerminalProgram q)
+  let reference := gaussianReference.bind terminalContinuation
+  refine ⟨reference, ?_, ?_⟩
+  · exact hgaussianDom.bind_same
+      (measurable_countedContinuation oracle.query _ hterminal.1 hterminal.2)
+      (fun state => by
+        dsimp only [terminalContinuation, countedContinuation]
+        let _ : IsProbabilityMeasure
+            ((figureOneFinalScheduledRetainedTerminalProgram q state.1).run
+              oracle.query) :=
+          MembershipOracleProgram.run_isProbabilityMeasure oracle.query _
+            (hterminal.2 state.1).executionMeasurable
+        exact Measure.isProbabilityMeasure_map (by fun_prop))
+  · have hcostEq :=
+      MembershipOracleProgram.countedQueryCost_bind_countedContinuation
+        oracle.query gaussianReference
+        (figureOneFinalScheduledRetainedTerminalProgram q)
+        hterminal.1 hterminal.2
+    change countedQueryCost reference ≤ _
+    rw [hcostEq, hgaussianMarginal]
+    exact add_le_add hgaussianCost
+      (figureOneFinalScheduledTerminalIdealExpectedCost_le q I oracle)
+
+/-- Counted execution of every remaining phase from one post-initial state,
+with the initializer's single query already present in the count. -/
+noncomputable def figureOneFinalScheduledCountedLawFromInitial
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (state : Option (AmbientSpace q.n)) :
+    Measure (Option (AmbientSpace q.n) × ℕ) :=
+  (iteratedKernelLaw
+      (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+      (Measure.dirac (state, 1)) (terminalPhaseSteps q)).bind
+    (countedContinuation oracle.query
+      (figureOneFinalScheduledRetainedTerminalProgram q))
+
+theorem figureOneFinalScheduledCountedLawFromInitial_measurable_and_probability
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    Measurable (figureOneFinalScheduledCountedLawFromInitial q I oracle) ∧
+    ∀ state, IsProbabilityMeasure
+      (figureOneFinalScheduledCountedLawFromInitial q I oracle state) := by
+  let phaseK := figureOneFinalScheduledGaussianCountedKernel q oracle.query
+  let terminalK := countedContinuation oracle.query
+    (figureOneFinalScheduledRetainedTerminalProgram q)
+  have hphaseMeas : ∀ phase, Measurable (phaseK phase) := fun phase => by
+    unfold phaseK figureOneFinalScheduledGaussianCountedKernel
+    exact measurable_countedContinuation oracle.query _
+      (figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+        q I oracle phase).1
+      (figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+        q I oracle phase).2
+  have hphaseProb : ∀ phase state,
+      IsProbabilityMeasure (phaseK phase state) := fun phase state => by
+    unfold phaseK figureOneFinalScheduledGaussianCountedKernel
+      countedContinuation
+    let _ : IsProbabilityMeasure
+        ((figureOneFinalScheduledRetainedGaussianPhaseProgram
+          q phase state.1).run oracle.query) :=
+      MembershipOracleProgram.run_isProbabilityMeasure oracle.query _
+        ((figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle phase).2 state.1).executionMeasurable
+    exact Measure.isProbabilityMeasure_map (by fun_prop)
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable q I oracle
+  have hterminalMeas : Measurable terminalK := by
+    unfold terminalK
+    exact measurable_countedContinuation oracle.query _ hterminal.1 hterminal.2
+  have hterminalProb : ∀ state,
+      IsProbabilityMeasure (terminalK state) := fun state => by
+    unfold terminalK countedContinuation
+    let _ : IsProbabilityMeasure
+        ((figureOneFinalScheduledRetainedTerminalProgram q state.1).run
+          oracle.query) :=
+      MembershipOracleProgram.run_isProbabilityMeasure oracle.query _
+        (hterminal.2 state.1).executionMeasurable
+    exact Measure.isProbabilityMeasure_map (by fun_prop)
+  have hiter := iteratedKernelLaw_dirac_measurable_and_probability
+    phaseK hphaseMeas hphaseProb (terminalPhaseSteps q)
+  constructor
+  · change Measurable (fun state =>
+      (iteratedKernelLaw phaseK (Measure.dirac (state, 1))
+        (terminalPhaseSteps q)).bind terminalK)
+    exact (Measure.measurable_bind' hterminalMeas).comp
+      (hiter.1.comp (by fun_prop))
+  · intro state
+    change IsProbabilityMeasure
+      ((iteratedKernelLaw phaseK (Measure.dirac (state, 1))
+        (terminalPhaseSteps q)).bind terminalK)
+    let _ : IsProbabilityMeasure
+        (iteratedKernelLaw phaseK (Measure.dirac (state, 1))
+          (terminalPhaseSteps q)) := hiter.2 (state, 1)
+    exact MeasureTheory.isProbabilityMeasure_bind hterminalMeas.aemeasurable
+      (ae_of_all _ hterminalProb)
+
+/-- Averaging the pointwise post-initial execution is exactly kernel
+iteration from the corresponding counted initial marginal. -/
+theorem bind_figureOneFinalScheduledCountedLawFromInitial
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (mu : Measure (Option (AmbientSpace q.n))) :
+    mu.bind (figureOneFinalScheduledCountedLawFromInitial q I oracle) =
+      (iteratedKernelLaw
+        (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+        (mu.map fun state => (state, 1)) (terminalPhaseSteps q)).bind
+      (countedContinuation oracle.query
+        (figureOneFinalScheduledRetainedTerminalProgram q)) := by
+  let phaseK := figureOneFinalScheduledGaussianCountedKernel q oracle.query
+  let terminalK := countedContinuation oracle.query
+    (figureOneFinalScheduledRetainedTerminalProgram q)
+  have hphaseMeas : ∀ phase, Measurable (phaseK phase) := fun phase => by
+    unfold phaseK figureOneFinalScheduledGaussianCountedKernel
+    exact measurable_countedContinuation oracle.query _
+      (figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+        q I oracle phase).1
+      (figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+        q I oracle phase).2
+  have hphaseProb : ∀ phase state,
+      IsProbabilityMeasure (phaseK phase state) := fun phase state => by
+    unfold phaseK figureOneFinalScheduledGaussianCountedKernel
+      countedContinuation
+    let _ : IsProbabilityMeasure
+        ((figureOneFinalScheduledRetainedGaussianPhaseProgram
+          q phase state.1).run oracle.query) :=
+      MembershipOracleProgram.run_isProbabilityMeasure oracle.query _
+        ((figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle phase).2 state.1).executionMeasurable
+    exact Measure.isProbabilityMeasure_map (by fun_prop)
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable q I oracle
+  have hterminalMeas : Measurable terminalK := by
+    unfold terminalK
+    exact measurable_countedContinuation oracle.query _ hterminal.1 hterminal.2
+  have hiterMeas :=
+    (iteratedKernelLaw_dirac_measurable_and_probability
+      phaseK hphaseMeas hphaseProb (terminalPhaseSteps q)).1.comp
+        (show Measurable (fun state : Option (AmbientSpace q.n) =>
+          (state, 1)) by fun_prop)
+  change mu.bind (fun state =>
+      (iteratedKernelLaw phaseK (Measure.dirac (state, 1))
+        (terminalPhaseSteps q)).bind terminalK) = _
+  calc
+    mu.bind (fun state =>
+        (iteratedKernelLaw phaseK (Measure.dirac (state, 1))
+          (terminalPhaseSteps q)).bind terminalK) =
+        (mu.bind fun state =>
+          iteratedKernelLaw phaseK (Measure.dirac (state, 1))
+            (terminalPhaseSteps q)).bind terminalK :=
+      (Measure.bind_bind hiterMeas.aemeasurable
+        hterminalMeas.aemeasurable).symm
+    _ = _ := by
+      rw [bind_iteratedKernelLaw_dirac_eq_iteratedKernelLaw_map
+        phaseK hphaseMeas hphaseProb mu (fun state => (state, 1))
+          (by fun_prop) (terminalPhaseSteps q)]
+
+theorem figureOneFinalScheduledRetainedCompleteProgram_run_eq_initial_bind
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (figureOneFinalScheduledRetainedCompleteProgram q).run oracle.query =
+      ((initialGaussianSamplingMeasure q).map
+        (initialTruncatedOption q I)).bind
+          (figureOneFinalScheduledCountedLawFromInitial q I oracle) := by
+  have hinitial :=
+    figureOneAbortInitialSample_countedStronglyMeasurable q I oracle
+  have hprefix :=
+    figureOneFinalScheduledRetainedGaussianPrefixProgram_countedMeasurable
+      q I oracle (terminalPhaseSteps q)
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable q I oracle
+  calc
+    (figureOneFinalScheduledRetainedCompleteProgram q).run oracle.query =
+        (iteratedKernelLaw
+          (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+          ((figureOneAbortInitialSample q).run oracle.query)
+          (terminalPhaseSteps q)).bind
+        (countedContinuation oracle.query
+          (figureOneFinalScheduledRetainedTerminalProgram q)) := by
+      unfold figureOneFinalScheduledRetainedCompleteProgram
+      rw [MembershipOracleProgram.run_bind_counted oracle.query _ _
+        hprefix hterminal.2 hterminal.1]
+      rw [figureOneFinalScheduledRetainedGaussianPrefixProgram_run]
+    _ = (iteratedKernelLaw
+          (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+          (((initialGaussianSamplingMeasure q).map
+            (initialTruncatedOption q I)).map fun state => (state, 1))
+          (terminalPhaseSteps q)).bind
+        (countedContinuation oracle.query
+          (figureOneFinalScheduledRetainedTerminalProgram q)) := by
+      rw [(figureOneAbortInitialSample_fixedQueryCount q).run_eq_map_runEstimate
+        oracle.query (figureOneAbortInitialSample_stronglyMeasurable q I oracle)]
+      rw [runEstimate_figureOneAbortInitialSample q I oracle]
+    _ = ((initialGaussianSamplingMeasure q).map
+          (initialTruncatedOption q I)).bind
+            (figureOneFinalScheduledCountedLawFromInitial q I oracle) := by
+      symm
+      exact bind_figureOneFinalScheduledCountedLawFromInitial q I oracle _
+
+theorem figureOneFinalScheduledGaussianCountedKernel_none
+    (q : VolumeParams) (oracle : AmbientSpace q.n → Bool)
+    (phase count : ℕ) :
+    figureOneFinalScheduledGaussianCountedKernel q oracle phase (none, count) =
+      Measure.dirac (none, count) := by
+  unfold figureOneFinalScheduledGaussianCountedKernel countedContinuation
+    figureOneFinalScheduledRetainedGaussianPhaseProgram
+  simp only [MembershipOracleProgram.run]
+  rw [Measure.map_dirac' (by fun_prop)]
+  rfl
+
+theorem iterated_figureOneFinalScheduledGaussianCountedKernel_none
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (count : ℕ) : ∀ steps,
+    iteratedKernelLaw
+      (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+      (Measure.dirac (none, count)) steps = Measure.dirac (none, count) := by
+  intro steps
+  induction steps with
+  | zero => rfl
+  | succ steps ih =>
+      rw [iteratedKernelLaw_succ, ih]
+      have hphase :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle steps
+      unfold figureOneFinalScheduledGaussianCountedKernel
+      rw [Measure.dirac_bind (measurable_countedContinuation oracle.query _
+        hphase.1 hphase.2)]
+      exact figureOneFinalScheduledGaussianCountedKernel_none
+        q oracle.query steps count
+
+theorem figureOneFinalScheduledCountedLawFromInitial_none
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    figureOneFinalScheduledCountedLawFromInitial q I oracle none =
+      Measure.dirac (none, 1) := by
+  unfold figureOneFinalScheduledCountedLawFromInitial
+  rw [iterated_figureOneFinalScheduledGaussianCountedKernel_none q I oracle]
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable q I oracle
+  rw [Measure.dirac_bind (measurable_countedContinuation oracle.query _
+    hterminal.1 hterminal.2)]
+  unfold countedContinuation figureOneFinalScheduledRetainedTerminalProgram
+  simp only [MembershipOracleProgram.run]
+  rw [Measure.map_dirac' (by fun_prop)]
+  rfl
+
 end ArlibCommunity.Algorithms.CV18
