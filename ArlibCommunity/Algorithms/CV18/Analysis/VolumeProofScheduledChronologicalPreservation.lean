@@ -461,6 +461,70 @@ theorem ApproxIndepFun.chronological_extension_of_resetPrefix_map_eq
   rw [← hsourceFactor, hproductMean, ← hcoordinateFactor] at htransport
   simpa only [meanReference] using htransport
 
+/-- Local creation adapter for the chronological recurrence.  A reset step
+typically proves independence of the accumulated old product and the *raw*
+newly recorded score.  Exact preservation of the old prefix changes the
+product's deterministic truncated-mean constants from the source law to the
+new reference law, while measurable postprocessing truncates the raw score
+exactly as required by the final capstone. -/
+theorem ApproxIndepFun.chronological_extension_created_of_resetPrefix_map_eq
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (source reference : Measure (ScheduledBalancedCoolingTrace q.n))
+    (hlaw : reference.map (scheduledResetPrefixCoordinates q phase) =
+      source.map (scheduledResetPrefixCoordinates q phase))
+    {epsilon : ℝ}
+    (hind : ApproxIndepFun epsilon
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I source
+          (figureOneScheduledReferenceCoordinateExtension q I))
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneScheduledReferenceCoordinateExtension q I)) phase)
+      (scheduledBalancedTracePhaseVariable q (phase + 1)) reference) :
+    ApproxIndepFun epsilon
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I reference
+          (figureOneScheduledReferenceCoordinateExtension q I))
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneScheduledReferenceCoordinateExtension q I)) phase)
+      (figureOneChronologicalTruncatedPhase q I
+        (figureOneScheduledReferenceCoordinateExtension q I) (phase + 1))
+      reference := by
+  let W := figureOneScheduledReferenceCoordinateExtension q I
+  let meanSource := figureOneChronologicalTruncatedMean q I source W
+  let meanReference := figureOneChronologicalTruncatedMean q I reference W
+  let V := figureOneChronologicalTruncatedPhase q I W
+  have hmean : ∀ j, 1 ≤ j → j ≤ phase →
+      meanSource j = meanReference j := by
+    intro j hj1 hjphase
+    exact (figureOneChronologicalTruncatedMean_extension_eq_of_prefix_map_eq
+      q I phase j hphase.le hj1 hjphase source reference hlaw).symm
+  have hproductMean :
+      dependentTruncatedProduct (figureOneDependentAlpha q) meanSource V
+          phase =
+        dependentTruncatedProduct (figureOneDependentAlpha q) meanReference V
+          phase :=
+    dependentTruncatedProduct_congr_mean_prefix _ _ _ _ phase hmean
+  let truncateNew : ℝ → ℝ := fun value =>
+    min value
+      (figureOneDependentAlpha q *
+        figureOneChronologicalRawMean q I (phase + 1))
+  have htruncateNew : Measurable truncateNew :=
+    measurable_id.min measurable_const
+  have hpost := hind.comp measurable_id htruncateNew
+  have hWused : W (phase + 1) =
+      scheduledBalancedTracePhaseVariable q (phase + 1) := by
+    exact figureOneScheduledReferenceCoordinateExtension_eq_of_used
+      q I (by omega) hphase
+  have hVnew : V (phase + 1) =
+      truncateNew ∘ scheduledBalancedTracePhaseVariable q (phase + 1) := by
+    funext trace
+    simp only [V, W, figureOneChronologicalTruncatedPhase,
+      dependentTruncatedPhase, hWused, truncateNew, Function.comp_apply]
+  rw [hproductMean] at hpost
+  simpa only [meanSource, meanReference, V, W, Function.id_comp, hVnew]
+    using hpost
+
 #print axioms map_scheduledResetPrefixCoordinates_resetAppend_eq
 #print axioms coordinate_moments_of_shared_prefix_law
 #print axioms ApproxIndepFun.of_shared_prefix_law
@@ -475,6 +539,8 @@ theorem ApproxIndepFun.chronological_extension_of_resetPrefix_map_eq
   dependentTruncatedProduct_chronological_extension_factor_prefix
 #print axioms
   ApproxIndepFun.chronological_extension_of_resetPrefix_map_eq
+#print axioms
+  ApproxIndepFun.chronological_extension_created_of_resetPrefix_map_eq
 
 end
 
