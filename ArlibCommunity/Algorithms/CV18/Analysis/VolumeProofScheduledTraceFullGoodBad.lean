@@ -1027,6 +1027,137 @@ theorem scheduledFigureOneTraceTruncatedPhase_append_eq_output
     simp [scheduledBalancedCoolingTraceAppend, balancedCoolingHistoryAppend,
       hvalid.1]
 
+/-- Joint-law identification at the instant phase `i` is created.  This is
+the bridge from the sequential-pair Lemma 7.17(b) calculation to the trace
+law after `i+1` completed phases. -/
+theorem map_pair_sequentialTracePhaseOutput_eq_forwardTrace_succ
+    (q : VolumeParams) (I : VolumeInput q.n) (i : ℕ)
+    (hi : i < figureOneDependentPhaseCount q) :
+    let rho := scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I i
+    let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) i
+    let Y := scheduledFigureOneTraceTruncatedPhase q I (i + 1)
+    let outK := scheduledBalancedTracePhaseOutputLaw
+      figureOneFinalScheduledBalancedParameters q I i
+      (figureOneScheduledTraceLiveTruncatedOutput q I (i + 1))
+      (figureOneScheduledTraceDeadTruncatedOutput q I (i + 1))
+    (sequentialPairLaw rho outK).map
+        (fun pair => (X pair.1, pair.2)) =
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I (i + 1)).map
+        (fun trace => (X trace, Y trace)) := by
+  dsimp only
+  let rho : Measure (ScheduledBalancedCoolingTrace q.n) :=
+    scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I i
+  let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+    (scheduledFigureOneTraceTruncatedMean q I)
+    (scheduledFigureOneTraceTruncatedPhase q I) i
+  let Y := scheduledFigureOneTraceTruncatedPhase q I (i + 1)
+  let liveOutput := figureOneScheduledTraceLiveTruncatedOutput q I (i + 1)
+  let deadOutput := figureOneScheduledTraceDeadTruncatedOutput q I (i + 1)
+  let outK : ScheduledBalancedCoolingTrace q.n → Measure ℝ :=
+    scheduledBalancedTracePhaseOutputLaw
+    figureOneFinalScheduledBalancedParameters q I i liveOutput deadOutput
+  let traceK : ScheduledBalancedCoolingTrace q.n →
+      Measure (ScheduledBalancedCoolingTrace q.n) :=
+    scheduledBalancedTracePhaseKernel
+    figureOneFinalScheduledBalancedParameters q I i
+  have hV : ∀ j, Measurable
+      (scheduledFigureOneTraceTruncatedPhase q I j) := fun j =>
+    (measurable_scheduledBalancedTracePhaseVariable q j).min measurable_const
+  have hX : Measurable X :=
+    measurable_dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) hV i
+  have hY : Measurable Y := hV (i + 1)
+  have hliveOutput : Measurable liveOutput :=
+    measurable_figureOneScheduledTraceLiveTruncatedOutput q I (i + 1)
+  have houtK := scheduledBalancedTracePhaseOutputLaw_measurable_and_probability
+    figureOneFinalScheduledBalancedParameters q I i liveOutput deadOutput
+      hliveOutput
+  have htraceK := scheduledBalancedTracePhaseKernel_measurable_and_probability
+    figureOneFinalScheduledBalancedParameters q I i
+  have hpair : Measurable fun pair :
+      ScheduledBalancedCoolingTrace q.n × ℝ => (X pair.1, pair.2) :=
+    (hX.comp measurable_fst).prodMk measurable_snd
+  have htracePair : Measurable fun trace => (X trace, Y trace) :=
+    hX.prodMk hY
+  unfold sequentialPairLaw
+  rw [map_bind_eq_bind_map_of_measurable rho
+    (measurable_sequentialPairKernel houtK.1 houtK.2) hpair]
+  rw [show (rho.bind fun trace =>
+        ((outK trace).map fun value => (trace, value)).map
+          (fun pair => (X pair.1, pair.2))) =
+      rho.bind fun trace =>
+        (outK trace).map fun value => (X trace, value) by
+    apply Measure.bind_congr_right
+    apply ae_of_all
+    intro trace
+    calc
+      ((outK trace).map fun value => (trace, value)).map
+          (fun pair => (X pair.1, pair.2)) =
+        (outK trace).map
+          ((fun pair => (X pair.1, pair.2)) ∘ fun value => (trace, value)) :=
+        Measure.map_map hpair (measurable_const.prodMk measurable_id)
+      _ = (outK trace).map fun value => (X trace, value) := by rfl]
+  rw [show scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I (i + 1) =
+      rho.bind traceK by rfl,
+    map_bind_eq_bind_map_of_measurable rho htraceK.1 htracePair]
+  apply Measure.bind_congr_right
+  filter_upwards [scheduledBalancedForwardTraceLaw_ae_valid
+    figureOneFinalScheduledBalancedParameters q I i] with trace hvalid
+  unfold outK scheduledBalancedTracePhaseOutputLaw
+    scheduledBalancedTracePhaseKernel
+  have hscalarPair : Measurable fun value : ℝ => (X trace, value) :=
+    measurable_const.prodMk measurable_id
+  have hconditional : Measurable
+      (if trace.2 then liveOutput else fun _ => deadOutput) := by
+    cases trace.2
+    · exact measurable_const
+    · exact hliveOutput
+  have happend : Measurable (scheduledBalancedCoolingTraceAppend trace) :=
+    (measurable_scheduledBalancedCoolingTraceAppend (n := q.n)).comp
+      (measurable_const.prodMk measurable_id)
+  calc
+    ((scheduledBalancedTracePhaseObservationLaw
+        figureOneFinalScheduledBalancedParameters q I i trace).map
+          (if trace.2 then liveOutput else fun _ => deadOutput)).map
+            (fun value => (X trace, value)) =
+      (scheduledBalancedTracePhaseObservationLaw
+        figureOneFinalScheduledBalancedParameters q I i trace).map
+          ((fun value => (X trace, value)) ∘
+            (if trace.2 then liveOutput else fun _ => deadOutput)) :=
+      Measure.map_map hscalarPair hconditional
+    _ = (scheduledBalancedTracePhaseObservationLaw
+        figureOneFinalScheduledBalancedParameters q I i trace).map
+          ((fun next => (X next, Y next)) ∘
+            scheduledBalancedCoolingTraceAppend trace) := by
+      refine Measure.map_congr
+        (μ := scheduledBalancedTracePhaseObservationLaw
+          figureOneFinalScheduledBalancedParameters q I i trace) ?_
+      apply ae_of_all
+      intro result
+      simp only [Function.comp_apply]
+      apply Prod.ext
+      · exact (scheduledFigureOneTraceTruncatedProduct_append_eq
+          q I hvalid (Nat.le_of_lt hi) le_rfl result).symm
+      · rw [show (if trace.2 = true then liveOutput else
+            fun _ => deadOutput) result =
+          if trace.2 = true then liveOutput result else deadOutput by
+            by_cases h : trace.2 = true <;> simp [h]]
+        exact (scheduledFigureOneTraceTruncatedPhase_append_eq_output
+          q I i hi trace hvalid result).symm
+    _ = ((scheduledBalancedTracePhaseObservationLaw
+        figureOneFinalScheduledBalancedParameters q I i trace).map
+          (scheduledBalancedCoolingTraceAppend trace)).map
+            (fun next => (X next, Y next)) :=
+      (Measure.map_map htracePair happend).symm
+  all_goals exact rho
+
 /-- The dead trace mass is bounded by the same optional-retained exact-chance
 error: the ideal accepted target is supported on `some`. -/
 theorem figureOneScheduledTrace_deadState_mass_le_retainedError
