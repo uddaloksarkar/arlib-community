@@ -57,12 +57,7 @@ theorem cv18TheoremOneOne :
     rfl
   have hrate : volumeTheoremOneOneRate q =
       volumeScheduledBaseComplexityRate q * protectedLog (1 / q.p) := by
-    simp only [volumeTheoremOneOneRate, volumeTheoremOneOneBaseRate,
-      volumeAccuracyLog, volumeSafeRetryCount,
-      volumePerSampleMixingError, volumeDependentEpsilon,
-      volumeDependentAlpha, volumeDependentPhaseCount, hsteps,
-      scheduledMaxSampleCount, scheduledFixedSampleCount,
-      scheduledSampleCount,
+    simp only [volumeTheoremOneOneRate, hsteps,
       volumeScheduledBaseComplexityRate, figureOneScheduledAccuracyLog,
       figureOneScheduledCoreError, figureOneScheduledRadialError,
       figureOneCorrectedBlockMixingError, figureOneSafeRetryCount,

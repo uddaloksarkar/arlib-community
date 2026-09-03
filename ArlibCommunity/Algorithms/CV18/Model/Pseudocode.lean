@@ -231,66 +231,34 @@ noncomputable def outcomeProbability (mu : Measure ℝ) (S : Set ℝ) : ℝ :=
 
 /-! ## Exact rate exposed by the verified scheduled implementation -/
 
-/-- Sample count for an accelerated or terminal phase. -/
-noncomputable def scheduledSampleCount (q : VolumeParams) : ℕ :=
-  Nat.ceil (512 * protectedLog (terminalVariance q) / q.eps ^ 2)
+/-- Exact query rate for Theorem 1.1, including confidence amplification.
 
-/-- Sample count for a fixed-rate phase. -/
-noncomputable def scheduledFixedSampleCount (q : VolumeParams) : ℕ :=
-  Nat.ceil
-    (4096 * protectedLog ((q.n : ℝ) / q.eps) / q.eps ^ 2)
-
-/-- Number of empirical estimators, including the terminal
-Gaussian-to-uniform estimator. -/
-noncomputable def volumeDependentPhaseCount (q : VolumeParams) : ℕ :=
-  modelTerminalPhaseSteps q + 1
-
-/-- A uniform sample-count bound across all phases. -/
-noncomputable def scheduledMaxSampleCount (q : VolumeParams) : ℕ :=
-  max (scheduledFixedSampleCount q) (scheduledSampleCount q)
-
-/-- Truncation parameter used by the dependent-product estimate. -/
-noncomputable def volumeDependentAlpha (q : VolumeParams) : ℝ :=
-  1024 * (volumeDependentPhaseCount q : ℝ) / q.eps ^ 2
-
-/-- Dependence budget used by the recursive moment estimate. -/
-noncomputable def volumeDependentEpsilon (q : VolumeParams) : ℝ :=
-  q.eps ^ 2 /
-    (4096 * volumeDependentAlpha q ^ 4 *
-      (volumeDependentPhaseCount q : ℝ))
-
-/-- Per-sample transition error allocated by the global exact-chance
-argument. -/
-noncomputable def volumePerSampleMixingError (q : VolumeParams) : ℝ :=
-  volumeDependentEpsilon q /
-    (3 * (scheduledMaxSampleCount q : ℝ) *
-      (volumeDependentPhaseCount q : ℝ))
-
-/-- Number of rejection attempts needed for the geometric tail budget. -/
-noncomputable def volumeSafeRetryCount (q : VolumeParams) : ℕ :=
-  Nat.ceil
-    (128 * protectedLog (4 / volumePerSampleMixingError q))
-
-/-- Common logarithmic accuracy scale for the core and radial mixing
-requirements. -/
-noncomputable def volumeAccuracyLog (q : VolumeParams) : ℝ :=
-  let perSample := volumePerSampleMixingError q
-  max
-    (protectedLog ((q.n : ℝ) / (perSample / 768)))
-    (protectedLog ((q.n : ℝ) / (perSample / 8)))
-
-/-- The exact one-run rate used by the completed scheduled proof.  Its extra
-factors are logarithmic and hence are suppressed by the paper's `O*`
-notation. -/
-noncomputable def volumeTheoremOneOneBaseRate (q : VolumeParams) : ℝ :=
-  volumeBaseComplexityRate q * volumeAccuracyLog q *
-    protectedLog
-      (1 / (volumePerSampleMixingError q /
-        (4 * (((volumeSafeRetryCount q - 1 : ℕ) : ℝ) + 1)))) ^ 2
-
-/-- Exact query rate after confidence amplification. -/
+The local bindings expose the concrete logarithmic factors used by the proof
+without adding auxiliary rate declarations to the model's public audit
+surface.  These factors are suppressed by the paper's `O*` notation. -/
 noncomputable def volumeTheoremOneOneRate (q : VolumeParams) : ℝ :=
-  volumeTheoremOneOneBaseRate q * protectedLog (1 / q.p)
+  let sampleCount : ℕ :=
+    Nat.ceil (512 * protectedLog (terminalVariance q) / q.eps ^ 2)
+  let fixedSampleCount : ℕ :=
+    Nat.ceil (4096 * protectedLog ((q.n : ℝ) / q.eps) / q.eps ^ 2)
+  let phaseCount : ℕ := modelTerminalPhaseSteps q + 1
+  let maxSampleCount : ℕ := max fixedSampleCount sampleCount
+  let alpha : ℝ := 1024 * (phaseCount : ℝ) / q.eps ^ 2
+  let dependenceBudget : ℝ :=
+    q.eps ^ 2 / (4096 * alpha ^ 4 * (phaseCount : ℝ))
+  let perSampleError : ℝ :=
+    dependenceBudget / (3 * (maxSampleCount : ℝ) * (phaseCount : ℝ))
+  let retryCount : ℕ :=
+    Nat.ceil (128 * protectedLog (4 / perSampleError))
+  let accuracyLog : ℝ :=
+    max
+      (protectedLog ((q.n : ℝ) / (perSampleError / 768)))
+      (protectedLog ((q.n : ℝ) / (perSampleError / 8)))
+  volumeBaseComplexityRate q * accuracyLog *
+    protectedLog
+      (1 / (perSampleError /
+        (4 * (((retryCount - 1 : ℕ) : ℝ) + 1)))) ^ 2 *
+    protectedLog (1 / q.p)
 
 #modelClosure volumeCoolingAlgorithm
 #modelClosure volumeTheoremOneOneRate
