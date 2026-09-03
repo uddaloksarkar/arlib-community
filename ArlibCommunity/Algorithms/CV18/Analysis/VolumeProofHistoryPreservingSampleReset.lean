@@ -211,6 +211,32 @@ theorem historyRawNextWithCopyKernel_measurable_and_probability
       (((measurable_const.prodMk measurable_id).prodMk
         measurable_id)).aemeasurable
 
+/-- The shadow copy before reset has exactly the ordinary operational
+next-state marginal. -/
+theorem map_bind_historyRawNextWithCopyKernel_snd
+    {H X : Type*} [MeasurableSpace H] [MeasurableSpace X]
+    (prefixLaw : Measure (H × X))
+    (K : X → Measure X) (hK : Measurable K)
+    (hKprob : ∀ x, IsProbabilityMeasure (K x)) :
+    (prefixLaw.bind (historyRawNextWithCopyKernel K)).map Prod.snd =
+      (prefixLaw.map Prod.snd).bind K := by
+  have hraw := historyRawNextWithCopyKernel_measurable_and_probability
+    (H := H) K hK hKprob
+  rw [map_bind_eq_bind_map_of_measurable prefixLaw hraw.1 measurable_snd]
+  rw [map_bind_eq_bind_comp_state prefixLaw measurable_snd hK]
+  apply Measure.bind_congr_right
+  filter_upwards with state
+  unfold historyRawNextWithCopyKernel
+  calc
+    ((K state.2).map (fun next => ((state.1, next), next))).map Prod.snd =
+        (K state.2).map
+          (Prod.snd ∘ fun next => ((state.1, next), next)) :=
+      Measure.map_map measurable_snd
+        ((measurable_const.prodMk measurable_id).prodMk measurable_id)
+    _ = K state.2 := by
+      change Measure.map id (K state.2) = K state.2
+      exact Measure.map_id
+
 /-- Record the observable of the reset shadow, while carrying the untouched
 operational copy into the next executable step. -/
 def historyRecordShadowState
@@ -418,6 +444,7 @@ theorem exists_shadowRecordedReference_of_nextMarginal_tvLe
 #print axioms MeasureLeUpTo.historyOperationalRecord_of_rawReset
 #print axioms map_recorded_newCoordinate_eq_of_reset_marginal
 #print axioms historyRawNextWithCopyKernel_measurable_and_probability
+#print axioms map_bind_historyRawNextWithCopyKernel_snd
 #print axioms bind_historyRawNextWithCopy_map_recordShadow_eq
 #print axioms MeasureLeUpTo.historyOperationalRecord_of_shadowReset
 #print axioms map_shadowRecorded_newCoordinate_eq_of_reset_marginal
