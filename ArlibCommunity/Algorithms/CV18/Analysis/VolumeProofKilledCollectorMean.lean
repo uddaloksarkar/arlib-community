@@ -288,6 +288,153 @@ theorem lintegral_iterated_retainedSumKernel_total_eq_sum_marginals
       rw [ih, Finset.sum_range_succ, hnextEq]
       ac_rfl
 
+/-! ## Exact relation with the executable scheduled collector -/
+
+/-- An absorbing dead retained state stays dead in the shadow construction,
+while preserving its invisible accumulated total. -/
+theorem iterated_retainedSumKernel_dirac_none
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (hnone : K none = Measure.dirac none)
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (total : ℝ) : ∀ steps,
+    iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+        (Measure.dirac (total, none)) steps =
+      Measure.dirac (total, none) := by
+  have hsum := retainedSumKernel_measurable_and_probability
+    K hK hKprob weight hweight
+  intro steps
+  induction steps with
+  | zero => rfl
+  | succ steps ih =>
+      rw [iteratedKernelLaw_succ, ih, Measure.dirac_bind hsum.1]
+      unfold retainedSumKernel
+      rw [hnone]
+      let F : Option S → ℝ × Option S := fun next =>
+        ((total, (none : Option S)).1 + retainedOptionWeight weight next, next)
+      have hF : Measurable F :=
+        (measurable_const.add
+          (measurable_retainedOptionWeight hweight)).prodMk measurable_id
+      calc
+        (Measure.dirac none).map F = Measure.dirac (F none) :=
+          Measure.map_dirac' hF none
+        _ = Measure.dirac (total, none) := by
+          simp [F, retainedOptionWeight]
+
+set_option maxHeartbeats 1000000 in
+/-- A scheduled recursive collector is exactly the shadow retained-state
+iteration, with the accumulated total exposed only when the last state is
+live. -/
+theorem scheduledBalancedTransitionCollectLaw_eq_map_retainedSumKernel
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (proposalCap properStride retryLimit : ℕ) : ∀ samples total current,
+    scheduledBalancedTransitionCollectLaw q I sigma2 weight proposalCap
+        properStride retryLimit samples total
+          (accuracyScaleFactor q • current) =
+      (iteratedKernelLaw
+        (fun _ => retainedSumKernel
+          (scheduledBalancedRetainedOptionKernel q I sigma2 proposalCap
+            properStride retryLimit) weight)
+        (Measure.dirac (total, some current)) samples).map
+          retainedSumOutput := by
+  let K := scheduledBalancedRetainedOptionKernel q I sigma2 proposalCap
+    properStride retryLimit
+  have hK : Measurable K :=
+    scheduledBalancedRetainedOptionKernel_measurable q I hsigma2 _ _ _
+  have hKprob : ∀ state, IsProbabilityMeasure (K state) := by
+    intro state
+    cases state with
+    | none =>
+        change IsProbabilityMeasure (Measure.dirac none)
+        infer_instance
+    | some state =>
+        exact (scheduledBalancedAccuracyTransitionLawAux_measurable_and_probability
+          q I hsigma2 proposalCap properStride retryLimit).2 _
+  have hsum := retainedSumKernel_measurable_and_probability
+    K hK hKprob weight hweight
+  have hout : Measurable (retainedSumOutput
+      (S := AmbientSpace q.n)) := measurable_retainedSumOutput
+  intro samples
+  induction samples with
+  | zero =>
+      intro total current
+      simp only [scheduledBalancedTransitionCollectLaw,
+        iteratedKernelLaw_zero]
+      rw [Measure.map_dirac' hout]
+      congr 3
+      exact inv_smul_smul₀ (accuracyScaleFactor_pos q).ne' current
+  | succ samples ih =>
+      intro total current
+      let R := retainedSumKernel K weight
+      let update : (ℝ × Option (AmbientSpace q.n)) ×
+          Option (AmbientSpace q.n) →
+          ℝ × Option (AmbientSpace q.n) := fun value =>
+        (value.1.1 + retainedOptionWeight weight value.2, value.2)
+      have hupdate : Measurable update := by
+        exact ((measurable_fst.comp measurable_fst).add
+          ((measurable_retainedOptionWeight hweight).comp measurable_snd)).prodMk
+            measurable_snd
+      have hfront := iteratedKernelLaw_const_succ_eq_bind
+        R hsum.1 (Measure.dirac (total, some current)) samples
+      have hmix := bind_iteratedKernelLaw_dirac_eq_iteratedKernelLaw_map
+        (fun _ => R) (fun _ => hsum.1) (fun _ _ => hsum.2 _)
+        (scheduledBalancedAccuracyTransitionLawAux q I sigma2 proposalCap
+          properStride retryLimit (accuracyScaleFactor q • current))
+        (fun next => update ((total, some current), next))
+        (hupdate.comp (measurable_const.prodMk measurable_id)) samples
+      rw [scheduledBalancedTransitionCollectLaw]
+      change _ = (iteratedKernelLaw (fun _ => R)
+        (Measure.dirac (total, some current)) (samples + 1)).map
+          retainedSumOutput
+      rw [hfront, Measure.dirac_bind
+        (measurable_iteratedKernelLaw_const_from_kernel R hsum.1 samples)]
+      change _ = (iteratedKernelLaw (fun _ => R)
+        (R (total, some current)) samples).map retainedSumOutput
+      have hRstart : R (total, some current) =
+          (scheduledBalancedAccuracyTransitionLawAux q I sigma2 proposalCap
+            properStride retryLimit (accuracyScaleFactor q • current)).map
+              (fun next => update ((total, some current), next)) := by rfl
+      rw [hRstart, ← hmix]
+      let T := scheduledBalancedAccuracyTransitionLawAux q I sigma2 proposalCap
+        properStride retryLimit (accuracyScaleFactor q • current)
+      let F : Option (AmbientSpace q.n) →
+          Measure (ℝ × Option (AmbientSpace q.n)) := fun next =>
+        iteratedKernelLaw (fun _ => R)
+          (Measure.dirac (update ((total, some current), next))) samples
+      have hF : Measurable F :=
+        (iteratedKernelLaw_dirac_measurable_and_probability
+          (fun _ => R) (fun _ => hsum.1) (fun _ _ => hsum.2 _) samples).1.comp
+            (hupdate.comp (measurable_const.prodMk measurable_id))
+      change T.bind (fun result => match result with
+          | none => Measure.dirac none
+          | some target =>
+              scheduledBalancedTransitionCollectLaw q I sigma2 weight
+                proposalCap properStride retryLimit samples
+                (total + weight target) (accuracyScaleFactor q • target)) =
+        (T.bind F).map retainedSumOutput
+      calc
+        _ = T.bind (fun next => (F next).map retainedSumOutput) := by
+          apply Measure.bind_congr_right
+          filter_upwards with next
+          cases next with
+          | none =>
+              have hdead := iterated_retainedSumKernel_dirac_none
+                K hK hKprob rfl weight hweight total samples
+              dsimp [F, update, retainedOptionWeight]
+              rw [add_zero]
+              change Measure.dirac none =
+                (iteratedKernelLaw (fun _ => R)
+                  (Measure.dirac (total, none)) samples).map retainedSumOutput
+              rw [hdead, Measure.map_dirac' hout]
+              rfl
+          | some next =>
+              simpa [F, update, retainedOptionWeight, K, R] using
+                ih (total + weight next) next
+        _ = _ := (map_bind_eq_bind_map_of_measurable T hF hout).symm
+
 /-- Pointwise, one shadow step increments the total by exactly the weight of
 the new retained state (zero after death). -/
 theorem retainedSumKernel_total_eq
@@ -373,6 +520,7 @@ theorem integral_retainedLiveTotal_loss_le
 #print axioms retainedSumKernel_measurable_and_probability
 #print axioms map_iterated_retainedSumKernel_state
 #print axioms lintegral_iterated_retainedSumKernel_total_eq_sum_marginals
+#print axioms scheduledBalancedTransitionCollectLaw_eq_map_retainedSumKernel
 #print axioms integral_retainedLiveTotal_loss_le
 
 end ArlibCommunity.Algorithms.CV18
