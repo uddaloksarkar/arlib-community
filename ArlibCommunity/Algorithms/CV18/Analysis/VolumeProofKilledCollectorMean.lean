@@ -338,6 +338,137 @@ theorem lintegral_iterated_retainedSumKernel_total_eq_sum_marginals
       rw [ih, Finset.sum_range_succ, hnextEq]
       ac_rfl
 
+/-- Real-integral form of the endpoint-marginal identity for uniformly
+bounded nonnegative weights and totals. -/
+theorem integral_iterated_retainedSumKernel_total_eq_sum_marginals
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    {B C : ℝ} (hB : 0 ≤ B) (hC : 0 ≤ C)
+    (hweight0 : ∀ state, 0 ≤ weight state)
+    (hweightB : ∀ state, weight state ≤ B)
+    (initial : Measure (ℝ × Option S)) [IsProbabilityMeasure initial]
+    (hinitial0 : ∀ᵐ state ∂initial, 0 ≤ state.1)
+    (hinitialC : ∀ᵐ state ∂initial, state.1 ≤ C)
+    (steps : ℕ) :
+    (∫ state, state.1
+      ∂iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+        initial steps) =
+      (∫ state, state.1 ∂initial) +
+        ∑ i ∈ Finset.range steps,
+          ∫ state, retainedOptionWeight weight state
+            ∂iteratedKernelLaw (fun _ => K)
+              (initial.map retainedSumState) (i + 1) := by
+  have hsum := retainedSumKernel_measurable_and_probability
+    K hK hKprob weight hweight
+  have hweightOpt : Measurable (retainedOptionWeight weight) :=
+    measurable_retainedOptionWeight hweight
+  have hweightOpt0 : ∀ state : Option S,
+      0 ≤ retainedOptionWeight weight state := by
+    intro state
+    cases state with
+    | none => rfl
+    | some state => exact hweight0 state
+  have hweightOptB : ∀ state : Option S,
+      retainedOptionWeight weight state ≤ B := by
+    intro state
+    cases state with
+    | none => simpa [retainedOptionWeight] using hB
+    | some state => exact hweightB state
+  have hshadow0 := iterated_retainedSumKernel_ae_total_nonnegative
+    K hK hKprob weight hweight hweight0 initial hinitial0 steps
+  have hshadowC := iterated_retainedSumKernel_ae_total_le
+    K hK hKprob weight hweight hB hweightB initial hinitialC steps
+  let shadow := iteratedKernelLaw
+    (fun _ => retainedSumKernel K weight) initial steps
+  let endpoint : ℕ → Measure (Option S) := fun i =>
+    iteratedKernelLaw (fun _ => K) (initial.map retainedSumState) (i + 1)
+  let _ : IsProbabilityMeasure shadow :=
+    iteratedKernelLaw_isProbabilityMeasure
+      (fun _ => retainedSumKernel K weight) initial inferInstance
+      (fun _ => hsum.1) (fun _ => hsum.2) steps
+  have hshadowInt : Integrable (fun state : ℝ × Option S => state.1)
+      shadow := by
+    apply Integrable.of_bound measurable_fst.aestronglyMeasurable
+      (C + (steps : ℝ) * B)
+    filter_upwards [hshadow0, hshadowC] with state hstate0 hstateC
+    simpa [Real.norm_eq_abs, abs_of_nonneg hstate0] using hstateC
+  have hinitialInt : Integrable
+      (fun state : ℝ × Option S => state.1) initial := by
+    apply Integrable.of_bound measurable_fst.aestronglyMeasurable C
+    filter_upwards [hinitial0, hinitialC] with state hstate0 hstateC
+    simpa [Real.norm_eq_abs, abs_of_nonneg hstate0] using hstateC
+  have hendpointProb : ∀ i, IsProbabilityMeasure (endpoint i) := by
+    intro i
+    dsimp only [endpoint]
+    exact iteratedKernelLaw_isProbabilityMeasure
+      (fun _ => K) (initial.map retainedSumState)
+      (Measure.isProbabilityMeasure_map measurable_snd.aemeasurable)
+      (fun _ => hK) (fun _ => hKprob) (i + 1)
+  have hendpointInt : ∀ i,
+      Integrable (retainedOptionWeight weight) (endpoint i) := by
+    intro i
+    let _ : IsProbabilityMeasure (endpoint i) := hendpointProb i
+    apply Integrable.of_bound hweightOpt.aestronglyMeasurable B
+    filter_upwards with state
+    rw [Real.norm_eq_abs, abs_of_nonneg (hweightOpt0 state)]
+    exact hweightOptB state
+  have hshadowNN : 0 ≤ ∫ state, state.1 ∂shadow :=
+    integral_nonneg_of_ae hshadow0
+  have hinitialNN : 0 ≤ ∫ state, state.1 ∂initial :=
+    integral_nonneg_of_ae hinitial0
+  have hendpointNN : ∀ i, 0 ≤
+      ∫ state, retainedOptionWeight weight state ∂endpoint i := by
+    intro i
+    exact integral_nonneg fun state => hweightOpt0 state
+  have hlin := lintegral_iterated_retainedSumKernel_total_eq_sum_marginals
+    K hK hKprob weight hweight hweight0 initial hinitial0 steps
+  have hshadowConv : ENNReal.ofReal (∫ state, state.1 ∂shadow) =
+      ∫⁻ state, ENNReal.ofReal state.1 ∂shadow :=
+    ofReal_integral_eq_lintegral_ofReal hshadowInt hshadow0
+  have hinitialConv : ENNReal.ofReal (∫ state, state.1 ∂initial) =
+      ∫⁻ state, ENNReal.ofReal state.1 ∂initial :=
+    ofReal_integral_eq_lintegral_ofReal hinitialInt hinitial0
+  have hendpointConv : ∀ i,
+      ENNReal.ofReal
+          (∫ state, retainedOptionWeight weight state ∂endpoint i) =
+        ∫⁻ state, ENNReal.ofReal (retainedOptionWeight weight state)
+          ∂endpoint i := by
+    intro i
+    exact ofReal_integral_eq_lintegral_ofReal (hendpointInt i)
+      (ae_of_all _ hweightOpt0)
+  have hENN : ENNReal.ofReal (∫ state, state.1 ∂shadow) =
+      ENNReal.ofReal ((∫ state, state.1 ∂initial) +
+        ∑ i ∈ Finset.range steps,
+          ∫ state, retainedOptionWeight weight state ∂endpoint i) := by
+    calc
+      ENNReal.ofReal (∫ state, state.1 ∂shadow) =
+          ∫⁻ state, ENNReal.ofReal state.1 ∂shadow := hshadowConv
+      _ = (∫⁻ state, ENNReal.ofReal state.1 ∂initial) +
+          ∑ i ∈ Finset.range steps,
+            ∫⁻ state, ENNReal.ofReal
+              (retainedOptionWeight weight state) ∂endpoint i := by
+        simpa [shadow, endpoint] using hlin
+      _ = ENNReal.ofReal (∫ state, state.1 ∂initial) +
+          ∑ i ∈ Finset.range steps,
+            ENNReal.ofReal
+              (∫ state, retainedOptionWeight weight state ∂endpoint i) := by
+        rw [hinitialConv]
+        apply congrArg ((∫⁻ state, ENNReal.ofReal state.1 ∂initial) + ·)
+        apply Finset.sum_congr rfl
+        intro i hi
+        exact (hendpointConv i).symm
+      _ = _ := by
+        have hsumNN : 0 ≤ ∑ i ∈ Finset.range steps,
+            ∫ state, retainedOptionWeight weight state ∂endpoint i :=
+          Finset.sum_nonneg fun i _ => hendpointNN i
+        rw [← ENNReal.ofReal_sum_of_nonneg (fun i hi => hendpointNN i),
+          ← ENNReal.ofReal_add hinitialNN hsumNN]
+  exact (ENNReal.ofReal_eq_ofReal_iff hshadowNN
+    (add_nonneg hinitialNN <| Finset.sum_nonneg fun i _ => hendpointNN i)).mp
+      hENN
+
 /-! ## Exact relation with the executable scheduled collector -/
 
 /-- An absorbing dead retained state stays dead in the shadow construction,
@@ -571,6 +702,7 @@ theorem integral_retainedLiveTotal_loss_le
 #print axioms map_iterated_retainedSumKernel_state
 #print axioms iterated_retainedSumKernel_ae_total_le
 #print axioms lintegral_iterated_retainedSumKernel_total_eq_sum_marginals
+#print axioms integral_iterated_retainedSumKernel_total_eq_sum_marginals
 #print axioms scheduledBalancedTransitionCollectLaw_eq_map_retainedSumKernel
 #print axioms integral_retainedLiveTotal_loss_le
 
