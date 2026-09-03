@@ -3,6 +3,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledResetAverageS
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofDependentProduct
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianPhaseMean
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPairedCost
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceRawMeanApprox
 
 /-!
 # Event-level transfer from a fixed-reset reference
@@ -419,6 +420,111 @@ theorem figureOneScheduledGaussianPhaseTarget_deviation_le_of_initializedHistory
     q I phase count (figureOnePhaseSampleCount_pos q _)
       target eps bound hhistory
 
+/-- On the public Gaussian phase target, the clamped raw-output projection
+has the same law as the ordinary phase-ratio projection: retained totals are
+nonnegative almost surely. -/
+theorem map_figureOneScheduledGaussianPhaseTarget_liveRaw_eq_ratio
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ) :
+    (figureOneScheduledGaussianPhaseTarget q I phase).map
+        figureOneScheduledTraceLiveRawOutput =
+      (figureOneScheduledGaussianPhaseTarget q I phase).map
+        scheduledBalancedPhaseRatio := by
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+    (scheduleValue q (phase + 1))
+  let K := figureOneFinalScheduledRetainedOptionKernel q I
+    (scheduleValue q phase)
+  let initialMap : AmbientSpace q.n →
+      ℝ × Option (AmbientSpace q.n) := fun x => (weight x, some x)
+  let initial :=
+    (truncatedGaussianProbability q I (scheduleValue q phase)
+      (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map initialMap
+  let shadow := iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+    initial (count - 1)
+  let output := balancedCoolingAverage count ∘
+    (retainedSumOutput (S := AmbientSpace q.n))
+  have hcount : 0 < count := figureOnePhaseSampleCount_pos q _
+  have hcountReal : (0 : ℝ) < count := by exact_mod_cast hcount
+  have hweight : Measurable weight :=
+    measurable_gaussianRatioWeight (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+  have hweight0 : ∀ x, 0 ≤ weight x :=
+    gaussianRatioWeight_nonnegative _ _
+  have hK :=
+    figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+      q I (scheduleValue_pos q phase)
+  have hinitialMap : Measurable initialMap :=
+    hweight.prodMk measurable_some
+  have hinitial0 : ∀ᵐ state ∂initial, 0 ≤ state.1 := by
+    apply (ae_map_iff hinitialMap.aemeasurable
+      (measurableSet_le measurable_const measurable_fst)).2
+    filter_upwards with x
+    exact hweight0 x
+  have hshadow0 : ∀ᵐ state ∂shadow, 0 ≤ state.1 :=
+    iterated_retainedSumKernel_ae_total_nonnegative
+      K hK.1 hK.2 weight hweight hweight0 initial hinitial0 (count - 1)
+  have houtput : Measurable output :=
+    (measurable_balancedCoolingAverage count).comp measurable_retainedSumOutput
+  rw [figureOneScheduledGaussianPhaseTarget_eq_map_retainedSumKernel]
+  rw [Measure.map_map
+      measurable_figureOneScheduledTraceLiveRawOutput houtput,
+    Measure.map_map measurable_scheduledBalancedPhaseRatio houtput]
+  apply Measure.map_congr
+  filter_upwards [hshadow0] with state hstate0
+  rcases state with ⟨total, state⟩
+  cases state with
+  | none =>
+      simp [output, Function.comp_def, retainedSumOutput,
+        balancedCoolingAverage, figureOneScheduledTraceLiveRawOutput,
+        scheduledBalancedPhaseRatio]
+  | some point =>
+      have havg0 : 0 ≤ total / (count : ℝ) :=
+        div_nonneg hstate0 hcountReal.le
+      simp [output, Function.comp_def, retainedSumOutput,
+        balancedCoolingAverage, figureOneScheduledTraceLiveRawOutput,
+        scheduledBalancedPhaseRatio, max_eq_right havg0]
+
+/-- A noninitial public Gaussian phase-target deviation bound transports to
+the corresponding coordinate of the final chronological trace, paying only
+the already-budgeted live/dead prefix error. -/
+theorem scheduledBalancedFinalTraceRawGaussianPhase_deviation_le_of_target
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase0 : 0 < phase) (hphase : phase < terminalPhaseSteps q)
+    (target eps : ℝ) (bound : ENNReal)
+    (htarget : figureOneScheduledGaussianPhaseTarget q I phase
+      {result | eps * target ≤
+        |scheduledBalancedPhaseRatio result - target|} ≤ bound) :
+    (scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q))
+      {trace | eps * target ≤
+        |scheduledBalancedTracePhaseVariable q (phase + 1) trace - target|} ≤
+      bound + (figureOneCorrectedTransitionBudget q +
+        figureOneScheduledRetainedError q phase) := by
+  let finalLaw := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I
+      (figureOneDependentPhaseCount q)
+  let W := scheduledBalancedTracePhaseVariable q (phase + 1)
+  let scalarDeviation : Set ℝ :=
+    {value | eps * target ≤ |value - target|}
+  have hset : MeasurableSet scalarDeviation := by
+    apply measurableSet_le measurable_const
+    exact (measurable_id.sub_const target).abs
+  have hcomparison :=
+    scheduledBalancedFinalTraceRawGaussianPhase_leUpTo_target
+      q I phase hphase0 hphase
+  have hevent := hcomparison.event_le scalarDeviation
+  rw [Measure.map_apply
+    (measurable_scheduledBalancedTracePhaseVariable q (phase + 1)) hset,
+    map_figureOneScheduledGaussianPhaseTarget_liveRaw_eq_ratio,
+    Measure.map_apply measurable_scheduledBalancedPhaseRatio hset] at hevent
+  have htarget' :
+      (figureOneScheduledGaussianPhaseTarget q I phase)
+          (scheduledBalancedPhaseRatio ⁻¹' scalarDeviation) ≤ bound := by
+    simpa [scalarDeviation, Set.preimage] using htarget
+  exact hevent.trans (by
+    gcongr)
+
 #print axioms
   MeasureLeUpTo.measure_relativeDeviation_le_of_reference_moments
 #print axioms
@@ -434,5 +540,8 @@ theorem figureOneScheduledGaussianPhaseTarget_deviation_le_of_initializedHistory
   figureOneScheduledGaussianPhaseTarget_deviation_eq_retainedSum
 #print axioms
   figureOneScheduledGaussianPhaseTarget_deviation_le_of_initializedHistory
+#print axioms map_figureOneScheduledGaussianPhaseTarget_liveRaw_eq_ratio
+#print axioms
+  scheduledBalancedFinalTraceRawGaussianPhase_deviation_le_of_target
 
 end ArlibCommunity.Algorithms.CV18
