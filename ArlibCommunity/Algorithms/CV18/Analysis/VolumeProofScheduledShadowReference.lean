@@ -141,6 +141,16 @@ noncomputable def scheduledShadowReferenceError
   | i + 1 => scheduledShadowReferenceError q i +
       scheduledRetainedEndpointError q (i + 1)
 
+theorem scheduledShadowReferenceError_ne_top
+    (q : VolumeParams) : ∀ tail,
+    scheduledShadowReferenceError q tail ≠ ⊤
+  | 0 => by simp [scheduledShadowReferenceError]
+  | i + 1 => by
+      rw [scheduledShadowReferenceError]
+      exact ENNReal.add_ne_top.mpr
+        ⟨scheduledShadowReferenceError_ne_top q i,
+          scheduledRetainedEndpointError_ne_top q (i + 1)⟩
+
 /-- The one-step shadow reset may start from any reference prefix whose
 operational-state marginal agrees with the executable prefix.  It preserves
 all previously written coordinates, installs an exact new coordinate, and
@@ -344,6 +354,71 @@ theorem exists_initializedScheduledRetainedShadowReference_all
             _ = scheduledRetainedExactSome q I phase :=
               holdCoordinates j hjold
 
+/-- The common exact-shadow reference inherits CV18 Lemma 7.17(b) from the
+executable history by total-variation stability.  The explicit `3 * error`
+term is the cost of transporting the joint rectangle and its two marginals.
+-/
+theorem exists_initializedScheduledRetainedShadowReference_all_approxIndep
+    (q : VolumeParams) (I : VolumeInput q.n) (phase count : ℕ)
+    (hcount0 : 0 < count)
+    (hcountMax : count ≤ figureOneDependentMaxSampleCount q) :
+    ∃ reference : Measure (RetainedSampleHistory (AmbientSpace q.n)),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+        reference (scheduledShadowReferenceError q (count - 1)) ∧
+      (∀ j, j < count →
+        reference.map (fun history => history.1 j) =
+          scheduledRetainedExactSome q I phase) ∧
+      (∀ r, r < count →
+        ApproxIndepFun
+          (figureOneDependentEpsilon q +
+            3 * (scheduledShadowReferenceError q (count - 1)).toReal)
+          (sequentialPrefixSum
+            (retainedSampleObservation
+              (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+                (scheduleValue q (phase + 1)))) r)
+          (retainedSampleObservation
+            (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+              (scheduleValue q (phase + 1))) r)
+          reference) := by
+  obtain ⟨reference, hreferenceProb, hmlu, hcoordinates, _hstate⟩ :=
+    exists_initializedScheduledRetainedShadowReference_all
+      q I phase (count - 1)
+  let actual := initializedScheduledRetainedHistoryLaw
+    q I phase (count - 1)
+  let _ : IsProbabilityMeasure reference := hreferenceProb
+  let _ : IsProbabilityMeasure actual := by
+    simpa [actual] using
+      initializedScheduledRetainedHistoryLaw_isProbabilityMeasure
+        q I phase (count - 1)
+  let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+    (scheduleValue q (phase + 1))
+  have hweight : Measurable weight :=
+    measurable_gaussianRatioWeight (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+  refine ⟨reference, hreferenceProb, hmlu, ?_, ?_⟩
+  · intro j hj
+    exact hcoordinates j (by omega)
+  · intro r hr
+    have hprefix : Measurable
+        (sequentialPrefixSum (retainedSampleObservation weight) r) :=
+      measurable_sequentialPrefixSum
+        (fun j => measurable_retainedSampleObservation hweight j) r
+    have hobs : Measurable (retainedSampleObservation weight r) :=
+      measurable_retainedSampleObservation hweight r
+    have hactualIndep :=
+      approxIndepFun_initializedScheduledRetainedHistory_all
+        q I phase count hcountMax r hr
+    have htv : TVLe reference actual
+        (scheduledShadowReferenceError q (count - 1)) := by
+      exact hmlu.to_tvLe.symm
+    simpa only [actual, weight] using
+      (ApproxIndepFun.of_tvLe reference actual
+        (scheduledShadowReferenceError_ne_top q (count - 1))
+        (sequentialPrefixSum (retainedSampleObservation weight) r)
+        (retainedSampleObservation weight r) hprefix hobs htv hactualIndep)
+
 /-- One executable scheduled tail step admits a reference law whose newly
 recorded coordinate is exactly distributed as the truncated Gaussian while
 the next operational retained-state marginal is unchanged. -/
@@ -455,6 +530,9 @@ theorem exists_initializedScheduledRetainedShadowReference
 #print axioms retainedSampleHistoryPrefix_update_at_limit
 #print axioms map_retainedSampleHistory_coordinate_eq_of_prefix_eq
 #print axioms exists_initializedScheduledRetainedShadowReference_all
+#print axioms scheduledShadowReferenceError_ne_top
+#print axioms
+  exists_initializedScheduledRetainedShadowReference_all_approxIndep
 #print axioms exists_initializedScheduledRetainedShadowReferenceStep
 #print axioms exists_initializedScheduledRetainedShadowReference
 
