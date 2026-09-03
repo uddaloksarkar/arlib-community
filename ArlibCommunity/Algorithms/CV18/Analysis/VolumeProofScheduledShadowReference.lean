@@ -151,6 +151,24 @@ theorem scheduledShadowReferenceError_ne_top
         ⟨scheduledShadowReferenceError_ne_top q i,
           scheduledRetainedEndpointError_ne_top q (i + 1)⟩
 
+/-- Fixed-cost exact-chance error when the reference operational state is
+reset to the exact target after every recorded sample. -/
+noncomputable def scheduledResetReferenceError
+    (q : VolumeParams) : ℕ → ENNReal
+  | 0 => 0
+  | i + 1 => scheduledResetReferenceError q i +
+      scheduledRetainedEndpointError q 1
+
+theorem scheduledResetReferenceError_ne_top
+    (q : VolumeParams) : ∀ tail,
+    scheduledResetReferenceError q tail ≠ ⊤
+  | 0 => by simp [scheduledResetReferenceError]
+  | i + 1 => by
+      rw [scheduledResetReferenceError]
+      exact ENNReal.add_ne_top.mpr
+        ⟨scheduledResetReferenceError_ne_top q i,
+          scheduledRetainedEndpointError_ne_top q 1⟩
+
 /-- The one-step shadow reset may start from any reference prefix whose
 operational-state marginal agrees with the executable prefix.  It preserves
 all previously written coordinates, installs an exact new coordinate, and
@@ -268,6 +286,99 @@ theorem exists_initializedScheduledRetainedShadowReferenceStep
         rw [map_initializedScheduledRetainedHistoryLaw_state q I phase i,
           map_initializedScheduledRetainedHistoryLaw_state q I phase (i + 1),
           iteratedKernelLaw_succ]
+  · simpa only [projectOld] using hprefix
+
+/-- Fixed-cost reset step for the exact-chance reference chain.  Its input
+state marginal is exact, and its output state and newly recorded coordinate
+are reset to that same exact marginal. -/
+theorem exists_scheduledRetainedResetReferenceStep
+    (q : VolumeParams) (I : VolumeInput q.n) (phase i : ℕ)
+    (prefixLaw : Measure (RetainedSampleHistory (AmbientSpace q.n)))
+    [IsProbabilityMeasure prefixLaw]
+    (hstate : prefixLaw.map retainedSampleHistoryState =
+      scheduledRetainedExactSome q I phase) :
+    ∃ reference : Measure (RetainedSampleHistory (AmbientSpace q.n)),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (prefixLaw.bind (retainedSampleHistoryKernel
+          (figureOneFinalScheduledRetainedOptionKernel q I
+            (scheduleValue q phase)) (i + 1)))
+        reference (scheduledRetainedEndpointError q 1) ∧
+      reference.map (fun history => history.1 (i + 1)) =
+        scheduledRetainedExactSome q I phase ∧
+      reference.map retainedSampleHistoryState =
+        scheduledRetainedExactSome q I phase ∧
+      reference.map
+          (retainedSampleHistoryPrefix (i + 1) ∘ Prod.fst) =
+        prefixLaw.map
+          (retainedSampleHistoryPrefix (i + 1) ∘ Prod.fst) := by
+  let K := figureOneFinalScheduledRetainedOptionKernel q I
+    (scheduleValue q phase)
+  let target := scheduledRetainedExactSome q I phase
+  let record : (ℕ → Option (AmbientSpace q.n)) →
+      Option (AmbientSpace q.n) → ℕ → Option (AmbientSpace q.n) :=
+    fun history next => Function.update history (i + 1) next
+  let readNew : (ℕ → Option (AmbientSpace q.n)) →
+      Option (AmbientSpace q.n) := fun history => history (i + 1)
+  let projectOld := retainedSampleHistoryPrefix
+    (S := AmbientSpace q.n) (i + 1)
+  have hK :=
+    figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+      q I (scheduleValue_pos q phase)
+  let _ : IsProbabilityMeasure target := by
+    simpa [target] using
+      scheduledRetainedExactSome_isProbabilityMeasure q I phase
+  have hrecord : Measurable (Function.uncurry record) := by
+    simpa [record] using
+      (measurable_uncurry_update_retainedHistoryCoordinate
+        (S := AmbientSpace q.n) (i + 1))
+  have hreadNew : Measurable readNew := by
+    simpa [readNew] using
+      (measurable_pi_apply (i + 1) :
+        Measurable fun history : ℕ → Option (AmbientSpace q.n) =>
+          history (i + 1))
+  have hprojectOld : Measurable projectOld := by
+    simpa [projectOld] using
+      measurable_retainedSampleHistoryPrefix
+        (S := AmbientSpace q.n) (i + 1)
+  have hnext : TVLe
+      ((prefixLaw.bind (historyRawNextKernel K)).map Prod.snd)
+      target (scheduledRetainedEndpointError q 1) := by
+    rw [map_bind_historyRawNextKernel_snd prefixLaw K hK.1 hK.2]
+    change TVLe ((prefixLaw.map retainedSampleHistoryState).bind K) target _
+    rw [hstate]
+    have hbindProb : IsProbabilityMeasure (target.bind K) :=
+      isProbabilityMeasure_bind hK.1.aemeasurable (ae_of_all _ hK.2)
+    let _ : IsProbabilityMeasure (target.bind K) := hbindProb
+    have hendpoint : MeasureLeUpTo (target.bind K) target
+        (scheduledRetainedEndpointError q 1) := by
+      simpa [K, target, scheduledRetainedExactSome,
+        scheduledRetainedEndpointError, iteratedKernelLaw_succ] using
+        (iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_exact_leUpTo
+          q I phase 1)
+    exact hendpoint.to_tvLe
+  obtain ⟨reference, hreferenceProb, hmlu, hcoordinate, hrefState,
+      hprefix⟩ :=
+    exists_recordedResetReference_of_nextMarginal_tvLe_preserving
+      prefixLaw K record id target readNew projectOld hK.1 hK.2 hrecord
+      measurable_id hreadNew hprojectOld (by
+        intro history next
+        simp [record, readNew]) (by
+        intro history next
+        exact retainedSampleHistoryPrefix_update_at_limit
+          (i + 1) history next) hnext
+  refine ⟨reference, hreferenceProb, ?_, ?_, ?_, ?_⟩
+  · change MeasureLeUpTo
+      (prefixLaw.bind (retainedSampleHistoryKernel K (i + 1))) reference
+      (scheduledRetainedEndpointError q 1)
+    change MeasureLeUpTo
+      (prefixLaw.bind (retainedSampleHistoryKernel K (i + 1))) reference
+      (scheduledRetainedEndpointError q 1) at hmlu
+    exact hmlu
+  · rw [Measure.map_id] at hcoordinate
+    change reference.map (fun history => history.1 (i + 1)) = target at hcoordinate
+    simpa only [target] using hcoordinate
+  · simpa only [target, retainedSampleHistoryState] using hrefState
   · simpa only [projectOld] using hprefix
 
 /-- A single scheduled phase admits one reference history law on which all
@@ -531,6 +642,8 @@ theorem exists_initializedScheduledRetainedShadowReference
 #print axioms map_retainedSampleHistory_coordinate_eq_of_prefix_eq
 #print axioms exists_initializedScheduledRetainedShadowReference_all
 #print axioms scheduledShadowReferenceError_ne_top
+#print axioms scheduledResetReferenceError_ne_top
+#print axioms exists_scheduledRetainedResetReferenceStep
 #print axioms
   exists_initializedScheduledRetainedShadowReference_all_approxIndep
 #print axioms exists_initializedScheduledRetainedShadowReferenceStep
