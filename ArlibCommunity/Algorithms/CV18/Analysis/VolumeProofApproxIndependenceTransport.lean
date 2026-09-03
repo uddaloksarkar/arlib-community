@@ -89,6 +89,47 @@ theorem ApproxIndepFun.of_map_pair_eq
   rw [← hjoint, ← hleft, ← hright]
   exact h A hA B hB
 
+/-- Binding a future probability kernel does not change the joint law of two
+observables when both observables are almost surely preserved by that kernel.
+This is the reusable future-phase step for the loss-preserving CV18 trace. -/
+theorem Measure.map_pair_bind_eq_of_ae_eq
+    {Omega Omega' S T : Type*}
+    [MeasurableSpace Omega] [MeasurableSpace Omega']
+    [MeasurableSpace S] [MeasurableSpace T]
+    (mu : Measure Omega) (K : Omega → Measure Omega')
+    (hK : Measurable K) (hKprob : ∀ omega, IsProbabilityMeasure (K omega))
+    (X : Omega → S) (Y : Omega → T)
+    (X' : Omega' → S) (Y' : Omega' → T)
+    (hX : Measurable X) (hY : Measurable Y)
+    (hX' : Measurable X') (hY' : Measurable Y')
+    (hpreserve : ∀ᵐ omega ∂mu, ∀ᵐ next ∂K omega,
+      X' next = X omega ∧ Y' next = Y omega) :
+    (mu.bind K).map (fun next => (X' next, Y' next)) =
+      mu.map (fun omega => (X omega, Y omega)) := by
+  have hpair : Measurable fun omega : Omega => (X omega, Y omega) :=
+    hX.prodMk hY
+  have hpair' : Measurable fun next : Omega' => (X' next, Y' next) :=
+    hX'.prodMk hY'
+  calc
+    (mu.bind K).map (fun next => (X' next, Y' next)) =
+        mu.bind fun omega =>
+          (K omega).map (fun next => (X' next, Y' next)) :=
+      map_bind_eq_bind_map_of_measurable mu hK hpair'
+    _ = mu.bind fun omega => Measure.dirac (X omega, Y omega) := by
+      apply Measure.bind_congr_right
+      filter_upwards [hpreserve] with omega homega
+      calc
+        (K omega).map (fun next => (X' next, Y' next)) =
+            (K omega).map (fun _ => (X omega, Y omega)) := by
+          apply Measure.map_congr
+          filter_upwards [homega] with next hnext
+          exact Prod.ext hnext.1 hnext.2
+        _ = Measure.dirac (X omega, Y omega) := by
+          rw [Measure.map_const, measure_univ, one_smul]
+    _ = mu.map (fun omega => (X omega, Y omega)) :=
+      Measure.bind_dirac_eq_map mu hpair
+
 #print axioms ApproxIndepFun.of_map_pair_eq
+#print axioms Measure.map_pair_bind_eq_of_ae_eq
 
 end ArlibCommunity.Algorithms.CV18
