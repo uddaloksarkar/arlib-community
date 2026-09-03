@@ -67,7 +67,7 @@ def retainedSumState {S : Type*} : ℝ × Option S → Option S := Prod.snd
 
 /-- Expose the accumulated total only if the retained chain is still live. -/
 def retainedLiveTotal {S : Type*} : ℝ × Option S → ℝ
-  | (total, none) => 0
+  | (_total, none) => 0
   | (total, some _) => total
 
 /-- Convert a shadow state back to the public optional collector output. -/
@@ -166,7 +166,72 @@ theorem retainedSumKernel_total_eq
   simpa [Function.comp_def] using
     (Measure.map_map (μ := K state.2) measurable_fst hout)
 
+/-! ## Loss from killing the accumulated sum -/
+
+/-- Killing the shadow total only on dead outcomes loses at most the
+deterministic total bound times the final death probability. -/
+theorem integral_retainedLiveTotal_loss_le
+    {S : Type*} [MeasurableSpace S]
+    (mu : Measure (ℝ × Option S)) [IsProbabilityMeasure mu]
+    {C : ℝ} (hC : 0 ≤ C)
+    (htotal0 : ∀ᵐ state ∂mu, 0 ≤ state.1)
+    (htotalC : ∀ᵐ state ∂mu, state.1 ≤ C) :
+    0 ≤ (∫ state, state.1 ∂mu) -
+        ∫ state, retainedLiveTotal state ∂mu ∧
+      (∫ state, state.1 ∂mu) -
+          ∫ state, retainedLiveTotal state ∂mu ≤
+        C * mu.real {state | state.2 = none} := by
+  let dead : Set (ℝ × Option S) := {state | state.2 = none}
+  have hdead : MeasurableSet dead :=
+    measurable_snd measurableSet_option_none
+  have hfstInt : Integrable (fun state : ℝ × Option S => state.1) mu := by
+    apply Integrable.of_bound measurable_fst.aestronglyMeasurable C
+    filter_upwards [htotal0, htotalC] with state hstate0 hstateC
+    simpa [Real.norm_eq_abs, abs_of_nonneg hstate0] using hstateC
+  have hlive0 : ∀ᵐ state ∂mu, 0 ≤ retainedLiveTotal state := by
+    filter_upwards [htotal0] with state hstate0
+    rcases state with ⟨total, state⟩
+    cases state <;> simp [retainedLiveTotal, hstate0]
+  have hliveC : ∀ᵐ state ∂mu, retainedLiveTotal state ≤ C := by
+    filter_upwards [htotalC] with state hstateC
+    rcases state with ⟨total, state⟩
+    cases state <;> simp [retainedLiveTotal, hC, hstateC]
+  have hliveInt : Integrable (retainedLiveTotal (S := S)) mu := by
+    apply Integrable.of_bound
+      measurable_retainedLiveTotal.aestronglyMeasurable C
+    filter_upwards [hlive0, hliveC] with state hstate0 hstateC
+    simpa [Real.norm_eq_abs, abs_of_nonneg hstate0] using hstateC
+  have hindInt : Integrable (dead.indicator (fun _ => C)) mu := by
+    apply Integrable.of_bound
+      (measurable_const.indicator hdead).aestronglyMeasurable C
+    filter_upwards with state
+    by_cases hstate : state ∈ dead
+    · simp [Set.indicator_of_mem hstate, Real.norm_eq_abs, abs_of_nonneg hC]
+    · simpa [Set.indicator, hstate] using hC
+  have hliveLe : ∫ state, retainedLiveTotal state ∂mu ≤
+      ∫ state, state.1 ∂mu :=
+    integral_mono_ae hliveInt hfstInt <| by
+      filter_upwards [htotal0] with state hstate0
+      rcases state with ⟨total, state⟩
+      cases state <;> simp [retainedLiveTotal, hstate0]
+  constructor
+  · linarith
+  · rw [← integral_sub hfstInt hliveInt]
+    calc
+      (∫ state, state.1 - retainedLiveTotal state ∂mu) ≤
+          ∫ state, dead.indicator (fun _ => C) state ∂mu := by
+        apply integral_mono_ae (hfstInt.sub hliveInt) hindInt
+        filter_upwards [htotal0, htotalC] with state hstate0 hstateC
+        rcases state with ⟨total, state⟩
+        cases state with
+        | none => simpa [dead, retainedLiveTotal] using hstateC
+        | some value => simp [dead, retainedLiveTotal]
+      _ = mu.real dead * C := integral_indicator_const C hdead
+      _ = C * mu.real {state | state.2 = none} := by
+        rw [mul_comm]
+
 #print axioms retainedSumKernel_measurable_and_probability
 #print axioms map_iterated_retainedSumKernel_state
+#print axioms integral_retainedLiveTotal_loss_le
 
 end ArlibCommunity.Algorithms.CV18
