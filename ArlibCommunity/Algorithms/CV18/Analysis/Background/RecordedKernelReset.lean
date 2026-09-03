@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.HistoryPreservingReset
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofCollectSemantics
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependenceMarkov
 
 /-!
 # History-preserving reset after a recorded kernel step
@@ -55,6 +56,37 @@ theorem historyRawOutputLaw_measurable_and_probability
     exact Measure.isProbabilityMeasure_map
       (measurable_const.prodMk measurable_id).aemeasurable
   exact isProbabilityMeasure_bind hlift.aemeasurable (ae_of_all _ hliftProb)
+
+/-- The output coordinate of the raw history law depends only on the
+operational-state marginal of its source.  This is the rewrite used by the
+outer CV18 recurrence once the previous reset has made that marginal exact. -/
+theorem map_historyRawOutputLaw_snd
+    {H X Z : Type*} [MeasurableSpace H] [MeasurableSpace X]
+    [MeasurableSpace Z]
+    (sourceLaw : Measure (H × X)) (K : X → Measure Z)
+    (hK : Measurable K) (hKprob : ∀ x, IsProbabilityMeasure (K x)) :
+    (historyRawOutputLaw sourceLaw K).map Prod.snd =
+      (sourceLaw.map Prod.snd).bind K := by
+  let lift : (H × X) → Measure (H × Z) := fun state =>
+    (K state.2).map fun result => (state.1, result)
+  have hlift : Measurable lift := by
+    exact measurable_measure_map_param_variable
+      (hK.comp measurable_snd) (fun state => hKprob state.2)
+      (measurable_fst.comp measurable_fst |>.prodMk measurable_snd)
+  change (sourceLaw.bind lift).map Prod.snd =
+    (sourceLaw.map Prod.snd).bind K
+  rw [map_bind_eq_bind_map_of_measurable sourceLaw hlift measurable_snd]
+  rw [map_bind_eq_bind_comp_state sourceLaw measurable_snd hK]
+  apply Measure.bind_congr_right
+  filter_upwards with state
+  have hpair : Measurable fun result : Z => (state.1, result) :=
+    measurable_const.prodMk measurable_id
+  calc
+    ((K state.2).map fun result : Z => (state.1, result)).map Prod.snd =
+        (K state.2).map (Prod.snd ∘ fun result : Z => (state.1, result)) :=
+      Measure.map_map measurable_snd hpair
+    _ = (K state.2).map id := by rfl
+    _ = K state.2 := Measure.map_id
 
 /-- A one-step exact-chance reset for a phase result.  The target is a joint
 law of the phase observable and retained next state, so one reset supplies
@@ -179,6 +211,7 @@ theorem exists_historyRecordedOutputReset_of_tvLe
               (hprojectOld.comp measurable_fst)
 
 #print axioms historyRawOutputLaw_measurable_and_probability
+#print axioms map_historyRawOutputLaw_snd
 #print axioms exists_historyRecordedOutputReset_of_tvLe
 
 end
