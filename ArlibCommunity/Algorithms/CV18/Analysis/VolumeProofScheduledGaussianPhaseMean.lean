@@ -832,6 +832,73 @@ theorem figureOneScheduledGaussianShadow_dead_real_le
   rw [Measure.real, hdead]
   exact ENNReal.toReal_mono herrorTop hendpoint
 
+/-- Fully explicit version of the Gaussian phase-target lower mean bound.
+The collector death term is now the scheduled stationary-target plus retry
+budget, with no reference to the internal shadow law. -/
+theorem integral_figureOneScheduledGaussianPhaseTarget_liveRaw_lower_explicit
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    {eta R A : ℝ} (heta : 0 < eta) (hR : 0 < R) (hA : 0 ≤ A)
+    (hepsilonTop :
+      2 * scheduledBalancedStationaryTargetError q +
+          figureOnePhaseSampleCount q (scheduleValue q phase) •
+            figureOneCorrectedTransitionBudget q ≠ ⊤)
+    (hepsEta :
+      (2 * scheduledBalancedStationaryTargetError q +
+          figureOnePhaseSampleCount q (scheduleValue q phase) •
+            figureOneCorrectedTransitionBudget q).toReal ≤ eta ^ 2)
+    (hsecond :
+      (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x ^ 2
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) ≤ R ^ 2)
+    (hshadowMem :
+      let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+      let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+        (scheduleValue q (phase + 1))
+      let K := figureOneFinalScheduledRetainedOptionKernel q I
+        (scheduleValue q phase)
+      let initial :=
+        (truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+            (fun x => (weight x, some x))
+      MemLp (fun state : ℝ × Option (AmbientSpace q.n) => state.1) 2
+        (iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+          initial (count - 1)))
+    (hshadowSecond :
+      let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+      let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+        (scheduleValue q (phase + 1))
+      let K := figureOneFinalScheduledRetainedOptionKernel q I
+        (scheduleValue q phase)
+      let initial :=
+        (truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+            (fun x => (weight x, some x))
+      (∫ state, (state.1 / (count : ℝ)) ^ 2
+        ∂iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+          initial (count - 1)) ≤ A ^ 2) :
+    (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) -
+        2 * eta * R -
+        A * Real.sqrt
+          ((scheduledBalancedStationaryTargetError q +
+            (figureOnePhaseSampleCount q (scheduleValue q phase) - 1) •
+              figureOneCorrectedTransitionBudget q).toReal) ≤
+      ∫ result, figureOneScheduledTraceLiveRawOutput result
+        ∂figureOneScheduledGaussianPhaseTarget q I phase := by
+  have hbase :=
+    integral_figureOneScheduledGaussianPhaseTarget_liveRaw_lower
+      q I phase heta hR hA hepsilonTop hepsEta hsecond hshadowMem
+        hshadowSecond
+  have hdead := figureOneScheduledGaussianShadow_dead_real_le
+    q I phase hepsilonTop
+  dsimp only at hdead
+  have hsqrt := Real.sqrt_le_sqrt hdead
+  have hmul := mul_le_mul_of_nonneg_left hsqrt hA
+  exact hbase.trans' (by linarith)
+
 #print axioms figureOneScheduledGaussianPhaseTarget_eq_map_retainedSumKernel
 #print axioms integral_retainedLiveTotal_loss_le_sqrt
 #print axioms integral_retainedLiveAverage_loss_le_sqrt
@@ -842,5 +909,7 @@ theorem figureOneScheduledGaussianShadow_dead_real_le
 #print axioms
   integral_figureOneScheduledGaussianPhaseTarget_liveRaw_lower
 #print axioms figureOneScheduledGaussianShadow_dead_real_le
+#print axioms
+  integral_figureOneScheduledGaussianPhaseTarget_liveRaw_lower_explicit
 
 end ArlibCommunity.Algorithms.CV18
