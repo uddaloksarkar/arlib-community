@@ -2,6 +2,7 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledPhaseL2
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBalancedHistoryMomentBridge
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofActualMeanTruncation
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceCapstoneExecutable
 
 /-!
 # Actual-mean moment assembly for the executable scheduled trace
@@ -562,6 +563,66 @@ theorem scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal
         apply mul_le_mul_of_nonneg_right _ hidealPos.le
         linarith [q.heps.1]
 
+/-! ## Executable capstone with the product algebra discharged -/
+
+/-- The unconditional scheduled capstone now needs only the sharp phasewise
+second moments, the raw-mean product bias, and Lemma 7.17(c)'s approximate
+independence.  All support, `L²`, truncation, and finite-product algebra is
+proved above. -/
+theorem figureOneFinalScheduledBalancedBase_failure_le_of_sharp_trace_moments
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (hrawPos : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      0 < scheduledFigureOneTraceRawMean q I j)
+    (hsecond : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        figureOneChronologicalMomentFactor q j *
+          scheduledFigureOneTraceRawMean q I j ^ 2)
+    (hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
+        (dependentTruncatedProduct (figureOneDependentAlpha q)
+          (scheduledFigureOneTraceTruncatedMean q I)
+          (scheduledFigureOneTraceTruncatedPhase q I) i)
+        (scheduledFigureOneTraceTruncatedPhase q I (i + 1))
+        (scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)))
+    (hrawApprox : RelativeApprox (q.eps / 64)
+      (∏ phase, figureOneIdealPhaseMean q I phase)
+      (dependentPhaseMeanProduct (scheduledFigureOneTraceRawMean q I)
+        (figureOneDependentPhaseCount q))) :
+    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  apply figureOneFinalScheduledBalancedBase_failure_le_of_trace_raw_moments
+    q I oracle hrounded
+  · intro j hj1 hjm
+    exact memLp_scheduledBalancedForwardTrace_phaseVariable q I j hj1 hjm
+  · exact hrawPos
+  · intro j hj1 hjm
+    calc
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+          ∂scheduledBalancedForwardTraceLaw
+            figureOneFinalScheduledBalancedParameters q I
+            (figureOneDependentPhaseCount q)) ≤
+          figureOneChronologicalMomentFactor q j *
+            scheduledFigureOneTraceRawMean q I j ^ 2 :=
+        hsecond j hj1 hjm
+      _ ≤ 2 * scheduledFigureOneTraceRawMean q I j ^ 2 :=
+        mul_le_mul_of_nonneg_right
+          (figureOneChronologicalMomentFactor_le_two q j) (sq_nonneg _)
+      _ ≤ 4 * scheduledFigureOneTraceRawMean q I j ^ 2 := by
+        nlinarith [sq_nonneg (scheduledFigureOneTraceRawMean q I j)]
+  · exact hind
+  · exact scheduledFigureOneTrace_relativeProduct_finite_of_sharp_moments
+      q I hrawPos hsecond
+  · exact scheduledFigureOneTrace_tailSecond_of_sharp_moments
+      q I hrawPos hsecond
+  · exact scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal
+      q I hrawPos hsecond hrawApprox
+
 #print axioms figureOneChronologicalMomentFactor_le_two
 #print axioms scheduledFigureOneTrace_truncatedSecond_le_rawSecond
 #print axioms scheduledFigureOneTrace_rawMean_le_one_add_inv_alpha_mul_truncatedMean
@@ -571,5 +632,6 @@ theorem scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal
 #print axioms scheduledFigureOneTrace_relativeProduct_finite_of_sharp_moments
 #print axioms scheduledFigureOneTrace_tailSecond_of_sharp_moments
 #print axioms scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal
+#print axioms figureOneFinalScheduledBalancedBase_failure_le_of_sharp_trace_moments
 
 end ArlibCommunity.Algorithms.CV18
