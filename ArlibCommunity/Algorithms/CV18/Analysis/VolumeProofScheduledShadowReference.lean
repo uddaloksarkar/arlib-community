@@ -94,6 +94,53 @@ theorem retainedSampleHistoryPrefix_update_at_limit
     simp [retainedSampleHistoryPrefix, hj, Function.update, hne]
   · simp [retainedSampleHistoryPrefix, hj]
 
+/-- Equality of truncated-prefix laws gives equality of every coordinate
+strictly inside that prefix. -/
+theorem map_retainedSampleHistory_coordinate_eq_of_prefix_eq
+    {S : Type*} [MeasurableSpace S]
+    (mu nu : Measure (RetainedSampleHistory S)) (limit j : ℕ)
+    (hj : j < limit)
+    (hprefix : mu.map
+        (retainedSampleHistoryPrefix limit ∘ Prod.fst) =
+      nu.map (retainedSampleHistoryPrefix limit ∘ Prod.fst)) :
+    mu.map (fun history => history.1 j) =
+      nu.map (fun history => history.1 j) := by
+  have hprefixMeas : Measurable
+      (retainedSampleHistoryPrefix (S := S) limit ∘
+        (Prod.fst : RetainedSampleHistory S → (ℕ → Option S))) :=
+    (measurable_retainedSampleHistoryPrefix limit).comp
+      (measurable_fst : Measurable (Prod.fst :
+        RetainedSampleHistory S → (ℕ → Option S)))
+  have heval : Measurable fun history : ℕ → Option S => history j :=
+    measurable_pi_apply j
+  calc
+    mu.map (fun history => history.1 j) =
+        mu.map ((fun history : ℕ → Option S => history j) ∘
+          (retainedSampleHistoryPrefix limit ∘ Prod.fst)) := by
+      congr 1
+      funext history
+      simp [retainedSampleHistoryPrefix, hj]
+    _ = (mu.map (retainedSampleHistoryPrefix limit ∘ Prod.fst)).map
+          (fun history => history j) :=
+      (Measure.map_map heval hprefixMeas).symm
+    _ = (nu.map (retainedSampleHistoryPrefix limit ∘ Prod.fst)).map
+          (fun history => history j) := by rw [hprefix]
+    _ = nu.map ((fun history : ℕ → Option S => history j) ∘
+          (retainedSampleHistoryPrefix limit ∘ Prod.fst)) :=
+      Measure.map_map heval hprefixMeas
+    _ = nu.map (fun history => history.1 j) := by
+      congr 1
+      funext history
+      simp [retainedSampleHistoryPrefix, hj]
+
+/-- Total event-transfer cost accumulated by recursively resetting every
+tail coordinate to an exact shadow. -/
+noncomputable def scheduledShadowReferenceError
+    (q : VolumeParams) : ℕ → ENNReal
+  | 0 => 0
+  | i + 1 => scheduledShadowReferenceError q i +
+      scheduledRetainedEndpointError q (i + 1)
+
 /-- The one-step shadow reset may start from any reference prefix whose
 operational-state marginal agrees with the executable prefix.  It preserves
 all previously written coordinates, installs an exact new coordinate, and
@@ -213,6 +260,90 @@ theorem exists_initializedScheduledRetainedShadowReferenceStep
           iteratedKernelLaw_succ]
   · simpa only [projectOld] using hprefix
 
+/-- A single scheduled phase admits one reference history law on which all
+recorded coordinates are exact truncated-Gaussian marginals.  The executable
+history is dominated by this law with the sum of the successive endpoint
+replacement errors. -/
+theorem exists_initializedScheduledRetainedShadowReference_all
+    (q : VolumeParams) (I : VolumeInput q.n) (phase tail : ℕ) :
+    ∃ reference : Measure (RetainedSampleHistory (AmbientSpace q.n)),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (initializedScheduledRetainedHistoryLaw q I phase tail)
+        reference (scheduledShadowReferenceError q tail) ∧
+      (∀ j, j ≤ tail →
+        reference.map (fun history => history.1 j) =
+          scheduledRetainedExactSome q I phase) ∧
+      reference.map retainedSampleHistoryState =
+        (initializedScheduledRetainedHistoryLaw q I phase tail).map
+          retainedSampleHistoryState := by
+  induction tail with
+  | zero =>
+      let reference := initializedScheduledRetainedHistoryLaw q I phase 0
+      have hreferenceProb : IsProbabilityMeasure reference := by
+        simpa [reference] using
+          initializedScheduledRetainedHistoryLaw_isProbabilityMeasure
+            q I phase 0
+      refine ⟨reference, hreferenceProb, ?_, ?_, rfl⟩
+      · simpa [scheduledShadowReferenceError] using
+          MeasureLeUpTo.refl reference
+      · intro j hj
+        have hj0 : j = 0 := Nat.eq_zero_of_le_zero hj
+        subst j
+        rw [show reference =
+            (truncatedGaussianProbability q I (scheduleValue q phase)
+              (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+                retainedSampleHistoryWithFirst by
+          rfl]
+        rw [Measure.map_map
+          (show Measurable (fun history :
+              RetainedSampleHistory (AmbientSpace q.n) => history.1 0) from
+            (measurable_pi_apply 0).comp measurable_fst)
+          measurable_retainedSampleHistoryWithFirst]
+        change _ = scheduledRetainedExactSome q I phase
+        unfold scheduledRetainedExactSome
+        congr 1
+  | succ i ih =>
+      obtain ⟨oldReference, holdProb, holdMlu, holdCoordinates, holdState⟩ := ih
+      let _ : IsProbabilityMeasure oldReference := holdProb
+      obtain ⟨reference, hreferenceProb, hstep, hnewCoordinate, hstate,
+          hprefix⟩ :=
+        exists_initializedScheduledRetainedShadowReferenceStep
+          q I phase i oldReference holdState
+      have hhistoryKernel :=
+        retainedSampleHistoryKernel_measurable_and_probability
+          (figureOneFinalScheduledRetainedOptionKernel q I
+            (scheduleValue q phase))
+          (figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+            q I (scheduleValue_pos q phase)).1
+          (figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+            q I (scheduleValue_pos q phase)).2 (i + 1)
+      refine ⟨reference, hreferenceProb, ?_, ?_, hstate⟩
+      · change MeasureLeUpTo
+          ((initializedScheduledRetainedHistoryLaw q I phase i).bind
+            (retainedSampleHistoryKernel
+              (figureOneFinalScheduledRetainedOptionKernel q I
+                (scheduleValue q phase)) (i + 1)))
+          reference (scheduledShadowReferenceError q (i + 1))
+        have htotal := MeasureLeUpTo.bind_then_replace holdMlu
+          (retainedSampleHistoryKernel
+            (figureOneFinalScheduledRetainedOptionKernel q I
+              (scheduleValue q phase)) (i + 1))
+          hhistoryKernel.1 hhistoryKernel.2 hstep
+        simpa only [scheduledShadowReferenceError] using htotal
+      · intro j hj
+        by_cases hnew : j = i + 1
+        · subst j
+          exact hnewCoordinate
+        · have hjold : j ≤ i := by omega
+          calc
+            reference.map (fun history => history.1 j) =
+                oldReference.map (fun history => history.1 j) :=
+              map_retainedSampleHistory_coordinate_eq_of_prefix_eq
+                reference oldReference (i + 1) j (by omega) hprefix
+            _ = scheduledRetainedExactSome q I phase :=
+              holdCoordinates j hjold
+
 /-- One executable scheduled tail step admits a reference law whose newly
 recorded coordinate is exactly distributed as the truncated Gaussian while
 the next operational retained-state marginal is unchanged. -/
@@ -322,6 +453,8 @@ theorem exists_initializedScheduledRetainedShadowReference
 #print axioms historyOperationalRecordKernel_update_eq_retainedSampleHistoryKernel
 #print axioms measurable_retainedSampleHistoryPrefix
 #print axioms retainedSampleHistoryPrefix_update_at_limit
+#print axioms map_retainedSampleHistory_coordinate_eq_of_prefix_eq
+#print axioms exists_initializedScheduledRetainedShadowReference_all
 #print axioms exists_initializedScheduledRetainedShadowReferenceStep
 #print axioms exists_initializedScheduledRetainedShadowReference
 
