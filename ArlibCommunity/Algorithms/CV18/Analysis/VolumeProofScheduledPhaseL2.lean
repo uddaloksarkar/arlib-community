@@ -393,11 +393,71 @@ theorem memLp_scheduledBalancedForwardTrace_phaseVariable
   exact memLp_two_of_ae_nonnegative_le
     (measurable_scheduledBalancedTracePhaseVariable q j) hB0 hW0 hWB
 
+/-! ## Centered-to-raw second moments -/
+
+/-- A centered second-moment estimate with coefficient three is exactly the
+raw second-moment estimate used by the executable capstone.  Stating this
+separately lets the paired/L² argument work with the centered numerator that
+appears in the CV18 variance calculation. -/
+theorem integral_sq_le_four_mul_integral_sq_of_centered_three
+    {S : Type*} [MeasurableSpace S]
+    {mu : Measure S} [IsProbabilityMeasure mu]
+    {f : S → ℝ} (hf : MemLp f 2 mu)
+    (hcenter :
+      (∫ x, (f x - ∫ y, f y ∂mu) ^ 2 ∂mu) ≤
+        3 * (∫ x, f x ∂mu) ^ 2) :
+    (∫ x, f x ^ 2 ∂mu) ≤ 4 * (∫ x, f x ∂mu) ^ 2 := by
+  have hcenterEq :
+      (∫ x, (f x - ∫ y, f y ∂mu) ^ 2 ∂mu) =
+        (∫ x, f x ^ 2 ∂mu) - (∫ x, f x ∂mu) ^ 2 := by
+    calc
+      (∫ x, (f x - ∫ y, f y ∂mu) ^ 2 ∂mu) =
+          Arlib.MarkovChains.varianceReal mu f := by
+        symm
+        change ProbabilityTheory.variance f mu = _
+        simpa using
+          (ProbabilityTheory.variance_eq_integral hf.aemeasurable)
+      _ = (∫ x, f x ^ 2 ∂mu) - (∫ x, f x ∂mu) ^ 2 :=
+        Arlib.MarkovChains.varianceReal_eq_sub hf
+  rw [hcenterEq] at hcenter
+  linarith
+
+/-- Consequently, for each chronological coordinate it remains to prove the
+paper's centered phase-average estimate.  Square-integrability is supplied by
+the executable scheduled-trace support theorem above. -/
+theorem scheduledFigureOneTrace_rawSecond_four_of_centered_three
+    (q : VolumeParams) (I : VolumeInput q.n) (j : ℕ)
+    (hj1 : 1 ≤ j) (hjm : j ≤ figureOneDependentPhaseCount q)
+    (hcenter :
+      (∫ trace,
+          (scheduledBalancedTracePhaseVariable q j trace -
+            scheduledFigureOneTraceRawMean q I j) ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        3 * scheduledFigureOneTraceRawMean q I j ^ 2) :
+    (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+      ∂scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)) ≤
+      4 * scheduledFigureOneTraceRawMean q I j ^ 2 := by
+  let _ : IsProbabilityMeasure
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)) :=
+    scheduledBalancedForwardTraceLaw_isProbabilityMeasure
+      figureOneFinalScheduledBalancedParameters q I _
+  apply integral_sq_le_four_mul_integral_sq_of_centered_three
+    (memLp_scheduledBalancedForwardTrace_phaseVariable q I j hj1 hjm)
+  simpa [scheduledFigureOneTraceRawMean] using hcenter
+
 #print axioms exists_scheduledPhaseBody_weight_upper_bound
 #print axioms memLp_scheduledBalancedTransitionCollect_average_of_continuous
 #print axioms memLp_scheduledBalancedCoolingRatioTransitionLaw_ratio
 #print axioms memLp_scheduledBalancedCoolingUniformTransitionLaw_ratio
 #print axioms exists_scheduledBalancedForwardTrace_coordinate_bound
 #print axioms memLp_scheduledBalancedForwardTrace_phaseVariable
+#print axioms integral_sq_le_four_mul_integral_sq_of_centered_three
+#print axioms scheduledFigureOneTrace_rawSecond_four_of_centered_three
 
 end ArlibCommunity.Algorithms.CV18
