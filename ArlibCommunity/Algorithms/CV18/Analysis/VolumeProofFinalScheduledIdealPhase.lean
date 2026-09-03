@@ -688,6 +688,121 @@ theorem figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_uniform
         balancedCoolingForgetState measurable_balancedCoolingForgetState
         hwithState
 
+/-- The retained terminal collector and the public scalar terminal wrapper
+have exactly the same query-count distribution, for every optional Gaussian
+product. -/
+theorem figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_scalarTail
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (product : Option (ℝ × AmbientSpace q.n)) :
+    ((figureOneFinalScheduledRetainedTerminalProgram q
+      (optionSnd product)).run oracle.query).map Prod.snd =
+      ((figureOneFinalScheduledScalarTerminalTail q product).run
+        oracle.query).map Prod.snd := by
+  cases product with
+  | none =>
+      simp only [optionSnd, figureOneFinalScheduledRetainedTerminalProgram,
+        figureOneFinalScheduledScalarTerminalTail,
+        MembershipOracleProgram.run]
+      rw [Measure.map_dirac' measurable_snd,
+        Measure.map_dirac' measurable_snd]
+  | some value =>
+      rcases value with ⟨gaussianProduct, lastPoint⟩
+      let finish : Option ℝ → ℝ
+        | none => 0
+        | some uniformRatio =>
+            initialGaussianIntegral q * gaussianProduct * uniformRatio
+      have hfinish : Measurable finish := by
+        have hsome : Measurable fun uniformRatio : ℝ =>
+            initialGaussianIntegral q * gaussianProduct * uniformRatio := by
+          fun_prop
+        convert Measurable.optionElim (0 : ℝ) hsome using 1
+        funext result
+        cases result <;> rfl
+      have huniform :=
+        (scheduledBalancedCoolingUniformRatioEstimate_countedMeasurable
+          figureOneFinalScheduledBalancedParameters q I oracle
+            (terminalVariance_pos' q)).2 lastPoint
+      calc
+        ((figureOneFinalScheduledRetainedTerminalProgram q
+            (optionSnd (some (gaussianProduct, lastPoint)))).run
+              oracle.query).map Prod.snd =
+            ((scheduledBalancedCoolingUniformRatioEstimate
+              figureOneFinalScheduledBalancedParameters q
+              (terminalVariance q) lastPoint).run oracle.query).map
+                Prod.snd := by
+          simpa only [optionSnd] using
+            figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_uniform
+              q I oracle lastPoint
+        _ = ((figureOneFinalScheduledScalarTerminalTail q
+            (some (gaussianProduct, lastPoint))).run oracle.query).map
+              Prod.snd := by
+          have hform : figureOneFinalScheduledScalarTerminalTail q
+              (some (gaussianProduct, lastPoint)) =
+              (scheduledBalancedCoolingUniformRatioEstimate
+              figureOneFinalScheduledBalancedParameters q
+              (terminalVariance q) lastPoint).bind fun result =>
+                .pure (finish result) := by
+            simp only [figureOneFinalScheduledScalarTerminalTail]
+            congr 1
+            funext result
+            cases result <;> rfl
+          rw [hform]
+          symm
+          exact MembershipOracleProgram.map_snd_run_bind_pure oracle.query _
+            finish hfinish huniform
+
+/-- From a fixed initial point, the complete retained interpreter and the
+public scalar Figure-1 continuation have exactly the same query-count law. -/
+theorem figureOneFinalScheduledRetainedFullCostProgram_map_snd_eq_pointContinuation
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (point : AmbientSpace q.n) :
+    ((figureOneFinalScheduledRetainedFullCostProgram q (some point)).run
+      oracle.query).map Prod.snd =
+      ((scheduledBalancedFigureOnePointContinuation
+        figureOneFinalScheduledBalancedParameters q point).run
+          oracle.query).map Prod.snd := by
+  let cooling := coolingProduct
+    (scheduledBalancedCoolingPrimitives
+      figureOneFinalScheduledBalancedParameters) q
+    (explicitVolumeCoolingSchedule q).variances point
+  let actualNext := figureOneFinalScheduledScalarTerminalTail q
+  let mappedNext := figureOneFinalScheduledRetainedTerminalProgram q
+  have hcooling := scheduledBalancedCoolingProduct_countedMeasurable
+    figureOneFinalScheduledBalancedParameters q I oracle
+      (explicitVolumeCoolingSchedule q).variances
+      (explicitVolumeCoolingSchedule q).positive
+  have hactual :=
+    figureOneFinalScheduledScalarTerminalTail_countedMeasurable q I oracle
+  have hmapped :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable q I oracle
+  have hchain :=
+    figureOneFinalScheduledRetainedGaussianChain_run_eq_map_coolingProduct
+      q I oracle 0 (terminalPhaseSteps q) point
+  rw [← explicitScheduleVariances_eq_scheduledVarianceSegment q] at hchain
+  have hcompose :=
+    MembershipOracleProgram.map_snd_bind_countedContinuation_eq
+      oracle.query (cooling.run oracle.query)
+      optionSnd measurable_optionSnd actualNext mappedNext
+      hactual.1 hactual.2 hmapped.1 hmapped.2
+      (figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_scalarTail
+        q I oracle)
+  have hpointForm :
+      scheduledBalancedFigureOnePointContinuation
+          figureOneFinalScheduledBalancedParameters q point =
+        cooling.bind actualNext := by
+    unfold scheduledBalancedFigureOnePointContinuation cooling actualNext
+      figureOneFinalScheduledScalarTerminalTail
+    congr 1
+  unfold figureOneFinalScheduledRetainedFullCostProgram
+  rw [MembershipOracleProgram.run_bind_counted oracle.query _ _
+    ((figureOneFinalScheduledRetainedGaussianChain_countedMeasurable
+      q I oracle 0 (terminalPhaseSteps q)).2 (some point))
+    hmapped.2 hmapped.1]
+  rw [hchain]
+  rw [hpointForm, MembershipOracleProgram.run_bind_counted oracle.query _ _
+    (hcooling.2 point) hactual.2 hactual.1]
+  exact hcompose
+
 /-- Finite chronological reference for every prefix of Gaussian phases.
 The reference has the exact ideal retained-point marginal, additive
 exact-chance loss, and only the sum of warm expected phase costs. -/
@@ -946,6 +1061,101 @@ theorem exists_figureOneFinalScheduledRetainedComplete_countedReference
     exact add_le_add hgaussianCost
       (figureOneFinalScheduledTerminalIdealExpectedCost_le q I oracle)
 
+/-- Forgetting the numerical volume output, the retained chronological
+interpreter and the actual aborting Figure-1 base program have exactly the
+same complete query-count distribution. -/
+theorem figureOneFinalScheduledRetainedCompleteProgram_map_snd_eq_abortBase
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ((figureOneFinalScheduledRetainedCompleteProgram q).run
+      oracle.query).map Prod.snd =
+      ((figureOneFinalScheduledAbortBaseProgram q).run
+        oracle.query).map Prod.snd := by
+  let actualNext : Option (AmbientSpace q.n) →
+      MembershipOracleProgram q.n ℝ
+    | none => .pure 0
+    | some point => scheduledBalancedFigureOnePointContinuation
+        figureOneFinalScheduledBalancedParameters q point
+  let mappedNext := figureOneFinalScheduledRetainedFullCostProgram q
+  have hpoint := scheduledBalancedFigureOnePointContinuation_countedMeasurable
+    figureOneFinalScheduledBalancedParameters q I oracle
+  have hactualRun : Measurable fun state =>
+      (actualNext state).run oracle.query := by
+    convert Measurable.optionElim (Measure.dirac ((0 : ℝ), 0))
+      hpoint.1 using 1
+    funext state
+    cases state <;> rfl
+  have hactual : ∀ state,
+      (actualNext state).CountedStronglyMeasurable oracle.query := by
+    intro state
+    cases state with
+    | none => trivial
+    | some point => exact hpoint.2 point
+  have hmapped :=
+    figureOneFinalScheduledRetainedFullCostProgram_countedMeasurable
+      q I oracle
+  have hnext : ∀ state,
+      ((mappedNext state).run oracle.query).map Prod.snd =
+        ((actualNext state).run oracle.query).map Prod.snd := by
+    intro state
+    cases state with
+    | none =>
+        have hnone : mappedNext none =
+            (MembershipOracleProgram.pure none :
+              MembershipOracleProgram q.n
+                (Option (AmbientSpace q.n))) := by
+          unfold mappedNext figureOneFinalScheduledRetainedFullCostProgram
+          rw [figureOneFinalScheduledRetainedGaussianChain_none q 0
+            (terminalPhaseSteps q)]
+          rfl
+        rw [hnone]
+        dsimp only [actualNext]
+        simp only [MembershipOracleProgram.run]
+        rw [Measure.map_dirac' measurable_snd,
+          Measure.map_dirac' measurable_snd]
+    | some point =>
+        exact
+          figureOneFinalScheduledRetainedFullCostProgram_map_snd_eq_pointContinuation
+            q I oracle point
+  let initialLaw := (figureOneAbortInitialSample q).run oracle.query
+  have hcompose :=
+    MembershipOracleProgram.map_snd_bind_countedContinuation_eq
+      oracle.query initialLaw id measurable_id actualNext mappedNext
+      hactualRun hactual hmapped.1 hmapped.2 hnext
+  have hid : initialLaw.map
+      (fun outcome => (id outcome.1, outcome.2)) = initialLaw := by
+    rw [show (fun outcome : Option (AmbientSpace q.n) × ℕ =>
+      (id outcome.1, outcome.2)) = id by
+        funext outcome
+        rfl]
+    exact Measure.map_id
+  have hretainedForm :
+      figureOneFinalScheduledRetainedCompleteProgram q =
+        (figureOneAbortInitialSample q).bind mappedNext := by
+    unfold figureOneFinalScheduledRetainedCompleteProgram mappedNext
+    rw [figureOneFinalScheduledRetainedGaussianPrefixProgram_eq_bind_chain]
+    rw [MembershipOracleProgram.bind_assoc_counted_cv18]
+    rfl
+  have hactualForm : figureOneFinalScheduledAbortBaseProgram q =
+      (figureOneAbortInitialSample q).bind actualNext := by
+    unfold figureOneFinalScheduledAbortBaseProgram baseVolumeCooling actualNext
+    congr 1
+    funext state
+    cases state with
+    | none => rfl
+    | some point =>
+        exact scheduledBalancedAbort_pointContinuation_eq
+          figureOneFinalScheduledBalancedParameters q point
+  rw [hretainedForm,
+    MembershipOracleProgram.run_bind_counted oracle.query _ _
+      (figureOneAbortInitialSample_countedStronglyMeasurable q I oracle)
+      hmapped.2 hmapped.1]
+  rw [hactualForm,
+    MembershipOracleProgram.run_bind_counted oracle.query _ _
+      (figureOneAbortInitialSample_countedStronglyMeasurable q I oracle)
+      hactual hactualRun]
+  rw [hid] at hcompose
+  exact hcompose
+
 #print axioms figureOneFinalScheduledGaussianIdealPhaseExpectedCost_le
 #print axioms figureOneFinalScheduledGaussianIdealPhaseEndpoint_leUpTo
 #print axioms figureOneAbortInitialRun_fst_leUpTo_idealPhaseStart
@@ -962,9 +1172,15 @@ theorem exists_figureOneFinalScheduledRetainedComplete_countedReference
 #print axioms
   figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_uniform
 #print axioms
+  figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_scalarTail
+#print axioms
+  figureOneFinalScheduledRetainedFullCostProgram_map_snd_eq_pointContinuation
+#print axioms
   exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
 #print axioms figureOneFinalScheduledTerminalIdealExpectedCost_le
 #print axioms
   exists_figureOneFinalScheduledRetainedComplete_countedReference
+#print axioms
+  figureOneFinalScheduledRetainedCompleteProgram_map_snd_eq_abortBase
 
 end ArlibCommunity.Algorithms.CV18
