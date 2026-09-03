@@ -176,6 +176,41 @@ theorem figureOne_resetReference_base_budget :
       congr 1
       norm_num
 
+/-- The reset error together with the full boundary/death reserve fits the
+legacy `1/64` mapped-product interface exactly. -/
+theorem figureOneScheduledGlobalReset_add_boundary_le_transferBudget
+    (q : VolumeParams) {boundary : ENNReal}
+    (hboundary : boundary ≤ ENNReal.ofReal (1 / 128 : ℝ)) :
+    figureOneScheduledGlobalResetReferenceError q + boundary ≤
+      ENNReal.ofReal (1 / 64 : ℝ) := by
+  calc
+    figureOneScheduledGlobalResetReferenceError q + boundary ≤
+        ENNReal.ofReal (3 / 2560 : ℝ) +
+          ENNReal.ofReal (1 / 128 : ℝ) :=
+      add_le_add (figureOneScheduledGlobalResetReferenceError_le q) hboundary
+    _ = ENNReal.ofReal (23 / 2560 : ℝ) := by
+      rw [← ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 3 / 2560)
+        (by norm_num : (0 : ℝ) ≤ 1 / 128)]
+      congr 1
+      norm_num
+    _ ≤ ENNReal.ofReal (1 / 64 : ℝ) :=
+      ENNReal.ofReal_le_ofReal (by norm_num)
+
+/-- Upgrade a concrete global trace/reference comparison to the existing
+mapped-product `1/64` consumer after separately bounding its boundary/death
+part. -/
+theorem MeasureLeUpTo.mono_resetReference_finalTransfer
+    {Omega : Type*} [MeasurableSpace Omega]
+    (q : VolumeParams) {actual reference : Measure Omega}
+    {error boundary : ENNReal}
+    (hcomparison : MeasureLeUpTo actual reference error)
+    (herror : error ≤
+      figureOneScheduledGlobalResetReferenceError q + boundary)
+    (hboundary : boundary ≤ ENNReal.ofReal (1 / 128 : ℝ)) :
+    MeasureLeUpTo actual reference (ENNReal.ofReal (1 / 64 : ℝ)) :=
+  hcomparison.mono_error <| herror.trans
+    (figureOneScheduledGlobalReset_add_boundary_le_transferBudget q hboundary)
+
 /-- Event-level post-initial capstone.  A single global trace/reference MLU
 comparison transports the `11/64` reference tail.  The complete reset sum
 and any already-assembled boundary/death error fitting `1/128` leave the
@@ -237,6 +272,9 @@ theorem MeasureLeUpTo.event_add_boundary_abort_le_thirteen_sixtyfour
 #print axioms figureOneInitialAbortAccuracyError_le
 #print axioms figureOne_resetReference_postInitial_budget
 #print axioms figureOne_resetReference_base_budget
+#print axioms
+  figureOneScheduledGlobalReset_add_boundary_le_transferBudget
+#print axioms MeasureLeUpTo.mono_resetReference_finalTransfer
 #print axioms MeasureLeUpTo.event_add_boundary_le_three_sixteenths
 #print axioms
   MeasureLeUpTo.event_add_boundary_abort_le_thirteen_sixtyfour
