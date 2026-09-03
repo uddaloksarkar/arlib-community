@@ -465,6 +465,69 @@ theorem exists_scheduledRetainedResetReference_all
             _ = scheduledRetainedExactSome q I phase :=
               holdCoordinates j hjold
 
+/-- The fixed-cost exact-coordinate reference inherits the executable
+prefix/next approximate-independence estimate.  Transport across the single
+history-level comparison costs three times its total reset error. -/
+theorem exists_scheduledRetainedResetReference_all_approxIndep
+    (q : VolumeParams) (I : VolumeInput q.n) (phase count : ℕ)
+    (hcount0 : 0 < count)
+    (hcountMax : count ≤ figureOneDependentMaxSampleCount q) :
+    ∃ reference : Measure (RetainedSampleHistory (AmbientSpace q.n)),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+        reference (scheduledResetReferenceError q (count - 1)) ∧
+      (∀ j, j < count →
+        reference.map (fun history => history.1 j) =
+          scheduledRetainedExactSome q I phase) ∧
+      (∀ r, r < count →
+        ApproxIndepFun
+          (figureOneDependentEpsilon q +
+            3 * (scheduledResetReferenceError q (count - 1)).toReal)
+          (sequentialPrefixSum
+            (retainedSampleObservation
+              (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+                (scheduleValue q (phase + 1)))) r)
+          (retainedSampleObservation
+            (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+              (scheduleValue q (phase + 1))) r)
+          reference) := by
+  obtain ⟨reference, hreferenceProb, hmlu, hcoordinates, _hstate⟩ :=
+    exists_scheduledRetainedResetReference_all q I phase (count - 1)
+  let actual := initializedScheduledRetainedHistoryLaw
+    q I phase (count - 1)
+  let _ : IsProbabilityMeasure reference := hreferenceProb
+  let _ : IsProbabilityMeasure actual := by
+    simpa [actual] using
+      initializedScheduledRetainedHistoryLaw_isProbabilityMeasure
+        q I phase (count - 1)
+  let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+    (scheduleValue q (phase + 1))
+  have hweight : Measurable weight :=
+    measurable_gaussianRatioWeight (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+  refine ⟨reference, hreferenceProb, hmlu, ?_, ?_⟩
+  · intro j hj
+    exact hcoordinates j (by omega)
+  · intro r hr
+    have hprefix : Measurable
+        (sequentialPrefixSum (retainedSampleObservation weight) r) :=
+      measurable_sequentialPrefixSum
+        (fun j => measurable_retainedSampleObservation hweight j) r
+    have hobs : Measurable (retainedSampleObservation weight r) :=
+      measurable_retainedSampleObservation hweight r
+    have hactualIndep :=
+      approxIndepFun_initializedScheduledRetainedHistory_all
+        q I phase count hcountMax r hr
+    have htv : TVLe reference actual
+        (scheduledResetReferenceError q (count - 1)) := by
+      exact hmlu.to_tvLe.symm
+    simpa only [actual, weight] using
+      (ApproxIndepFun.of_tvLe reference actual
+        (scheduledResetReferenceError_ne_top q (count - 1))
+        (sequentialPrefixSum (retainedSampleObservation weight) r)
+        (retainedSampleObservation weight r) hprefix hobs htv hactualIndep)
+
 /-- A single scheduled phase admits one reference history law on which all
 recorded coordinates are exact truncated-Gaussian marginals.  The executable
 history is dominated by this law with the sum of the successive endpoint
@@ -729,6 +792,7 @@ theorem exists_initializedScheduledRetainedShadowReference
 #print axioms scheduledResetReferenceError_ne_top
 #print axioms exists_scheduledRetainedResetReferenceStep
 #print axioms exists_scheduledRetainedResetReference_all
+#print axioms exists_scheduledRetainedResetReference_all_approxIndep
 #print axioms
   exists_initializedScheduledRetainedShadowReference_all_approxIndep
 #print axioms exists_initializedScheduledRetainedShadowReferenceStep
