@@ -40,6 +40,33 @@ theorem MeasureLeUpTo.iteratedKernelLaw_le_lawSequence_sum
         (hactualMeas t) (hactualProb t) (hstep t (Nat.lt_succ_self t))
       simpa only [iteratedKernelLaw_succ, Finset.sum_range_succ] using hnext
 
+/-- Law-sequence exact chance with an explicit initial replacement error.
+This is the form used when the executable initial state is first reset to a
+warm accepted law before the chronological phase recurrence begins. -/
+theorem MeasureLeUpTo.iteratedKernelLaw_le_lawSequence_add_sum
+    {S : Type*} [MeasurableSpace S]
+    (actualK : ℕ → S → Measure S) (actualInitial : Measure S)
+    (referenceLaw : ℕ → Measure S) (stepError : ℕ → ENNReal)
+    {initialError : ENNReal}
+    (hinitial : MeasureLeUpTo actualInitial (referenceLaw 0) initialError)
+    (hactualMeas : ∀ i, Measurable (actualK i))
+    (hactualProb : ∀ i state, IsProbabilityMeasure (actualK i state))
+    (t : ℕ)
+    (hstep : ∀ i, i < t →
+      MeasureLeUpTo ((referenceLaw i).bind (actualK i))
+        (referenceLaw (i + 1)) (stepError i)) :
+    MeasureLeUpTo
+      (iteratedKernelLaw actualK actualInitial t) (referenceLaw t)
+      (initialError + ∑ i ∈ Finset.range t, stepError i) := by
+  induction t with
+  | zero => simpa using hinitial
+  | succ t ih =>
+      have ih' := ih fun i hi => hstep i (hi.trans (Nat.lt_succ_self t))
+      have hnext := MeasureLeUpTo.bind_then_replace ih' (actualK t)
+        (hactualMeas t) (hactualProb t) (hstep t (Nat.lt_succ_self t))
+      simpa only [iteratedKernelLaw_succ, Finset.sum_range_succ,
+        add_assoc] using hnext
+
 /-- Finitely many existential one-step reference constructions can be chosen
 coherently as a single sequence.  `Invariant i` may record all moment,
 marginal, and prefix-dependence facts accumulated through phase `i`. -/
@@ -144,9 +171,47 @@ theorem exists_iteratedKernelLaw_le_finiteReference
   · exact hactualProb
   · exact hstepComparison
 
+/-- Construct a finite reference from a separately supplied initial reference
+law and retain the initial replacement error in the final comparison. -/
+theorem exists_iteratedKernelLaw_le_finiteReference_of_initial
+    {S : Type*} [MeasurableSpace S]
+    (actualK : ℕ → S → Measure S)
+    (actualInitial referenceInitial : Measure S)
+    (Invariant : ℕ → Measure S → Prop) (stepError : ℕ → ENNReal)
+    {initialError : ENNReal}
+    (hreferenceInitialProb : IsProbabilityMeasure referenceInitial)
+    (hreferenceInitialInvariant : Invariant 0 referenceInitial)
+    (hinitial : MeasureLeUpTo actualInitial referenceInitial initialError)
+    (hactualMeas : ∀ i, Measurable (actualK i))
+    (hactualProb : ∀ i state, IsProbabilityMeasure (actualK i state))
+    (t : ℕ)
+    (hstep : ∀ i, i < t → ∀ source : Measure S,
+      IsProbabilityMeasure source → Invariant i source →
+      ∃ target : Measure S,
+        IsProbabilityMeasure target ∧
+        MeasureLeUpTo (source.bind (actualK i)) target (stepError i) ∧
+        Invariant (i + 1) target) :
+    ∃ reference : Measure S,
+      IsProbabilityMeasure reference ∧
+      Invariant t reference ∧
+      MeasureLeUpTo (iteratedKernelLaw actualK actualInitial t) reference
+        (initialError + ∑ i ∈ Finset.range t, stepError i) := by
+  obtain ⟨referenceLaw, hzero, hprob, hinvariant, hstepComparison⟩ :=
+    exists_finiteReferenceLawSequence actualK referenceInitial Invariant
+      stepError hreferenceInitialProb hreferenceInitialInvariant t hstep
+  refine ⟨referenceLaw t, hprob t le_rfl, hinvariant t le_rfl, ?_⟩
+  apply MeasureLeUpTo.iteratedKernelLaw_le_lawSequence_add_sum
+    actualK actualInitial referenceLaw stepError
+  · simpa [hzero] using hinitial
+  · exact hactualMeas
+  · exact hactualProb
+  · exact hstepComparison
+
 #print axioms MeasureLeUpTo.iteratedKernelLaw_le_lawSequence_sum
+#print axioms MeasureLeUpTo.iteratedKernelLaw_le_lawSequence_add_sum
 #print axioms exists_finiteReferenceLawSequence
 #print axioms exists_iteratedKernelLaw_le_finiteReference
+#print axioms exists_iteratedKernelLaw_le_finiteReference_of_initial
 
 end
 
