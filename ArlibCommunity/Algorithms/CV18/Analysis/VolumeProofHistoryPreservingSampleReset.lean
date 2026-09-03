@@ -99,6 +99,33 @@ theorem historyOperationalRecordKernel_measurable_and_probability
     exact Measure.isProbabilityMeasure_map
       (hupdate.comp (measurable_const.prodMk measurable_id)).aemeasurable
 
+/-- Recording an observation does not change the operational next-state
+marginal. -/
+theorem map_bind_historyOperationalRecordKernel_snd
+    {H X Y : Type*} [MeasurableSpace H] [MeasurableSpace X]
+    [MeasurableSpace Y]
+    (prefixLaw : Measure (H × X))
+    (K : X → Measure X) (record : H → Y → H) (observe : X → Y)
+    (hK : Measurable K) (hKprob : ∀ x, IsProbabilityMeasure (K x))
+    (hrecord : Measurable (Function.uncurry record))
+    (hobserve : Measurable observe) :
+    (prefixLaw.bind
+        (historyOperationalRecordKernel K record observe)).map Prod.snd =
+      (prefixLaw.map Prod.snd).bind K := by
+  have hstep := historyOperationalRecordKernel_measurable_and_probability
+    K record observe hK hKprob hrecord hobserve
+  rw [map_bind_eq_bind_map_of_measurable prefixLaw hstep.1 measurable_snd]
+  rw [map_bind_eq_bind_comp_state prefixLaw measurable_snd hK]
+  apply Measure.bind_congr_right
+  filter_upwards with state
+  unfold historyOperationalRecordKernel
+  have hnext : Measurable fun next : X =>
+      (record state.1 (observe next), next) :=
+    (hrecord.comp (measurable_const.prodMk hobserve)).prodMk measurable_id
+  rw [Measure.map_map measurable_snd hnext]
+  change Measure.map id (K state.2) = K state.2
+  exact Measure.map_id
+
 /-- Running the operational transition and then recording is exactly the
 direct executable recording kernel. -/
 theorem bind_historyRawNextKernel_map_record_eq
@@ -572,6 +599,7 @@ theorem exists_shadowRecordedReference_of_nextMarginal_tvLe_preserving
 
 #print axioms historyRawNextKernel_measurable_and_probability
 #print axioms historyOperationalRecordKernel_measurable_and_probability
+#print axioms map_bind_historyOperationalRecordKernel_snd
 #print axioms bind_historyRawNextKernel_map_record_eq
 #print axioms MeasureLeUpTo.historyOperationalRecord_of_rawReset
 #print axioms map_recorded_newCoordinate_eq_of_reset_marginal
