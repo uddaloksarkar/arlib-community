@@ -177,11 +177,67 @@ theorem initializedScheduledRetainedHistory_relativeDeviation_le_of_coordinate_m
       (hrefSecond.trans (by simpa [mean] using hmomentBudget))
   simpa [mean] using hresult
 
+/-- The initialized-history deviation event is exactly the corresponding
+retained-sum shadow event.  This is a law identity, not an approximation. -/
+theorem initializedScheduledRetainedHistory_deviation_eq_retainedSum
+    (q : VolumeParams) (I : VolumeInput q.n) (phase count : ℕ)
+    (hcount : 0 < count) (target eps : ℝ) :
+    let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+    let K := figureOneFinalScheduledRetainedOptionKernel q I
+      (scheduleValue q phase)
+    let initial :=
+      (truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+          (fun x => (weight x, some x))
+    (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+        {history | eps * target ≤
+          |sequentialPrefixSum (retainedSampleObservation weight) count history /
+              (count : ℝ) - target|} =
+      (iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+        initial (count - 1))
+        {state | eps * target ≤ |state.1 / (count : ℝ) - target|} := by
+  dsimp only
+  let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+    (scheduleValue q (phase + 1))
+  let K := figureOneFinalScheduledRetainedOptionKernel q I
+    (scheduleValue q phase)
+  let exact : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I (scheduleValue q phase)
+      (scheduleValue_pos q phase)
+  let toSum := retainedSampleHistoryToSum weight count
+  let deviation : Set (ℝ × Option (AmbientSpace q.n)) :=
+    {state | eps * target ≤ |state.1 / (count : ℝ) - target|}
+  have hweight : Measurable weight :=
+    measurable_gaussianRatioWeight (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+  have hK :=
+    figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+      q I (scheduleValue_pos q phase)
+  have htoSum : Measurable toSum := by
+    simpa [toSum] using measurable_retainedSampleHistoryToSum hweight count
+  have hdeviation : MeasurableSet deviation := by
+    apply measurableSet_le measurable_const
+    exact (((measurable_fst.div_const (count : ℝ)).sub_const target).abs)
+  have hmap := map_iterated_initializedRetainedSampleHistoryKernel_sum
+    K hK.1 hK.2 weight hweight exact (count - 1)
+  have happly := congrArg
+    (fun mu : Measure (ℝ × Option (AmbientSpace q.n)) => mu deviation) hmap
+  rw [Measure.map_apply
+    (measurable_retainedSampleHistoryToSum hweight ((count - 1) + 1))
+    hdeviation] at happly
+  have hcountEq : count - 1 + 1 = count := Nat.sub_add_cancel (by omega)
+  simpa [initializedScheduledRetainedHistoryLaw, exact, K, weight, toSum,
+    deviation, retainedSampleHistoryToSum, sequentialPrefixSum, hcountEq]
+    using happly
+
 #print axioms
   MeasureLeUpTo.measure_relativeDeviation_le_of_reference_moments
 #print axioms
   initializedScheduledRetainedHistory_relativeDeviation_le_of_resetReference
 #print axioms
   initializedScheduledRetainedHistory_relativeDeviation_le_of_coordinate_moments
+#print axioms
+  initializedScheduledRetainedHistory_deviation_eq_retainedSum
 
 end ArlibCommunity.Algorithms.CV18
