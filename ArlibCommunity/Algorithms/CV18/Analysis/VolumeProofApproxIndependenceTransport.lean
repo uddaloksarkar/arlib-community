@@ -1,0 +1,94 @@
+/- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependencePerturbation
+
+/-! # Transporting approximate independence through joint-law identities
+
+The CV18 chronological proof establishes Lemma 7.17(c) when a phase is
+created, then runs probability kernels for the remaining phases.  Those
+kernels preserve the two already-created scalar observables.  The useful
+interface is therefore equality of their joint pushforward laws, rather than
+pointwise equality on the whole trace space.
+-/
+
+namespace ArlibCommunity.Algorithms.CV18
+
+open MeasureTheory
+
+/-- Approximate independence depends only on the joint pushforward law of its
+two observables.  This formulation permits the source and target experiments
+to have different sample spaces. -/
+theorem ApproxIndepFun.of_map_pair_eq
+    {Omega Omega' S T : Type*}
+    [MeasurableSpace Omega] [MeasurableSpace Omega']
+    [MeasurableSpace S] [MeasurableSpace T]
+    {epsilon : ℝ} {mu : Measure Omega} {nu : Measure Omega'}
+    {X : Omega → S} {Y : Omega → T}
+    {X' : Omega' → S} {Y' : Omega' → T}
+    (hX : Measurable X) (hY : Measurable Y)
+    (hX' : Measurable X') (hY' : Measurable Y')
+    (hlaw : mu.map (fun omega => (X omega, Y omega)) =
+      nu.map (fun omega => (X' omega, Y' omega)))
+    (h : ApproxIndepFun epsilon X Y mu) :
+    ApproxIndepFun epsilon X' Y' nu := by
+  intro A hA B hB
+  have hpair : Measurable fun omega : Omega => (X omega, Y omega) :=
+    hX.prodMk hY
+  have hpair' : Measurable fun omega : Omega' => (X' omega, Y' omega) :=
+    hX'.prodMk hY'
+  have hjoint :
+      mu.real (X ⁻¹' A ∩ Y ⁻¹' B) =
+        nu.real (X' ⁻¹' A ∩ Y' ⁻¹' B) := by
+    have hAB : MeasurableSet (A ×ˢ B) := hA.prod hB
+    have hm := congrArg (fun law : Measure (S × T) => law.real (A ×ˢ B)) hlaw
+    simp only [measureReal_def] at hm
+    rw [Measure.map_apply hpair hAB, Measure.map_apply hpair' hAB] at hm
+    have hpre : (fun omega : Omega => (X omega, Y omega)) ⁻¹' (A ×ˢ B) =
+        X ⁻¹' A ∩ Y ⁻¹' B := by
+      ext omega
+      simp
+    have hpre' : (fun omega : Omega' => (X' omega, Y' omega)) ⁻¹' (A ×ˢ B) =
+        X' ⁻¹' A ∩ Y' ⁻¹' B := by
+      ext omega
+      simp
+    rw [hpre, hpre'] at hm
+    simpa only [measureReal_def] using hm
+  have hleft : mu.real (X ⁻¹' A) = nu.real (X' ⁻¹' A) := by
+    have hAu : MeasurableSet (A ×ˢ (Set.univ : Set T)) :=
+      hA.prod MeasurableSet.univ
+    have hm := congrArg
+      (fun law : Measure (S × T) => law.real (A ×ˢ Set.univ)) hlaw
+    simp only [measureReal_def] at hm
+    rw [Measure.map_apply hpair hAu, Measure.map_apply hpair' hAu] at hm
+    have hpre : (fun omega : Omega => (X omega, Y omega)) ⁻¹'
+        (A ×ˢ (Set.univ : Set T)) = X ⁻¹' A := by
+      ext omega
+      simp
+    have hpre' : (fun omega : Omega' => (X' omega, Y' omega)) ⁻¹'
+        (A ×ˢ (Set.univ : Set T)) = X' ⁻¹' A := by
+      ext omega
+      simp
+    rw [hpre, hpre'] at hm
+    simpa only [measureReal_def] using hm
+  have hright : mu.real (Y ⁻¹' B) = nu.real (Y' ⁻¹' B) := by
+    have huB : MeasurableSet ((Set.univ : Set S) ×ˢ B) :=
+      MeasurableSet.univ.prod hB
+    have hm := congrArg
+      (fun law : Measure (S × T) => law.real (Set.univ ×ˢ B)) hlaw
+    simp only [measureReal_def] at hm
+    rw [Measure.map_apply hpair huB, Measure.map_apply hpair' huB] at hm
+    have hpre : (fun omega : Omega => (X omega, Y omega)) ⁻¹'
+        ((Set.univ : Set S) ×ˢ B) = Y ⁻¹' B := by
+      ext omega
+      simp
+    have hpre' : (fun omega : Omega' => (X' omega, Y' omega)) ⁻¹'
+        ((Set.univ : Set S) ×ˢ B) = Y' ⁻¹' B := by
+      ext omega
+      simp
+    rw [hpre, hpre'] at hm
+    simpa only [measureReal_def] using hm
+  rw [← hjoint, ← hleft, ← hright]
+  exact h A hA B hB
+
+#print axioms ApproxIndepFun.of_map_pair_eq
+
+end ArlibCommunity.Algorithms.CV18
