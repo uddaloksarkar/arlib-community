@@ -169,6 +169,101 @@ theorem scheduledResetReferenceError_ne_top
         ⟨scheduledResetReferenceError_ne_top q i,
           scheduledRetainedEndpointError_ne_top q 1⟩
 
+theorem scheduledResetReferenceError_eq_nsmul
+    (q : VolumeParams) (tail : ℕ) :
+    scheduledResetReferenceError q tail =
+      tail • scheduledRetainedEndpointError q 1 := by
+  induction tail with
+  | zero => simp [scheduledResetReferenceError]
+  | succ i ih =>
+      rw [scheduledResetReferenceError, ih, succ_nsmul]
+
+/-- Resetting from an exact target costs at most `3/2` of one transition
+budget: one transition budget plus twice the reserved quarter-budget for
+the stationary-target correction. -/
+theorem scheduledRetainedEndpointError_one_toReal_le
+    (q : VolumeParams) :
+    (scheduledRetainedEndpointError q 1).toReal ≤
+      (3 / 2 : ℝ) * figureOnePerSampleMixingError q := by
+  let delta := figureOneCorrectedTransitionBudget q
+  let stationary := scheduledBalancedStationaryTargetError q
+  have hnu : 0 < figureOnePerSampleMixingError q :=
+    figureOnePerSampleMixingError_pos q
+  have hdeltaTop : delta ≠ ⊤ := by
+    simp [delta, figureOneCorrectedTransitionBudget]
+  have htargetTop : figureOneCorrectedTargetBudget q ≠ ⊤ :=
+    ENNReal.div_ne_top hdeltaTop (by norm_num)
+  have hstationaryTop : stationary ≠ ⊤ :=
+    ne_top_of_le_ne_top htargetTop
+      (scheduledBalancedStationaryTargetError_le_targetBudget q)
+  have htwiceTop : 2 * stationary ≠ ⊤ :=
+    ENNReal.mul_ne_top (by norm_num) hstationaryTop
+  have hstationaryReal : stationary.toReal ≤
+      figureOnePerSampleMixingError q / 4 := by
+    have hreal := ENNReal.toReal_mono htargetTop
+      (scheduledBalancedStationaryTargetError_le_targetBudget q)
+    simpa [stationary, figureOneCorrectedTargetBudget, delta,
+      figureOneCorrectedTransitionBudget, ENNReal.toReal_div,
+      ENNReal.toReal_ofReal hnu.le] using hreal
+  rw [scheduledRetainedEndpointError,
+    ENNReal.toReal_add htwiceTop (by simpa using hdeltaTop),
+    ENNReal.toReal_mul, ENNReal.toReal_ofNat]
+  simp only [one_nsmul, delta, figureOneCorrectedTransitionBudget,
+    ENNReal.toReal_ofReal hnu.le]
+  nlinarith
+
+/-- The exact-target reset recurrence is linear in the number of tail
+samples, with an explicit real-valued `3/2` per-sample envelope. -/
+theorem scheduledResetReferenceError_toReal_le
+    (q : VolumeParams) (tail : ℕ) :
+    (scheduledResetReferenceError q tail).toReal ≤
+      (3 / 2 : ℝ) * (tail : ℝ) *
+        figureOnePerSampleMixingError q := by
+  rw [scheduledResetReferenceError_eq_nsmul, ENNReal.toReal_nsmul]
+  have htail : 0 ≤ (tail : ℝ) := Nat.cast_nonneg tail
+  have hone := scheduledRetainedEndpointError_one_toReal_le q
+  simp only [nsmul_eq_mul]
+  nlinarith
+
+/-- Even after transporting the executable dependence estimate to the
+fixed-cost reference, its coefficient grows by at most a factor `5/2`.
+This uses the global sample/phase allocation from Lemma 7.17(c). -/
+theorem scheduledResetReference_transportEpsilon_le
+    (q : VolumeParams) {count : ℕ}
+    (hcount : count ≤ figureOneDependentMaxSampleCount q) :
+    figureOneDependentEpsilon q +
+        3 * (scheduledResetReferenceError q (count - 1)).toReal ≤
+      (5 / 2 : ℝ) * figureOneDependentEpsilon q := by
+  have hnu : 0 < figureOnePerSampleMixingError q :=
+    figureOnePerSampleMixingError_pos q
+  have htailNat : count - 1 ≤ figureOneDependentMaxSampleCount q :=
+    (Nat.sub_le count 1).trans hcount
+  have htail : ((count - 1 : ℕ) : ℝ) ≤
+      (figureOneDependentMaxSampleCount q : ℝ) := by
+    exact_mod_cast htailNat
+  have hreset := scheduledResetReferenceError_toReal_le q (count - 1)
+  have hresetMax :
+      (scheduledResetReferenceError q (count - 1)).toReal ≤
+        (3 / 2 : ℝ) *
+          (figureOneDependentMaxSampleCount q : ℝ) *
+            figureOnePerSampleMixingError q := by
+    exact hreset.trans (mul_le_mul_of_nonneg_right
+      (mul_le_mul_of_nonneg_left htail (by norm_num)) hnu.le)
+  have hm : (1 : ℝ) ≤ figureOneDependentPhaseCount q := by
+    exact_mod_cast figureOneDependentPhaseCount_pos q
+  have hk0 : 0 ≤ (figureOneDependentMaxSampleCount q : ℝ) := by
+    positivity
+  have hkm :
+      (figureOneDependentMaxSampleCount q : ℝ) *
+          figureOnePerSampleMixingError q ≤
+        (figureOneDependentMaxSampleCount q : ℝ) *
+          (figureOneDependentPhaseCount q : ℝ) *
+            figureOnePerSampleMixingError q := by
+    have := mul_le_mul_of_nonneg_left hm hk0
+    nlinarith
+  have hbudget := figureOne_lemma717c_budget q
+  nlinarith
+
 /-- The one-step shadow reset may start from any reference prefix whose
 operational-state marginal agrees with the executable prefix.  It preserves
 all previously written coordinates, installs an exact new coordinate, and
@@ -790,6 +885,10 @@ theorem exists_initializedScheduledRetainedShadowReference
 #print axioms exists_initializedScheduledRetainedShadowReference_all
 #print axioms scheduledShadowReferenceError_ne_top
 #print axioms scheduledResetReferenceError_ne_top
+#print axioms scheduledResetReferenceError_eq_nsmul
+#print axioms scheduledRetainedEndpointError_one_toReal_le
+#print axioms scheduledResetReferenceError_toReal_le
+#print axioms scheduledResetReference_transportEpsilon_le
 #print axioms exists_scheduledRetainedResetReferenceStep
 #print axioms exists_scheduledRetainedResetReference_all
 #print axioms exists_scheduledRetainedResetReference_all_approxIndep
