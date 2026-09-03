@@ -17,6 +17,65 @@ namespace ArlibCommunity.Algorithms.CV18
 
 open _root_.Arlib _root_.Arlib.MarkovChains
 
+/-- Killing an accumulated nonnegative total only on the final dead event
+costs at most its `L²` norm times the square root of the death probability.
+This is the usable replacement for multiplying the tiny failure probability
+by the enormous compact-support supremum of an early Gaussian ratio. -/
+theorem integral_retainedLiveTotal_loss_le_sqrt
+    {S : Type*} [MeasurableSpace S]
+    (mu : Measure (ℝ × Option S)) [IsProbabilityMeasure mu]
+    (htotal0 : ∀ᵐ state ∂mu, 0 ≤ state.1)
+    (htotalMem : MemLp (fun state : ℝ × Option S => state.1) 2 mu) :
+    (∫ state, state.1 ∂mu) - ∫ state, retainedLiveTotal state ∂mu ≤
+      Real.sqrt (∫ state, state.1 ^ 2 ∂mu) *
+        Real.sqrt (mu.real {state | state.2 = none}) := by
+  let dead : Set (ℝ × Option S) := {state | state.2 = none}
+  let killed : ℝ × Option S → ℝ :=
+    dead.indicator (fun _ => (1 : ℝ))
+  have hdead : MeasurableSet dead :=
+    measurable_snd measurableSet_option_none
+  have hkilled : Measurable killed := measurable_const.indicator hdead
+  have hkilledMem : MemLp killed 2 mu := by
+    apply MemLp.of_bound hkilled.aestronglyMeasurable 1
+    filter_upwards with state
+    by_cases hstate : state ∈ dead
+    · simp [killed, Set.indicator_of_mem hstate]
+    · simp [killed, Set.indicator_of_notMem hstate]
+  have hfstInt : Integrable (fun state : ℝ × Option S => state.1) mu :=
+    htotalMem.integrable (by norm_num)
+  have hliveInt : Integrable (retainedLiveTotal (S := S)) mu := by
+    apply Integrable.mono' hfstInt
+      measurable_retainedLiveTotal.aestronglyMeasurable
+    filter_upwards [htotal0] with state hstate0
+    rcases state with ⟨total, state⟩
+    cases state with
+    | none =>
+        simpa [retainedLiveTotal] using hstate0
+    | some value =>
+        simpa [retainedLiveTotal, Real.norm_eq_abs,
+          abs_of_nonneg hstate0] using hstate0
+  have hloss : (∫ state, state.1 ∂mu) -
+        ∫ state, retainedLiveTotal state ∂mu =
+      ∫ state, state.1 * killed state ∂mu := by
+    rw [← integral_sub hfstInt hliveInt]
+    apply integral_congr_ae
+    filter_upwards with state
+    rcases state with ⟨total, state⟩
+    cases state <;> simp [retainedLiveTotal, killed, dead]
+  have hkilledSq : (∫ state, killed state ^ 2 ∂mu) = mu.real dead := by
+    calc
+      (∫ state, killed state ^ 2 ∂mu) = ∫ state, killed state ∂mu := by
+        apply integral_congr_ae
+        filter_upwards with state
+        by_cases hstate : state ∈ dead <;>
+          simp [killed, Set.indicator_of_mem, Set.indicator_of_notMem, hstate]
+      _ = mu.real dead := by
+        simpa [killed] using integral_indicator_const (μ := mu) (1 : ℝ) hdead
+  rw [hloss]
+  have hCS := integral_mul_le_sqrt_mul_sqrt htotalMem hkilledMem
+  rw [hkilledSq] at hCS
+  exact hCS
+
 set_option maxHeartbeats 1000000 in
 /-- The common-tail Gaussian phase target is exactly the killed retained-sum
 shadow, followed by the public output and averaging maps. -/
@@ -149,5 +208,6 @@ theorem figureOneScheduledGaussianPhaseTarget_eq_map_retainedSumKernel
   rw [hfirstBind, Measure.map_map havg hout]
 
 #print axioms figureOneScheduledGaussianPhaseTarget_eq_map_retainedSumKernel
+#print axioms integral_retainedLiveTotal_loss_le_sqrt
 
 end ArlibCommunity.Algorithms.CV18
