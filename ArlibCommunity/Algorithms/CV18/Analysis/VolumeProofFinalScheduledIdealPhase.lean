@@ -454,6 +454,149 @@ theorem exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
   rw [figureOneFinalScheduledRetainedGaussianPrefixProgram_run q I oracle steps]
   exact exists_figureOneFinalScheduledGaussianCountedReference q I oracle steps
 
+/-- At the exact final Gaussian endpoint, the terminal Gaussian-to-uniform
+collector also pays only its warm-start term. -/
+theorem figureOneFinalScheduledTerminalIdealExpectedCost_le
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    (∫⁻ state, countedQueryCost
+      ((figureOneFinalScheduledRetainedTerminalProgram q state).run
+        oracle.query)
+      ∂figureOneFinalScheduledIdealPhaseStart q I (terminalPhaseSteps q)) ≤
+      ((384 * (figureOneSampleCount q *
+        figureOneFinalScheduledBalancedParameters.retryLimit q
+          (terminalVariance q) *
+        figureOneFinalScheduledBalancedParameters.properStride q
+          (terminalVariance q)) : ℕ) : ENNReal) := by
+  have hsteps : 0 < terminalPhaseSteps q := terminalPhaseSteps_pos q
+  obtain ⟨previous, hprevious⟩ := Nat.exists_eq_succ_of_ne_zero hsteps.ne'
+  let target := figureOneScheduledAcceptedTargetAt q I previous
+  let _ : IsProbabilityMeasure target :=
+    figureOneScheduledAcceptedTargetAt_isProbabilityMeasure q I previous
+  have hideal : figureOneFinalScheduledIdealPhaseStart q I
+      (terminalPhaseSteps q) = target.map some := by
+    simp [figureOneFinalScheduledIdealPhaseStart, target, hprevious]
+  have hwarmBase :=
+    figureOneFinalScheduledIdealPhaseStart_scaled_isWarm q I
+      (terminalPhaseSteps q)
+  have hsub : terminalPhaseSteps q - 1 = previous := by omega
+  have hwarm : IsWarm
+      (8 * ENNReal.ofReal (speedyAdjacentWarmConstant q))
+      (target.map fun point => accuracyScaleFactor q • point)
+      (ellGaussianProb
+        (figureOneScheduledPhaseBody q I (terminalVariance q))
+        (figureOneScheduledProposalRadius q (terminalVariance q))
+        (terminalVariance q)) := by
+    simpa [figureOneScheduledSpeedyPiAt, scheduleValue_terminalPhaseSteps,
+      target, hsteps.ne', hsub] using hwarmBase
+  have hbound :=
+    lintegral_optional_scheduledCollector_cost_le_finalEnvelope_of_leUpTo
+      q I oracle (terminalVariance_pos' q)
+      (measurable_uniformRatioWeight (terminalVariance q))
+      (figureOneFinalScheduledIdealPhaseStart q I (terminalPhaseSteps q)) target
+      (by rw [hideal]; exact MeasureLeUpTo.refl (target.map some))
+      hwarm (finalIdealWarmConstant_le_ninetySix q)
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q))
+      (figureOneSampleCount q)
+      (figureOneScheduledCorrectedProperStride_pos q (terminalVariance q)
+        (figureOneSafeRetryCount q - 1))
+  have hcost : (∫⁻ state, countedQueryCost
+      ((figureOneFinalScheduledRetainedTerminalProgram q state).run
+        oracle.query)
+      ∂figureOneFinalScheduledIdealPhaseStart q I (terminalPhaseSteps q)) =
+      ∫⁻ state, match state with
+        | none => 0
+        | some point => countedQueryCost
+            ((scheduledBalancedAccuracyRetryCollect q (terminalVariance q)
+              (uniformRatioWeight (terminalVariance q))
+              (figureOneFinalScheduledBalancedParameters.proposalCap q
+                (terminalVariance q))
+              (figureOneFinalScheduledBalancedParameters.properStride q
+                (terminalVariance q))
+              (figureOneFinalScheduledBalancedParameters.retryLimit q
+                (terminalVariance q))
+              (figureOneSampleCount q)
+              (accuracyScaleFactor q • point)).run oracle.query)
+        ∂figureOneFinalScheduledIdealPhaseStart q I
+          (terminalPhaseSteps q) := by
+    apply lintegral_congr
+    intro state
+    exact figureOneFinalScheduledRetainedTerminalProgram_cost q I oracle state
+  rw [hcost]
+  exact hbound.trans (by push_cast; simp [mul_comm, mul_left_comm, mul_assoc])
+
+/-- Forward-associated retained execution through the terminal collector. -/
+noncomputable def figureOneFinalScheduledRetainedCompleteProgram
+    (q : VolumeParams) :
+    MembershipOracleProgram q.n (Option (AmbientSpace q.n)) :=
+  (figureOneFinalScheduledRetainedGaussianPrefixProgram q
+    (terminalPhaseSteps q)).bind
+      (figureOneFinalScheduledRetainedTerminalProgram q)
+
+/-- Complete retained counted reference, including the terminal collector. -/
+theorem exists_figureOneFinalScheduledRetainedComplete_countedReference
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ∃ reference : Measure (Option (AmbientSpace q.n) × ℕ),
+      MeasureLeUpTo
+        ((figureOneFinalScheduledRetainedCompleteProgram q).run oracle.query)
+        reference
+        ((ENNReal.ofReal (q.eps / 64) +
+            scheduledBalancedStationaryTargetError q) +
+          ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+            figureOnePhaseSampleCount q (scheduleValue q phase) •
+              figureOneCorrectedTransitionBudget q) ∧
+      countedQueryCost reference ≤
+        1 + ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+          ((384 * (figureOnePhaseSampleCount q (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.retryLimit q
+              (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.properStride q
+              (scheduleValue q phase)) : ℕ) : ENNReal) +
+          ((384 * (figureOneSampleCount q *
+            figureOneFinalScheduledBalancedParameters.retryLimit q
+              (terminalVariance q) *
+            figureOneFinalScheduledBalancedParameters.properStride q
+              (terminalVariance q)) : ℕ) : ENNReal) := by
+  obtain ⟨gaussianReference, hgaussianDom, hgaussianMarginal,
+      hgaussianCost⟩ :=
+    exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
+      q I oracle (terminalPhaseSteps q)
+  have hterminal :=
+    figureOneFinalScheduledRetainedTerminalProgram_countedMeasurable
+      q I oracle
+  let terminalContinuation := countedContinuation oracle.query
+    (figureOneFinalScheduledRetainedTerminalProgram q)
+  let reference := gaussianReference.bind terminalContinuation
+  refine ⟨reference, ?_, ?_⟩
+  · have hbind := hgaussianDom.bind_same
+      (measurable_countedContinuation oracle.query _ hterminal.1 hterminal.2)
+      (fun state => by
+        dsimp only [terminalContinuation, countedContinuation]
+        let _ : IsProbabilityMeasure
+            ((figureOneFinalScheduledRetainedTerminalProgram q state.1).run
+              oracle.query) :=
+          MembershipOracleProgram.run_isProbabilityMeasure oracle.query _
+            (hterminal.2 state.1).executionMeasurable
+        exact Measure.isProbabilityMeasure_map (by fun_prop))
+    unfold figureOneFinalScheduledRetainedCompleteProgram
+    rw [MembershipOracleProgram.run_bind_counted oracle.query _ _
+      (figureOneFinalScheduledRetainedGaussianPrefixProgram_countedMeasurable
+        q I oracle (terminalPhaseSteps q)) hterminal.2 hterminal.1]
+    exact hbind
+  · have hcostEq :=
+      MembershipOracleProgram.countedQueryCost_bind_countedContinuation
+        oracle.query gaussianReference
+        (figureOneFinalScheduledRetainedTerminalProgram q)
+        hterminal.1 hterminal.2
+    change countedQueryCost reference ≤ _
+    rw [hcostEq, hgaussianMarginal]
+    exact add_le_add hgaussianCost
+      (figureOneFinalScheduledTerminalIdealExpectedCost_le q I oracle)
+
 #print axioms figureOneFinalScheduledGaussianIdealPhaseExpectedCost_le
 #print axioms figureOneFinalScheduledGaussianIdealPhaseEndpoint_leUpTo
 #print axioms figureOneAbortInitialRun_fst_leUpTo_idealPhaseStart
@@ -462,5 +605,8 @@ theorem exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
   figureOneFinalScheduledRetainedGaussianPrefixProgram_run
 #print axioms
   exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
+#print axioms figureOneFinalScheduledTerminalIdealExpectedCost_le
+#print axioms
+  exists_figureOneFinalScheduledRetainedComplete_countedReference
 
 end ArlibCommunity.Algorithms.CV18
