@@ -1,11 +1,180 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
-import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceRetainedInduction
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGoodBadIndependence
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceDependentAssembly
 
 /-! # Full retained-state good/bad decomposition for the scheduled trace -/
 
 namespace ArlibCommunity.Algorithms.CV18
 
 open MeasureTheory ProbabilityTheory Set
+
+/-! ## The asymmetric form of Lemma 7.17(b) -/
+
+/-- In the good/bad trace argument the conditioned next-phase law pays twice
+the accumulated bad mass, whereas the unconditional law pays it only once.
+Keeping those two errors separate is essential: replacing both by the larger
+one loses a factor four and no longer fits CV18's `3 k m nu` allocation. -/
+theorem approxIndepFun_sequentialPairLaw_of_asymmetric_leUpTo
+    {H T : Type*} [MeasurableSpace H] [MeasurableSpace T]
+    (rho : Measure H) [IsProbabilityMeasure rho]
+    (K : H → Measure T) (hK : Measurable K)
+    (hKprob : ∀ h, IsProbabilityMeasure (K h))
+    (target : Measure T) [IsProbabilityMeasure target]
+    {conditionedError baseError : ENNReal}
+    (hconditionedTop : conditionedError ≠ ⊤)
+    (hbaseTop : baseError ≠ ⊤)
+    (hconditioned : ∀ mu : Measure H, IsProbabilityMeasure mu →
+      Arlib.IsWarm 2 mu rho →
+      MeasureLeUpTo (mu.bind K) target conditionedError)
+    (hbase : MeasureLeUpTo (rho.bind K) target baseError) :
+    ApproxIndepFun (conditionedError + baseError).toReal
+      Prod.fst Prod.snd (sequentialPairLaw rho K) := by
+  apply approxIndepFun_fst_snd_sequentialPairLaw_of_condOn_bind_tv
+    rho hK hKprob (ENNReal.add_ne_top.mpr
+      ⟨hconditionedTop, hbaseTop⟩)
+  intro A hA hhalf
+  have hAposReal : 0 < rho.real A :=
+    lt_of_lt_of_le (by norm_num) hhalf
+  have hA0 : rho A ≠ 0 := by
+    intro hzero
+    rw [measureReal_def, hzero] at hAposReal
+    simp at hAposReal
+  let hcondProb : IsProbabilityMeasure (Arlib.condOn rho A) :=
+    Arlib.isProbabilityMeasure_condOn rho hA0 (measure_ne_top rho A)
+  let _ : IsProbabilityMeasure (Arlib.condOn rho A) := hcondProb
+  let _ : IsProbabilityMeasure ((Arlib.condOn rho A).bind K) :=
+    isProbabilityMeasure_bind hK.aemeasurable (ae_of_all _ hKprob)
+  let _ : IsProbabilityMeasure (rho.bind K) :=
+    isProbabilityMeasure_bind hK.aemeasurable (ae_of_all _ hKprob)
+  have hleft := hconditioned (Arlib.condOn rho A) hcondProb
+    (isWarm_condOn_two_of_half rho hA hhalf)
+  exact hleft.to_tvLe.trans hbase.to_tvLe.symm
+
+/-! ## Exact arithmetic of the accumulated retained error -/
+
+theorem figureOneScheduledRetainedError_toReal_le
+    (q : VolumeParams) (phases : ℕ) :
+    (figureOneScheduledRetainedError q phases).toReal ≤
+      figureOnePerSampleMixingError q / 4 +
+        (phases : ℝ) * (figureOneDependentMaxSampleCount q : ℝ) *
+          figureOnePerSampleMixingError q := by
+  have hnu : 0 ≤ figureOnePerSampleMixingError q :=
+    (figureOnePerSampleMixingError_pos q).le
+  have htarget := scheduledBalancedStationaryTargetError_le_targetBudget q
+  have htargetBudgetTop : figureOneCorrectedTargetBudget q ≠ ⊤ := by
+    exact ENNReal.div_ne_top ENNReal.ofReal_ne_top (by norm_num)
+  have htargetTop : scheduledBalancedStationaryTargetError q ≠ ⊤ :=
+    ne_top_of_le_ne_top htargetBudgetTop htarget
+  have htermTop : ∀ phase,
+      figureOnePhaseSampleCount q (scheduleValue q phase) •
+          figureOneCorrectedTransitionBudget q ≠ ⊤ := by
+    intro phase
+    rw [nsmul_eq_mul]
+    exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+      ENNReal.ofReal_ne_top
+  have hsumTop : (∑ phase ∈ Finset.range phases,
+      figureOnePhaseSampleCount q (scheduleValue q phase) •
+        figureOneCorrectedTransitionBudget q) ≠ ⊤ := by
+    exact ENNReal.sum_ne_top.2 fun phase _ => htermTop phase
+  rw [figureOneScheduledRetainedError,
+    ENNReal.toReal_add htargetTop hsumTop]
+  calc
+    (scheduledBalancedStationaryTargetError q).toReal +
+        (∑ phase ∈ Finset.range phases,
+          figureOnePhaseSampleCount q (scheduleValue q phase) •
+            figureOneCorrectedTransitionBudget q).toReal ≤
+      (figureOneCorrectedTargetBudget q).toReal +
+        ∑ phase ∈ Finset.range phases,
+          (figureOnePhaseSampleCount q (scheduleValue q phase) : ℝ) *
+            figureOnePerSampleMixingError q := by
+      apply add_le_add
+      · exact ENNReal.toReal_mono htargetBudgetTop htarget
+      · rw [ENNReal.toReal_sum fun phase _ => htermTop phase]
+        apply Finset.sum_le_sum
+        intro phase hphase
+        rw [ENNReal.toReal_nsmul,
+          figureOneCorrectedTransitionBudget,
+          ENNReal.toReal_ofReal hnu]
+        simp [nsmul_eq_mul]
+    _ ≤ figureOnePerSampleMixingError q / 4 +
+        ∑ _phase ∈ Finset.range phases,
+          (figureOneDependentMaxSampleCount q : ℝ) *
+            figureOnePerSampleMixingError q := by
+      apply add_le_add
+      · simp [figureOneCorrectedTargetBudget,
+          figureOneCorrectedTransitionBudget, ENNReal.toReal_div,
+          ENNReal.toReal_ofReal hnu]
+      · apply Finset.sum_le_sum
+        intro phase hphase
+        have hcount :
+            (figureOnePhaseSampleCount q (scheduleValue q phase) : ℝ) ≤
+              (figureOneDependentMaxSampleCount q : ℝ) := by
+          exact_mod_cast figureOnePhaseSampleCount_le_dependentMax
+            q (scheduleValue q phase)
+        exact mul_le_mul_of_nonneg_right hcount hnu
+    _ = figureOnePerSampleMixingError q / 4 +
+        (phases : ℝ) * (figureOneDependentMaxSampleCount q : ℝ) *
+          figureOnePerSampleMixingError q := by
+      rw [Finset.sum_const, Finset.card_range, nsmul_eq_mul]
+      ring
+
+/-- The asymmetric conditioned/unconditioned comparison fits exactly inside
+the paper's dependence budget at every noninitial chronological phase. -/
+theorem figureOneScheduledRetained_asymmetric_budget
+    (q : VolumeParams) (phases : ℕ)
+    (hphases : phases < figureOneDependentPhaseCount q) :
+    ((figureOneCorrectedTransitionBudget q +
+          2 * figureOneScheduledRetainedError q phases) +
+        (figureOneCorrectedTransitionBudget q +
+          figureOneScheduledRetainedError q phases)).toReal ≤
+      figureOneDependentEpsilon q := by
+  have hnu : 0 < figureOnePerSampleMixingError q :=
+    figureOnePerSampleMixingError_pos q
+  have herrTop : figureOneScheduledRetainedError q phases ≠ ⊤ := by
+    unfold figureOneScheduledRetainedError
+    apply ENNReal.add_ne_top.mpr
+    constructor
+    · exact ne_top_of_le_ne_top
+        (ENNReal.div_ne_top ENNReal.ofReal_ne_top (by norm_num))
+        (scheduledBalancedStationaryTargetError_le_targetBudget q)
+    · exact ENNReal.sum_ne_top.2 fun phase _ => by
+        rw [nsmul_eq_mul]
+        exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+          ENNReal.ofReal_ne_top
+  have hbudgetReal := figureOneScheduledRetainedError_toReal_le q phases
+  have htransitionTop : figureOneCorrectedTransitionBudget q ≠ ⊤ := by
+    simp [figureOneCorrectedTransitionBudget]
+  have htwoErrorTop : 2 * figureOneScheduledRetainedError q phases ≠ ⊤ :=
+    ENNReal.mul_ne_top (by norm_num) herrTop
+  have hreal :
+      ((figureOneCorrectedTransitionBudget q +
+            2 * figureOneScheduledRetainedError q phases) +
+          (figureOneCorrectedTransitionBudget q +
+            figureOneScheduledRetainedError q phases)).toReal =
+        2 * figureOnePerSampleMixingError q +
+          3 * (figureOneScheduledRetainedError q phases).toReal := by
+    rw [ENNReal.toReal_add
+        (ENNReal.add_ne_top.mpr ⟨htransitionTop, htwoErrorTop⟩)
+        (ENNReal.add_ne_top.mpr ⟨htransitionTop, herrTop⟩),
+      ENNReal.toReal_add htransitionTop htwoErrorTop,
+      ENNReal.toReal_add htransitionTop herrTop,
+      ENNReal.toReal_mul, ENNReal.toReal_ofNat,
+      figureOneCorrectedTransitionBudget,
+      ENNReal.toReal_ofReal hnu.le]
+    ring
+  rw [hreal]
+  have hphaseCast : (phases : ℝ) + 1 ≤
+      figureOneDependentPhaseCount q := by
+    exact_mod_cast (Nat.succ_le_iff.mpr hphases)
+  have hk : (1 : ℝ) ≤ figureOneDependentMaxSampleCount q := by
+    exact_mod_cast figureOneDependentMaxSampleCount_pos q
+  have hphaseProduct := mul_le_mul_of_nonneg_right hphaseCast
+    (mul_nonneg
+      (show 0 ≤ (figureOneDependentMaxSampleCount q : ℝ) by positivity)
+      hnu.le)
+  have hnuProduct := mul_le_mul_of_nonneg_right hk hnu.le
+  rw [← figureOne_lemma717c_budget q]
+  nlinarith [hphaseProduct, hnuProduct]
 
 /-- The dead trace mass is bounded by the same optional-retained exact-chance
 error: the ideal accepted target is supported on `some`. -/
