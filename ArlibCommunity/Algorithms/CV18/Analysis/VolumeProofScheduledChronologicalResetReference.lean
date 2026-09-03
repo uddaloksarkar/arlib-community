@@ -156,6 +156,60 @@ theorem map_sequentialPairLaw_scheduledResetTraceAppend_eq_bind
   simp only [Function.comp_apply, Prod.fst, Prod.snd]
   rw [scheduledResetPairToResult_pairOutput_eq result hresult]
 
+/-- A retained-option marginal supported on `some` forces the trace to be
+live almost surely.  This is the support fact needed when a reset phase is
+recorded back into the public loss-preserving trace. -/
+theorem ae_trace_live_of_map_retainedOption_eq_map_some
+    (source : Measure (ScheduledBalancedCoolingTrace n))
+    (retained : Measure (AmbientSpace n))
+    (hretained : source.map scheduledBalancedTraceRetainedOption =
+      retained.map some) :
+    ∀ᵐ trace ∂source, trace.2 = true := by
+  have hsome : ∀ᵐ value ∂retained.map some, value ≠ none :=
+    (ae_map_iff measurable_some.aemeasurable
+      measurableSet_option_none.compl).2 <|
+      ae_of_all _ fun point => by simp
+  rw [← hretained] at hsome
+  have hoption : ∀ᵐ trace ∂source,
+      scheduledBalancedTraceRetainedOption trace ≠ none :=
+    (ae_map_iff measurable_scheduledBalancedTraceRetainedOption.aemeasurable
+      measurableSet_option_none.compl).1 hsome
+  filter_upwards [hoption] with trace htrace
+  unfold scheduledBalancedTraceRetainedOption at htrace
+  cases hlive : trace.2 with
+  | false => simp [hlive] at htrace
+  | true => rfl
+
+/-- On a live valid prefix, a nonnegative reset score with a present endpoint
+is exactly the newly appended public trace coordinate. -/
+theorem scheduledBalancedTracePhaseVariable_resetAppend_eq_fst
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (trace : ScheduledBalancedCoolingTrace q.n)
+    (hvalid : ScheduledBalancedCoolingTraceValid phase trace)
+    (hlive : trace.2 = true)
+    (result : ℝ × Option (AmbientSpace q.n))
+    (hscore : 0 ≤ result.1) (hpoint : result.2 ≠ none) :
+    scheduledBalancedTracePhaseVariable q (phase + 1)
+        (scheduledResetTraceAppend (trace, result)) = result.1 := by
+  unfold scheduledResetTraceAppend
+  rw [scheduledBalancedTracePhaseVariable_append_eq_rawOutput q phase hphase
+    trace hvalid]
+  simp only [hlive, if_true]
+  rw [liveRaw_scheduledResetPairToResult]
+  simp [hpoint, max_eq_right hscore]
+
+/-- The endpoint of a live reset append is precisely the reset endpoint. -/
+theorem scheduledBalancedTraceRetainedOption_resetAppend
+    (trace : ScheduledBalancedCoolingTrace n)
+    (hlive : trace.2 = true)
+    (result : ℝ × Option (AmbientSpace n)) :
+    scheduledBalancedTraceRetainedOption
+        (scheduledResetTraceAppend (trace, result)) = result.2 := by
+  unfold scheduledResetTraceAppend
+  rw [scheduledBalancedTraceRetainedOption_append]
+  simp [hlive]
+
 /-- The exact Gaussian and normalized accepted endpoint laws differ by the
 single stationary-target error already allocated in the scheduled boundary
 budget. -/
@@ -640,6 +694,9 @@ theorem exists_scheduledTerminalPairTarget
 #print axioms scheduledRetainedExactSome_tvLe_acceptedSome
 #print axioms scheduledResetPairToResult_pairOutput_eq
 #print axioms map_sequentialPairLaw_scheduledResetTraceAppend_eq_bind
+#print axioms ae_trace_live_of_map_retainedOption_eq_map_some
+#print axioms scheduledBalancedTracePhaseVariable_resetAppend_eq_fst
+#print axioms scheduledBalancedTraceRetainedOption_resetAppend
 #print axioms exists_acceptedEndpointResetJoint
 #print axioms exists_acceptedEndpointResetJoint_of_joint
 #print axioms exists_scheduledGaussianAcceptedPairTarget
