@@ -339,6 +339,71 @@ theorem figureOneFinalScheduledRetainedGaussianPrefixProgram_run
         hprefix hphase.2 hphase.1, ih]
       rfl
 
+/-- Erasing the ratio coordinate after one executable Gaussian estimator
+gives exactly the retained phase's full result-and-count law. -/
+theorem figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (phase : ℕ) (point : AmbientSpace q.n) :
+    (figureOneFinalScheduledRetainedGaussianPhaseProgram q phase
+        (some point)).run oracle.query =
+      ((scheduledBalancedCoolingRatioEstimate
+        figureOneFinalScheduledBalancedParameters q
+        (scheduleValue q phase) (scheduleValue q (phase + 1)) point).run
+          oracle.query).map fun outcome => (optionSnd outcome.1, outcome.2) := by
+  let raw := scheduledBalancedAccuracyRetryCollect q (scheduleValue q phase)
+    (gaussianRatioWeight (scheduleValue q phase)
+      (scheduleValue q (phase + 1)))
+    (figureOneFinalScheduledBalancedParameters.proposalCap q
+      (scheduleValue q phase))
+    (figureOneFinalScheduledBalancedParameters.properStride q
+      (scheduleValue q phase))
+    (figureOneFinalScheduledBalancedParameters.retryLimit q
+      (scheduleValue q phase))
+    (figureOnePhaseSampleCount q (scheduleValue q phase))
+    (accuracyScaleFactor q • point)
+  have hraw := (scheduledBalancedAccuracyRetryCollect_countedMeasurable
+    q I oracle (scheduleValue_pos q phase)
+      (measurable_gaussianRatioWeight (scheduleValue q phase)
+        (scheduleValue q (phase + 1)))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase))
+      (figureOnePhaseSampleCount q (scheduleValue q phase))).2
+        (accuracyScaleFactor q • point)
+  have hretained :
+      (figureOneFinalScheduledRetainedGaussianPhaseProgram q phase
+          (some point)).run oracle.query =
+        (raw.run oracle.query).map fun outcome =>
+          (optionSnd outcome.1, outcome.2) := by
+    unfold figureOneFinalScheduledRetainedGaussianPhaseProgram raw
+    exact MembershipOracleProgram.run_bind_pure_eq_map oracle.query _
+      optionSnd measurable_optionSnd hraw
+  have hratio :
+      (scheduledBalancedCoolingRatioEstimate
+        figureOneFinalScheduledBalancedParameters q
+        (scheduleValue q phase) (scheduleValue q (phase + 1)) point).run
+          oracle.query =
+        (raw.run oracle.query).map fun outcome =>
+          (balancedCoolingAverage
+            (figureOnePhaseSampleCount q (scheduleValue q phase)) outcome.1,
+            outcome.2) := by
+    unfold scheduledBalancedCoolingRatioEstimate raw
+    exact MembershipOracleProgram.run_bind_pure_eq_map oracle.query _
+      (balancedCoolingAverage
+        (figureOnePhaseSampleCount q (scheduleValue q phase)))
+      (measurable_balancedCoolingAverage _) hraw
+  rw [hretained, hratio, Measure.map_map]
+  · apply Measure.map_congr
+    filter_upwards with outcome
+    simp only [Function.comp_apply]
+    rw [optionSnd_balancedCoolingAverage]
+  · exact (measurable_optionSnd.comp measurable_fst).prodMk measurable_snd
+  · exact ((measurable_balancedCoolingAverage _).comp measurable_fst).prodMk
+      measurable_snd
+
 /-- Finite chronological reference for every prefix of Gaussian phases.
 The reference has the exact ideal retained-point marginal, additive
 exact-chance loss, and only the sum of warm expected phase costs. -/
@@ -603,6 +668,8 @@ theorem exists_figureOneFinalScheduledRetainedComplete_countedReference
 #print axioms exists_figureOneFinalScheduledGaussianCountedReference
 #print axioms
   figureOneFinalScheduledRetainedGaussianPrefixProgram_run
+#print axioms
+  figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
 #print axioms
   exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
 #print axioms figureOneFinalScheduledTerminalIdealExpectedCost_le
