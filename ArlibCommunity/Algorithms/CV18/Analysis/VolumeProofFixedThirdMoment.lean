@@ -174,6 +174,65 @@ theorem four_le_figureOneDependentPhaseCount (q : VolumeParams) :
     linarith
   simpa [figureOneDependentPhaseCount] using Nat.add_le_add_right hterminalSteps 1
 
+/-- A slightly longer explicit prefix is still below variance one.  This
+strengthening is useful when approximate independence has first been
+transported to the exact-coordinate reset reference, which inflates its
+coefficient by `5/2`. -/
+theorem eight_le_figureOneDependentPhaseCount (q : VolumeParams) :
+    8 ≤ figureOneDependentPhaseCount q := by
+  have hn : (3 : ℝ) ≤ q.n := by exact_mod_cast q.dim_ok
+  have hstep : ∀ {s : ℝ}, 0 ≤ s → s ≤ 1 →
+      nextVariance q s ≤ s * (4 / 3 : ℝ) := by
+    intro s hs hsone
+    calc
+      nextVariance q s ≤ s * coolingRate q s := min_le_right _ _
+      _ = s * (1 + 1 / (q.n : ℝ)) := by
+        rw [coolingRate, if_pos hsone]
+      _ ≤ s * (4 / 3 : ℝ) := by
+        apply mul_le_mul_of_nonneg_left _ hs
+        have hinv : 1 / (q.n : ℝ) ≤ 1 / 3 :=
+          one_div_le_one_div_of_le (by norm_num) hn
+        linarith
+  have hzero : scheduleValue q 0 ≤ (1 / 192 : ℝ) := by
+    simp only [scheduleValue, Function.iterate_zero_apply]
+    unfold initialVariance
+    rw [div_le_iff₀ (by positivity : (0 : ℝ) < 64 * (q.n : ℝ))]
+    nlinarith [q.heps.2]
+  have hone : scheduleValue q 1 ≤ (1 / 144 : ℝ) := by
+    rw [show 1 = 0 + 1 by omega, scheduleValue_succ]
+    exact (hstep (scheduleValue_pos q 0).le (hzero.trans (by norm_num))).trans
+      (by nlinarith)
+  have htwo : scheduleValue q 2 ≤ (1 / 108 : ℝ) := by
+    rw [show 2 = 1 + 1 by omega, scheduleValue_succ]
+    exact (hstep (scheduleValue_pos q 1).le (hone.trans (by norm_num))).trans
+      (by nlinarith)
+  have hthree : scheduleValue q 3 ≤ (1 / 81 : ℝ) := by
+    rw [show 3 = 2 + 1 by omega, scheduleValue_succ]
+    exact (hstep (scheduleValue_pos q 2).le (htwo.trans (by norm_num))).trans
+      (by nlinarith)
+  have hfour : scheduleValue q 4 ≤ (4 / 243 : ℝ) := by
+    rw [show 4 = 3 + 1 by omega, scheduleValue_succ]
+    exact (hstep (scheduleValue_pos q 3).le (hthree.trans (by norm_num))).trans
+      (by nlinarith)
+  have hfive : scheduleValue q 5 ≤ (16 / 729 : ℝ) := by
+    rw [show 5 = 4 + 1 by omega, scheduleValue_succ]
+    exact (hstep (scheduleValue_pos q 4).le (hfour.trans (by norm_num))).trans
+      (by nlinarith)
+  have hsix : scheduleValue q 6 ≤ (64 / 2187 : ℝ) := by
+    rw [show 6 = 5 + 1 by omega, scheduleValue_succ]
+    exact (hstep (scheduleValue_pos q 5).le (hfive.trans (by norm_num))).trans
+      (by nlinarith)
+  have hsixTerminal : scheduleValue q 6 < terminalVariance q :=
+    hsix.trans_lt <| (by norm_num : (64 / 2187 : ℝ) < 1) |>.trans_le
+      (terminalVariance_ge_one' q)
+  have hterminalSteps : 7 ≤ terminalPhaseSteps q := by
+    by_contra hnot
+    have hle : terminalPhaseSteps q ≤ 6 := by omega
+    have heq := scheduleValue_terminal_persists q hle
+      (scheduleValue_terminalPhaseSteps q)
+    linarith
+  simpa [figureOneDependentPhaseCount] using Nat.add_le_add_right hterminalSteps 1
+
 /-- The final CV18 truncation parameter is at least `4096`.  This is the
 numerical threshold at which the dimension-three `L³` covariance loss fits
 one eighth of the executable moment slack. -/
@@ -181,6 +240,14 @@ theorem figureOneDependentAlpha_ge_4096 (q : VolumeParams) :
     (4096 : ℝ) ≤ figureOneDependentAlpha q := by
   have hm : (4 : ℝ) ≤ figureOneDependentPhaseCount q := by
     exact_mod_cast four_le_figureOneDependentPhaseCount q
+  have he2 : q.eps ^ 2 ≤ 1 := by nlinarith [q.heps.1, q.heps.2]
+  rw [figureOneDependentAlpha, le_div_iff₀ (sq_pos_of_pos q.heps.1)]
+  nlinarith
+
+theorem figureOneDependentAlpha_ge_8192 (q : VolumeParams) :
+    (8192 : ℝ) ≤ figureOneDependentAlpha q := by
+  have hm : (8 : ℝ) ≤ figureOneDependentPhaseCount q := by
+    exact_mod_cast eight_le_figureOneDependentPhaseCount q
   have he2 : q.eps ^ 2 ≤ 1 := by nlinarith [q.heps.1, q.heps.2]
   rw [figureOneDependentAlpha, le_div_iff₀ (sq_pos_of_pos q.heps.1)]
   nlinarith
@@ -232,6 +299,69 @@ theorem figureOne_fixedThirdMoment_dependence_le_slack_div_eight
   field_simp [halphaPos.ne']
   nlinarith
 
+/-- The same dimension-three covariance budget remains valid after the
+`5/2` independence-coefficient inflation of the exact-coordinate reset
+reference. -/
+theorem figureOne_fixedThirdMoment_reset_dependence_le_slack_div_eight
+    (q : VolumeParams) :
+    3 * ((5 / 2 : ℝ) * figureOneDependentEpsilon q) ^ (1 / 3 : ℝ) *
+        (129 / 64 : ℝ) ^ 2 ≤
+      figureOneExecutableMomentSlack q / 8 := by
+  let epsilon := (5 / 2 : ℝ) * figureOneDependentEpsilon q
+  let d := epsilon ^ (1 / 3 : ℝ)
+  let alpha := figureOneDependentAlpha q
+  let slack := figureOneExecutableMomentSlack q
+  have hdependentPos : 0 < figureOneDependentEpsilon q := by
+    unfold figureOneDependentEpsilon
+    have hm : (0 : ℝ) < figureOneDependentPhaseCount q := by
+      exact_mod_cast figureOneDependentPhaseCount_pos q
+    exact div_pos (sq_pos_of_pos q.heps.1)
+      (mul_pos
+        (mul_pos (by norm_num) (pow_pos (figureOneDependentAlpha_pos q) 4)) hm)
+  have hepsilon : 0 < epsilon := mul_pos (by norm_num) hdependentPos
+  have hd0 : 0 ≤ d := by dsimp [d]; positivity
+  have hslack0 : 0 ≤ slack / 8 := by
+    exact div_nonneg (figureOneExecutableMomentSlack_nonneg q) (by norm_num)
+  have hdcube : d ^ 3 = epsilon := by
+    dsimp [d]
+    convert Real.rpow_inv_natCast_pow hepsilon.le
+      (by norm_num : (3 : ℕ) ≠ 0) using 1
+    norm_num
+  change 3 * d * (129 / 64 : ℝ) ^ 2 ≤ slack / 8
+  apply (pow_le_pow_iff_left₀
+    (mul_nonneg (mul_nonneg (by norm_num) hd0) (sq_nonneg _))
+    hslack0 (by norm_num : (3 : ℕ) ≠ 0)).mp
+  have halpha : (8192 : ℝ) ≤ alpha := by
+    simpa [alpha] using figureOneDependentAlpha_ge_8192 q
+  have halphaPos : 0 < alpha := lt_of_lt_of_le (by norm_num) halpha
+  have halphaSq : (8192 : ℝ) ^ 2 ≤ alpha ^ 2 :=
+    pow_le_pow_left₀ (by norm_num) halpha 2
+  rw [show (3 * d * (129 / 64 : ℝ) ^ 2) ^ 3 =
+      3 ^ 3 * d ^ 3 * (129 / 64 : ℝ) ^ 6 by ring,
+    hdcube]
+  have hdependent : figureOneDependentEpsilon q = slack / alpha ^ 4 := by
+    simpa [slack, alpha] using
+      figureOneDependentEpsilon_eq_slack_div_alpha_four q
+  have hslack : slack = 1 / (4 * alpha) := by
+    simpa [slack, alpha] using
+      figureOneExecutableMomentSlack_eq_inv_four_alpha q
+  dsimp only [epsilon]
+  rw [hdependent, hslack]
+  field_simp [halphaPos.ne']
+  nlinarith
+
+/-- Monotone form consumed directly by any reference whose transported
+dependence coefficient is bounded by `5/2` of the original allocation. -/
+theorem figureOne_fixedThirdMoment_dependence_le_slack_div_eight_of_le_reset
+    (q : VolumeParams) {epsilon : ℝ} (hepsilon : 0 ≤ epsilon)
+    (hle : epsilon ≤ (5 / 2 : ℝ) * figureOneDependentEpsilon q) :
+    3 * epsilon ^ (1 / 3 : ℝ) * (129 / 64 : ℝ) ^ 2 ≤
+      figureOneExecutableMomentSlack q / 8 := by
+  have hrpow := Real.rpow_le_rpow hepsilon hle (by norm_num : (0 : ℝ) ≤ 1 / 3)
+  exact (mul_le_mul_of_nonneg_right
+    (mul_le_mul_of_nonneg_left hrpow (by norm_num)) (sq_nonneg _)).trans
+      (figureOne_fixedThirdMoment_reset_dependence_le_slack_div_eight q)
+
 /-- The exact dependence contribution in the empirical-average second
 moment (including the finite-count factor) fits the capstone reserve. -/
 theorem figureOne_fixedThirdMoment_average_dependence_le_slack_div_eight
@@ -269,8 +399,13 @@ theorem figureOne_fixedThirdMoment_average_dependence_le_slack_div_eight
 #print axioms
   scheduleValue_fixedRate_thirdMoment_le_rational_mean_cube_dim_three
 #print axioms four_le_figureOneDependentPhaseCount
+#print axioms eight_le_figureOneDependentPhaseCount
 #print axioms figureOneDependentAlpha_ge_4096
+#print axioms figureOneDependentAlpha_ge_8192
 #print axioms figureOne_fixedThirdMoment_dependence_le_slack_div_eight
+#print axioms figureOne_fixedThirdMoment_reset_dependence_le_slack_div_eight
+#print axioms
+  figureOne_fixedThirdMoment_dependence_le_slack_div_eight_of_le_reset
 #print axioms
   figureOne_fixedThirdMoment_average_dependence_le_slack_div_eight
 
