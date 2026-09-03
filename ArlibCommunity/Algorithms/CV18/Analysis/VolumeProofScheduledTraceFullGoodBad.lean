@@ -1423,6 +1423,223 @@ theorem exists_figureOneScheduledTraceScaledState_good_bad
           measure_add_measure_compl measurableSet_option_none]
       _ ≤ figureOneScheduledRetainedError q (phase + 1) := herrorMass
 
+/-! ## Conditioning the retained live/dead split -/
+
+theorem scheduledBalancedTraceLiveStateLaw_mono_smul
+    (q : VolumeParams)
+    (mu rho : Measure (ScheduledBalancedCoolingTrace q.n))
+    (c : ENNReal) (transform : AmbientSpace q.n → AmbientSpace q.n)
+    (htransform : Measurable transform)
+    (h : mu ≤ c • rho) :
+    scheduledBalancedTraceLiveStateLaw mu transform ≤
+      c • scheduledBalancedTraceLiveStateLaw rho transform := by
+  unfold scheduledBalancedTraceLiveStateLaw
+  rw [← Measure.map_smul, ← Measure.restrict_smul]
+  exact Measure.map_mono
+    (Measure.restrict_mono Set.Subset.rfl h)
+    (htransform.comp measurable_scheduledBalancedTraceRetainedState)
+
+theorem scheduledBalancedTraceDeadStateLaw_mass_mono_smul
+    (q : VolumeParams)
+    (mu rho : Measure (ScheduledBalancedCoolingTrace q.n))
+    (c : ENNReal) (transform : AmbientSpace q.n → AmbientSpace q.n)
+    (htransform : Measurable transform)
+    (h : mu ≤ c • rho) :
+    scheduledBalancedTraceDeadStateLaw mu transform Set.univ ≤
+      c * scheduledBalancedTraceDeadStateLaw rho transform Set.univ := by
+  have hmeasure : scheduledBalancedTraceDeadStateLaw mu transform ≤
+      c • scheduledBalancedTraceDeadStateLaw rho transform := by
+    unfold scheduledBalancedTraceDeadStateLaw
+    rw [← Measure.map_smul, ← Measure.restrict_smul]
+    exact Measure.map_mono
+      (Measure.restrict_mono Set.Subset.rfl h)
+      (htransform.comp measurable_scheduledBalancedTraceRetainedState)
+  have := Measure.le_iff'.mp hmeasure Set.univ
+  simpa [Measure.smul_apply, smul_eq_mul] using this
+
+/-- The asymmetric Lemma 7.17(b) estimate for a noninitial Gaussian phase,
+before transporting the newly created coordinate through later trace phases. -/
+theorem approxIndepFun_figureOneScheduledTrace_gaussianPhaseOutput
+    (q : VolumeParams) (I : VolumeInput q.n) (previous : ℕ)
+    (hnext : previous + 1 < terminalPhaseSteps q) :
+    let i := previous + 1
+    let rho := scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I i
+    let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) i
+    let liveOutput := figureOneScheduledTraceLiveTruncatedOutput q I (i + 1)
+    let deadOutput := figureOneScheduledTraceDeadTruncatedOutput q I (i + 1)
+    let outK := scheduledBalancedTracePhaseOutputLaw
+      figureOneFinalScheduledBalancedParameters q I i liveOutput deadOutput
+    ApproxIndepFun (figureOneDependentEpsilon q)
+      (X ∘ Prod.fst) Prod.snd (sequentialPairLaw rho outK) := by
+  dsimp only
+  let i := previous + 1
+  let rho := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I i
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    accuracyScaleFactor q • x
+  let good := (figureOneScheduledAcceptedTargetAt q I previous).map scale
+  let eta := figureOneScheduledRetainedError q i
+  let liveOutput := figureOneScheduledTraceLiveTruncatedOutput q I (i + 1)
+  let deadOutput := figureOneScheduledTraceDeadTruncatedOutput q I (i + 1)
+  let outK := scheduledBalancedTracePhaseOutputLaw
+    figureOneFinalScheduledBalancedParameters q I i liveOutput deadOutput
+  let target := (figureOneScheduledGaussianPhaseTarget q I i).map liveOutput
+  have hprevious : previous < terminalPhaseSteps q := by omega
+  obtain ⟨bad, hlive, herror⟩ :=
+    exists_figureOneScheduledTraceScaledLive_good_bad q I previous hprevious
+  have hetaTop : eta ≠ ⊤ := by
+    dsimp only [eta, i]
+    unfold figureOneScheduledRetainedError
+    apply ENNReal.add_ne_top.mpr
+    constructor
+    · exact ne_top_of_le_ne_top
+        (ENNReal.div_ne_top ENNReal.ofReal_ne_top (by norm_num))
+        (scheduledBalancedStationaryTargetError_le_targetBudget q)
+    · exact ENNReal.sum_ne_top.2 fun phase _ => by
+        rw [nsmul_eq_mul]
+        exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+          ENNReal.ofReal_ne_top
+  let _ : IsFiniteMeasure bad :=
+    { measure_univ_lt_top := by
+        apply lt_of_le_of_lt
+        · exact le_trans (le_add_right le_rfl) herror
+        · exact lt_top_iff_ne_top.mpr hetaTop }
+  let _ : IsProbabilityMeasure rho :=
+    scheduledBalancedForwardTraceLaw_isProbabilityMeasure
+      figureOneFinalScheduledBalancedParameters q I i
+  have hscale : Measurable scale := by
+    dsimp only [scale]
+    fun_prop
+  have hliveOutput : Measurable liveOutput :=
+    measurable_figureOneScheduledTraceLiveTruncatedOutput q I (i + 1)
+  have houtK := scheduledBalancedTracePhaseOutputLaw_measurable_and_probability
+    figureOneFinalScheduledBalancedParameters q I i liveOutput deadOutput
+      hliveOutput
+  let _ : IsProbabilityMeasure target := by
+    let _ := figureOneScheduledGaussianPhaseTarget_isProbabilityMeasure q I i
+    exact Measure.isProbabilityMeasure_map hliveOutput.aemeasurable
+  have hgood : Arlib.IsWarm
+      (ENNReal.ofReal (8 * speedyAdjacentWarmConstant q)) good
+      (figureOneScheduledSpeedyPiAt q I i) := by
+    simpa [good, scale, i, figureOneScheduledAcceptedTargetAt,
+      figureOneScheduledSpeedyPiAt] using
+      map_scheduledBalancedAcceptedTarget_scale_adjacent_isWarm q I previous
+  have hM8 : (1 : ENNReal) ≤
+      ENNReal.ofReal (8 * speedyAdjacentWarmConstant q) := by
+    rw [← ENNReal.ofReal_one]
+    exact ENNReal.ofReal_le_ofReal <| by
+      nlinarith [speedyAdjacentWarmConstant_one_le q]
+  have hM8M16 : ENNReal.ofReal (8 * speedyAdjacentWarmConstant q) ≤
+      ENNReal.ofReal (16 * speedyAdjacentWarmConstant q) := by
+    exact ENNReal.ofReal_le_ofReal <| by
+      nlinarith [speedyAdjacentWarmConstant_one_le q]
+  have hM16 : (1 : ENNReal) ≤
+      ENNReal.ofReal (16 * speedyAdjacentWarmConstant q) :=
+    hM8.trans hM8M16
+  have hbase : MeasureLeUpTo (rho.bind outK) target
+      (figureOneCorrectedTransitionBudget q + eta) := by
+    apply bind_scheduledBalancedTracePhaseOutputLaw_leUpTo_of_live_good_bad
+      q I i hnext rho good bad hM8 ENNReal.ofReal_ne_top hM8M16
+    · simpa [rho, good, scale, i] using hlive
+    · exact hgood
+    · simpa [rho, scale, eta, i] using herror
+    · exact hliveOutput
+  have hconditioned : ∀ mu : Measure (ScheduledBalancedCoolingTrace q.n),
+      IsProbabilityMeasure mu → Arlib.IsWarm 2 mu rho →
+      MeasureLeUpTo (mu.bind outK) target
+        (figureOneCorrectedTransitionBudget q + 2 * eta) := by
+    intro mu hmu hwarm
+    let _ : IsProbabilityMeasure mu := hmu
+    have hmule : mu ≤ (2 : ENNReal) • rho :=
+      (isWarm_iff_le_smul mu rho).1 hwarm
+    let good2 : Measure (AmbientSpace q.n) := (2 : ENNReal) • good
+    let bad2 : Measure (AmbientSpace q.n) := (2 : ENNReal) • bad
+    let _ : IsFiniteMeasure bad2 :=
+      { measure_univ_lt_top := by
+          rw [show bad2 = (2 : ENNReal) • bad by rfl,
+            Measure.smul_apply, smul_eq_mul]
+          exact ENNReal.mul_lt_top (by norm_num) (measure_lt_top bad Set.univ) }
+    have hlive2 : scheduledBalancedTraceLiveStateLaw mu scale ≤
+        good2 + bad2 := by
+      calc
+        scheduledBalancedTraceLiveStateLaw mu scale ≤
+            (2 : ENNReal) • scheduledBalancedTraceLiveStateLaw rho scale :=
+          scheduledBalancedTraceLiveStateLaw_mono_smul q mu rho 2 scale
+            hscale hmule
+        _ ≤ (2 : ENNReal) • (good + bad) := by
+          rw [Measure.le_iff]
+          intro S hS
+          rw [Measure.smul_apply, Measure.smul_apply, smul_eq_mul,
+            smul_eq_mul]
+          gcongr
+        _ = good2 + bad2 := by
+          simp only [good2, bad2, smul_add]
+    have hgood2 : Arlib.IsWarm
+        (ENNReal.ofReal (16 * speedyAdjacentWarmConstant q)) good2
+        (figureOneScheduledSpeedyPiAt q I i) := by
+      intro S hS
+      rw [show good2 = (2 : ENNReal) • good by rfl,
+        Measure.smul_apply, smul_eq_mul]
+      have hg := hgood S hS
+      have hcoef : (2 : ENNReal) *
+          ENNReal.ofReal (8 * speedyAdjacentWarmConstant q) =
+            ENNReal.ofReal (16 * speedyAdjacentWarmConstant q) := by
+        rw [show (2 : ENNReal) = ENNReal.ofReal (2 : ℝ) by norm_num,
+          ← ENNReal.ofReal_mul (by norm_num : (0 : ℝ) ≤ 2)]
+        congr 1
+        ring
+      calc
+        2 * good S ≤ 2 *
+            (ENNReal.ofReal (8 * speedyAdjacentWarmConstant q) *
+              (figureOneScheduledSpeedyPiAt q I i) S) := by gcongr
+        _ = ENNReal.ofReal (16 * speedyAdjacentWarmConstant q) *
+              (figureOneScheduledSpeedyPiAt q I i) S := by
+          rw [← mul_assoc, hcoef]
+    have hdead2 := scheduledBalancedTraceDeadStateLaw_mass_mono_smul
+      q mu rho 2 scale hscale hmule
+    have herror2 : bad2 Set.univ +
+        scheduledBalancedTraceDeadStateLaw mu scale Set.univ ≤ 2 * eta := by
+      rw [show bad2 = (2 : ENNReal) • bad by rfl,
+        Measure.smul_apply, smul_eq_mul]
+      calc
+        2 * bad Set.univ +
+            scheduledBalancedTraceDeadStateLaw mu scale Set.univ ≤
+          2 * bad Set.univ +
+            2 * scheduledBalancedTraceDeadStateLaw rho scale Set.univ := by
+              gcongr
+        _ = 2 * (bad Set.univ +
+            scheduledBalancedTraceDeadStateLaw rho scale Set.univ) := by ring
+        _ ≤ 2 * eta := by gcongr
+    apply bind_scheduledBalancedTracePhaseOutputLaw_leUpTo_of_live_good_bad
+      q I i hnext mu good2 bad2 hM16 ENNReal.ofReal_ne_top le_rfl
+    · exact hlive2
+    · exact hgood2
+    · exact herror2
+    · exact hliveOutput
+  have hraw := approxIndepFun_sequentialPairLaw_of_asymmetric_leUpTo
+    rho outK houtK.1 houtK.2 target
+    (ENNReal.add_ne_top.mpr ⟨by simp [figureOneCorrectedTransitionBudget],
+      ENNReal.mul_ne_top (by norm_num) hetaTop⟩)
+    (ENNReal.add_ne_top.mpr
+      ⟨by simp [figureOneCorrectedTransitionBudget], hetaTop⟩)
+    hconditioned hbase
+  have hX : Measurable (dependentTruncatedProduct
+      (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) i) :=
+    measurable_dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I)
+      (fun j => (measurable_scheduledBalancedTracePhaseVariable q j).min
+        measurable_const) i
+  apply (hraw.comp hX measurable_id).mono
+  exact figureOneScheduledRetained_asymmetric_budget q i (by
+    rw [figureOneDependentPhaseCount]
+    omega)
+
 #print axioms figureOneScheduledTrace_deadState_mass_le_retainedError
 #print axioms exists_figureOneScheduledTraceScaledState_good_bad
 
