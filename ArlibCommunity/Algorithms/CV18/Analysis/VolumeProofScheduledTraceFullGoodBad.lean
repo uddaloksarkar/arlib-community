@@ -1782,6 +1782,226 @@ theorem approxIndepFun_figureOneScheduledFinalTrace_zero
     (scheduledFigureOneTraceTruncatedPhase q I 1)
     (figureOneDependentEpsilon_nonneg q)
 
+/-! ## The final uniform-ratio phase -/
+
+noncomputable def figureOneScheduledScaledTerminalPhaseLaw
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    AmbientSpace q.n → Measure (Option (ℝ × AmbientSpace q.n)) :=
+  fun current =>
+    (scheduledBalancedTransitionCollectLaw q I (terminalVariance q)
+      (uniformRatioWeight (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q))
+      (figureOneSampleCount q) 0 current).map
+        (balancedCoolingAverage (figureOneSampleCount q))
+
+theorem figureOneScheduledScaledTerminalPhaseLaw_measurable_and_probability
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    Measurable (figureOneScheduledScaledTerminalPhaseLaw q I) ∧
+    ∀ current, IsProbabilityMeasure
+      (figureOneScheduledScaledTerminalPhaseLaw q I current) := by
+  have hcollect := scheduledBalancedTransitionCollectLaw_measurable_and_probability
+    q I (terminalVariance_pos' q)
+    (measurable_uniformRatioWeight (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.proposalCap q
+      (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.properStride q
+      (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.retryLimit q
+      (terminalVariance q)) (figureOneSampleCount q)
+  have havg := measurable_balancedCoolingAverage (n := q.n)
+    (figureOneSampleCount q)
+  constructor
+  · unfold figureOneScheduledScaledTerminalPhaseLaw
+    exact (Measure.measurable_map _ havg).comp
+      (hcollect.1.comp (measurable_const.prodMk measurable_id))
+  · intro current
+    unfold figureOneScheduledScaledTerminalPhaseLaw
+    let _ := hcollect.2 0 current
+    exact Measure.isProbabilityMeasure_map havg.aemeasurable
+
+noncomputable def figureOneScheduledTerminalPhaseTarget
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    Measure (Option (ℝ × AmbientSpace q.n)) :=
+  let count := figureOneSampleCount q
+  let first := (truncatedGaussianProbability q I (terminalVariance q)
+    (terminalVariance_pos' q) : Measure (AmbientSpace q.n)).map some
+  let tail : Option (AmbientSpace q.n) →
+      Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+    match result with
+    | none => Measure.dirac none
+    | some point =>
+        scheduledBalancedTransitionCollectLaw q I (terminalVariance q)
+          (uniformRatioWeight (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.proposalCap q
+            (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.properStride q
+            (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.retryLimit q
+            (terminalVariance q))
+          (count - 1) (uniformRatioWeight (terminalVariance q) point)
+          (accuracyScaleFactor q • point)
+  (first.bind tail).map (balancedCoolingAverage count)
+
+theorem figureOneScheduledTerminalPhaseTarget_isProbabilityMeasure
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    IsProbabilityMeasure (figureOneScheduledTerminalPhaseTarget q I) := by
+  let count := figureOneSampleCount q
+  let first := (truncatedGaussianProbability q I (terminalVariance q)
+    (terminalVariance_pos' q) : Measure (AmbientSpace q.n)).map some
+  let tail : Option (AmbientSpace q.n) →
+      Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+    match result with
+    | none => Measure.dirac none
+    | some point =>
+        scheduledBalancedTransitionCollectLaw q I (terminalVariance q)
+          (uniformRatioWeight (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.proposalCap q
+            (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.properStride q
+            (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.retryLimit q
+            (terminalVariance q))
+          (count - 1) (uniformRatioWeight (terminalVariance q) point)
+          (accuracyScaleFactor q • point)
+  have htailCollect :=
+    scheduledBalancedTransitionCollectLaw_measurable_and_probability
+      q I (terminalVariance_pos' q)
+      (measurable_uniformRatioWeight (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q)) (count - 1)
+  have htail : Measurable tail := by
+    have hsome : Measurable fun point : AmbientSpace q.n =>
+        scheduledBalancedTransitionCollectLaw q I (terminalVariance q)
+          (uniformRatioWeight (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.proposalCap q
+            (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.properStride q
+            (terminalVariance q))
+          (figureOneFinalScheduledBalancedParameters.retryLimit q
+            (terminalVariance q))
+          (count - 1) (uniformRatioWeight (terminalVariance q) point)
+          (accuracyScaleFactor q • point) :=
+      htailCollect.1.comp <|
+        (measurable_uniformRatioWeight _).prodMk
+          ((measurable_const : Measurable fun _ : AmbientSpace q.n =>
+            accuracyScaleFactor q).smul measurable_id)
+    convert Measurable.optionElim
+      (Measure.dirac (none : Option (ℝ × AmbientSpace q.n))) hsome using 1
+    funext result
+    cases result <;> rfl
+  have htailProb : ∀ result, IsProbabilityMeasure (tail result) := by
+    intro result
+    cases result with
+    | none => infer_instance
+    | some point => exact htailCollect.2 _ _
+  let _ : IsProbabilityMeasure first :=
+    Measure.isProbabilityMeasure_map measurable_some.aemeasurable
+  let _ : IsProbabilityMeasure (first.bind tail) :=
+    isProbabilityMeasure_bind htail.aemeasurable (ae_of_all _ htailProb)
+  unfold figureOneScheduledTerminalPhaseTarget
+  exact Measure.isProbabilityMeasure_map
+    (measurable_balancedCoolingAverage count).aemeasurable
+
+theorem bind_figureOneScheduledScaledTerminalPhaseLaw_leUpTo_target_of_warmSixteen
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (mu : Measure (AmbientSpace q.n)) [IsProbabilityMeasure mu]
+    (hwarm : Arlib.IsWarm
+      (ENNReal.ofReal (16 * speedyAdjacentWarmConstant q)) mu
+      (figureOneScheduledSpeedyPiAt q I (terminalPhaseSteps q))) :
+    MeasureLeUpTo
+      (mu.bind (figureOneScheduledScaledTerminalPhaseLaw q I))
+      (figureOneScheduledTerminalPhaseTarget q I)
+      (figureOneCorrectedTransitionBudget q) := by
+  let count := figureOneSampleCount q
+  let collect := fun current =>
+    scheduledBalancedTransitionCollectLaw q I (terminalVariance q)
+      (uniformRatioWeight (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q)) count 0 current
+  have hcollect := scheduledBalancedTransitionCollectLaw_measurable_and_probability
+    q I (terminalVariance_pos' q)
+    (measurable_uniformRatioWeight (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.proposalCap q
+      (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.properStride q
+      (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.retryLimit q
+      (terminalVariance q)) count
+  have hcollectCurrent : Measurable collect :=
+    hcollect.1.comp (measurable_const.prodMk measurable_id)
+  let transition := scheduledBalancedAccuracyTransitionLawAux q I
+    (terminalVariance q)
+    (figureOneFinalScheduledBalancedParameters.proposalCap q
+      (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.properStride q
+      (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.retryLimit q
+      (terminalVariance q))
+  have htransition :=
+    scheduledBalancedAccuracyTransitionLawAux_measurable_and_probability
+      q I (terminalVariance_pos' q)
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q))
+  let _ : IsProbabilityMeasure (mu.bind transition) :=
+    isProbabilityMeasure_bind htransition.1.aemeasurable
+      (ae_of_all _ htransition.2)
+  let _ : IsProbabilityMeasure
+      ((truncatedGaussianProbability q I (terminalVariance q)
+        (terminalVariance_pos' q) : Measure (AmbientSpace q.n)).map some) :=
+    Measure.isProbabilityMeasure_map measurable_some.aemeasurable
+  have hfirst : MeasureLeUpTo (mu.bind transition)
+      ((truncatedGaussianProbability q I (terminalVariance q)
+        (terminalVariance_pos' q) : Measure (AmbientSpace q.n)).map some)
+      (figureOneCorrectedTransitionBudget q) := by
+    apply MeasureLeUpTo.of_tvLe
+    simpa [transition, figureOneScheduledSpeedyPiAt,
+      scheduleValue_terminalPhaseSteps] using
+      bind_figureOneFinalScheduledBalancedTransition_tvLe_of_warmSixteen
+        q I (terminalVariance_pos' q) mu (by
+          simpa [figureOneScheduledSpeedyPiAt,
+            scheduleValue_terminalPhaseSteps] using hwarm)
+  have hcomplete :=
+    MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
+      q I (terminalVariance_pos' q)
+      (measurable_uniformRatioWeight (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q)) (count - 1) mu _ hfirst
+  have hcount : 0 < count := figureOneSampleCount_pos q
+  rw [Nat.sub_add_cancel hcount] at hcomplete
+  have hmapped := hcomplete.map
+    (measurable_balancedCoolingAverage (n := q.n) count)
+  rw [map_bind_eq_bind_map_of_measurable mu hcollectCurrent
+    (measurable_balancedCoolingAverage (n := q.n) count)] at hmapped
+  change MeasureLeUpTo
+    (mu.bind fun current => (collect current).map
+      (balancedCoolingAverage count))
+    (figureOneScheduledTerminalPhaseTarget q I)
+    (figureOneCorrectedTransitionBudget q)
+  convert hmapped using 1 <;>
+    simp [figureOneScheduledTerminalPhaseTarget, count, collect]
+  congr 1
+
 #print axioms figureOneScheduledTrace_deadState_mass_le_retainedError
 #print axioms exists_figureOneScheduledTraceScaledState_good_bad
 
