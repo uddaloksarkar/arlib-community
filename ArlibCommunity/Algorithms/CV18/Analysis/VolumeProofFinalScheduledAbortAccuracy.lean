@@ -104,6 +104,63 @@ theorem initialTruncatedOption_bind_apply_le
           le_rfl)
         (initialGaussianSamplingMeasure_truncatedBody_compl_le q I)
 
+/-- For an event which is impossible after the abort output, the rejected
+initial Gaussian mass costs nothing.  Only the live restriction remains, and
+that restriction is dominated by the normalized truncated Gaussian.  This is
+the event-specific form needed for the global query-cap event: aborting after
+the initial query cannot exhaust that cap. -/
+theorem initialTruncatedOption_bind_apply_le_of_none_zero
+    {β : Type*} [MeasurableSpace β]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (K : Option (AmbientSpace q.n) → Measure β) (hK : Measurable K)
+    (E : Set β) (hE : MeasurableSet E) (hnone : K none E = 0) :
+    (((initialGaussianSamplingMeasure q).map
+        (initialTruncatedOption q I)).bind K) E ≤
+      (((truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).map some).bind K) E := by
+  rw [map_bind_eq_bind_comp _ _ (measurable_initialTruncatedOption q I) K hK]
+  rw [Measure.bind_apply hE
+    (hK.comp (measurable_initialTruncatedOption q I)).aemeasurable]
+  calc
+    (∫⁻ point, (K ∘ initialTruncatedOption q I) point E
+        ∂initialGaussianSamplingMeasure q) =
+        ∫⁻ point, (K ∘ initialTruncatedOption q I) point E
+          ∂((initialGaussianSamplingMeasure q).restrict (truncatedBody q I) +
+            (initialGaussianSamplingMeasure q).restrict
+              (truncatedBody q I)ᶜ) := by
+      rw [Measure.restrict_add_restrict_compl
+        (truncatedBody_measurable q I)]
+    _ = (∫⁻ point, (K ∘ initialTruncatedOption q I) point E
+          ∂(initialGaussianSamplingMeasure q).restrict (truncatedBody q I)) +
+        ∫⁻ point, (K ∘ initialTruncatedOption q I) point E
+          ∂(initialGaussianSamplingMeasure q).restrict
+            (truncatedBody q I)ᶜ := by
+      rw [lintegral_add_measure]
+    _ = (∫⁻ point, K (some point) E
+          ∂(initialGaussianSamplingMeasure q).restrict (truncatedBody q I)) + 0 := by
+      congr 1
+      · apply lintegral_congr_ae
+        filter_upwards
+          [ae_restrict_mem (truncatedBody_measurable q I)] with point hpoint
+        simp [initialTruncatedOption, hpoint]
+      · rw [← lintegral_zero]
+        apply lintegral_congr_ae
+        filter_upwards
+          [ae_restrict_mem (truncatedBody_measurable q I).compl] with point hpoint
+        have hpoint' : point ∉ truncatedBody q I := hpoint
+        simp [initialTruncatedOption, hpoint', hnone]
+    _ ≤ ∫⁻ point, K (some point) E
+          ∂(truncatedGaussianProbability q I (initialVariance q)
+            (initialVariance_pos q)) := by
+      rw [add_zero]
+      exact lintegral_mono'
+        (initialGaussianSamplingMeasure_restrict_truncatedBody_le q I) le_rfl
+    _ = (((truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).map some).bind K) E := by
+      rw [map_bind_eq_bind_comp _ _ measurable_some K hK]
+      rw [Measure.bind_apply hE (hK.comp measurable_some).aemeasurable]
+      rfl
+
 /-- Exact initial-law decomposition for the aborting scheduled base program. -/
 theorem figureOneFinalScheduledAbortBaseProgram_runEstimate_eq_initial_bind
     (q : VolumeParams) (I : VolumeInput q.n)
