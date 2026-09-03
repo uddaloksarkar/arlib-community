@@ -1,6 +1,8 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledResetAverageSecond
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofDependentProduct
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianPhaseMean
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyPairedCost
 
 /-!
 # Event-level transfer from a fixed-reset reference
@@ -324,6 +326,99 @@ theorem retainedSum_liveDeviation_le_of_initializedHistory
     _ ≤ bound + shadow {state | state.2 = none} := by
       gcongr
 
+/-- The public Gaussian phase target's scalar-deviation event is exactly the
+retained-sum shadow's live-average event. -/
+theorem figureOneScheduledGaussianPhaseTarget_deviation_eq_retainedSum
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (target eps : ℝ) :
+    let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+    let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+    let K := figureOneFinalScheduledRetainedOptionKernel q I
+      (scheduleValue q phase)
+    let initial :=
+      (truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+          (fun x => (weight x, some x))
+    figureOneScheduledGaussianPhaseTarget q I phase
+        {result | eps * target ≤
+          |scheduledBalancedPhaseRatio result - target|} =
+      (iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+        initial (count - 1))
+        {state | eps * target ≤
+          |retainedLiveTotal state / (count : ℝ) - target|} := by
+  dsimp only
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+    (scheduleValue q (phase + 1))
+  let K := figureOneFinalScheduledRetainedOptionKernel q I
+    (scheduleValue q phase)
+  let initial :=
+    (truncatedGaussianProbability q I (scheduleValue q phase)
+      (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+        (fun x => (weight x, some x))
+  let deviation : Set (Option (ℝ × AmbientSpace q.n)) :=
+    {result | eps * target ≤
+      |scheduledBalancedPhaseRatio result - target|}
+  have hdeviation : MeasurableSet deviation := by
+    apply measurableSet_le measurable_const
+    exact (measurable_scheduledBalancedPhaseRatio.sub_const target).abs
+  rw [figureOneScheduledGaussianPhaseTarget_eq_map_retainedSumKernel]
+  rw [Measure.map_apply
+    ((measurable_balancedCoolingAverage count).comp
+      measurable_retainedSumOutput) hdeviation]
+  congr 1
+  ext state
+  rcases state with ⟨total, result⟩
+  cases result <;>
+    simp [deviation, count, Function.comp_def, retainedSumOutput,
+      balancedCoolingAverage, scheduledBalancedPhaseRatio, retainedLiveTotal]
+
+/-- Public phase-target deviation bound obtained from an initialized-history
+bound plus the final collector death event. -/
+theorem figureOneScheduledGaussianPhaseTarget_deviation_le_of_initializedHistory
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (target eps : ℝ) (bound : ENNReal)
+    (hhistory :
+      let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+      let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+        (scheduleValue q (phase + 1))
+      (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+          {history | eps * target ≤
+            |sequentialPrefixSum (retainedSampleObservation weight) count history /
+                (count : ℝ) - target|} ≤ bound) :
+    let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+    let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+    let K := figureOneFinalScheduledRetainedOptionKernel q I
+      (scheduleValue q phase)
+    let initial :=
+      (truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+          (fun x => (weight x, some x))
+    let shadow := iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+      initial (count - 1)
+    figureOneScheduledGaussianPhaseTarget q I phase
+        {result | eps * target ≤
+          |scheduledBalancedPhaseRatio result - target|} ≤
+      bound + shadow {state | state.2 = none} := by
+  dsimp only at hhistory ⊢
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+    (scheduleValue q (phase + 1))
+  let K := figureOneFinalScheduledRetainedOptionKernel q I
+    (scheduleValue q phase)
+  let initial :=
+    (truncatedGaussianProbability q I (scheduleValue q phase)
+      (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+        (fun x => (weight x, some x))
+  let shadow := iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+    initial (count - 1)
+  rw [figureOneScheduledGaussianPhaseTarget_deviation_eq_retainedSum]
+  exact retainedSum_liveDeviation_le_of_initializedHistory
+    q I phase count (figureOnePhaseSampleCount_pos q _)
+      target eps bound hhistory
+
 #print axioms
   MeasureLeUpTo.measure_relativeDeviation_le_of_reference_moments
 #print axioms
@@ -335,5 +430,9 @@ theorem retainedSum_liveDeviation_le_of_initializedHistory
 #print axioms retainedLiveAverage_deviation_subset_raw_union_dead
 #print axioms measure_retainedLiveAverage_deviation_le_raw_add_dead
 #print axioms retainedSum_liveDeviation_le_of_initializedHistory
+#print axioms
+  figureOneScheduledGaussianPhaseTarget_deviation_eq_retainedSum
+#print axioms
+  figureOneScheduledGaussianPhaseTarget_deviation_le_of_initializedHistory
 
 end ArlibCommunity.Algorithms.CV18
