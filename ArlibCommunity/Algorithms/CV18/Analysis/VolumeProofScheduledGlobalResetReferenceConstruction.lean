@@ -91,6 +91,103 @@ theorem scheduledBalancedInitialAcceptedTraceReference_prefixInvariant
   · simpa using
       map_scheduledBalancedInitialAcceptedTraceReference_retainedOption q I
 
+/-- Structural induction step for the recurrence invariant.  Exact prefix
+preservation carries every earlier moment and independence fact; the caller
+only supplies the newly created coordinate facts and the new support. -/
+theorem ScheduledGlobalResetPrefixInvariant.extend
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (source reference : Measure (ScheduledBalancedCoolingTrace q.n))
+    (hsource : ScheduledGlobalResetPrefixInvariant q I phase source)
+    (hprefix : reference.map (scheduledResetPrefixCoordinates q phase) =
+      source.map (scheduledResetPrefixCoordinates q phase))
+    (hnewMem : MemLp (scheduledBalancedTracePhaseVariable q (phase + 1))
+      2 reference)
+    (hnewMean : (∫ trace,
+        scheduledBalancedTracePhaseVariable q (phase + 1) trace
+          ∂reference) = figureOneChronologicalRawMean q I (phase + 1))
+    (hnewSecond : (∫ trace,
+        scheduledBalancedTracePhaseVariable q (phase + 1) trace ^ 2
+          ∂reference) ≤
+      (figureOneChronologicalMomentFactor q (phase + 1) +
+          figureOneExecutableMomentSlack q / 8) *
+        figureOneChronologicalRawMean q I (phase + 1) ^ 2)
+    (hnewInd : ApproxIndepFun
+      ((5 / 2 : ℝ) * figureOneDependentEpsilon q)
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I reference
+          (figureOneScheduledReferenceCoordinateExtension q I))
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneScheduledReferenceCoordinateExtension q I)) phase)
+      (figureOneChronologicalTruncatedPhase q I
+        (figureOneScheduledReferenceCoordinateExtension q I) (phase + 1))
+      reference)
+    (hsupport : ∀ᵐ trace ∂reference,
+      ScheduledBalancedCoolingTraceValid (phase + 1) trace ∧
+        ScheduledBalancedCoolingTraceCoordinatesNonnegative
+          (phase + 1) trace) :
+    ScheduledGlobalResetPrefixInvariant q I (phase + 1) reference := by
+  have holdMoments : ∀ j, 1 ≤ j → j ≤ phase →
+      MemLp (scheduledBalancedTracePhaseVariable q j) 2 reference ∧
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace
+          ∂reference) =
+        ∫ trace, scheduledBalancedTracePhaseVariable q j trace ∂source ∧
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+          ∂reference) =
+        ∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+          ∂source := by
+    intro j hj1 hjphase
+    let F := scheduledResetPrefixPhaseVariable phase j
+    have hfactor : scheduledBalancedTracePhaseVariable q j =
+        F ∘ scheduledResetPrefixCoordinates q phase := by
+      funext trace
+      exact (scheduledResetPrefixPhaseVariable_apply q phase j hj1 hjphase
+        trace).symm
+    have hlaw : reference.map (scheduledBalancedTracePhaseVariable q j) =
+        source.map (scheduledBalancedTracePhaseVariable q j) := by
+      rw [hfactor, ← Measure.map_map
+        (measurable_scheduledResetPrefixPhaseVariable phase j)
+        (measurable_scheduledResetPrefixCoordinates q phase), hprefix,
+        Measure.map_map (measurable_scheduledResetPrefixPhaseVariable phase j)
+          (measurable_scheduledResetPrefixCoordinates q phase)]
+    exact coordinate_moments_of_map_eq source reference
+      (scheduledBalancedTracePhaseVariable q j)
+      (scheduledBalancedTracePhaseVariable q j)
+      (measurable_scheduledBalancedTracePhaseVariable q j)
+      (measurable_scheduledBalancedTracePhaseVariable q j) hlaw
+      (hsource.coordinate_memLp j hj1 hjphase)
+  refine
+    { valid := by
+        filter_upwards [hsupport] with trace htrace
+        exact htrace.1
+      coordinates_nonnegative := by
+        filter_upwards [hsupport] with trace htrace
+        exact htrace.2
+      coordinate_memLp := ?_
+      coordinate_mean := ?_
+      coordinate_second := ?_
+      approxIndep := ?_ }
+  · intro j hj1 hjnext
+    by_cases hj : j = phase + 1
+    · simpa [hj] using hnewMem
+    · exact (holdMoments j hj1 (by omega)).1
+  · intro j hj1 hjnext
+    by_cases hj : j = phase + 1
+    · simpa [hj] using hnewMean
+    · exact (holdMoments j hj1 (by omega)).2.1.trans
+        (hsource.coordinate_mean j hj1 (by omega))
+  · intro j hj1 hjnext
+    by_cases hj : j = phase + 1
+    · simpa [hj] using hnewSecond
+    · rw [(holdMoments j hj1 (by omega)).2.2]
+      exact hsource.coordinate_second j hj1 (by omega)
+  · intro i hinext
+    by_cases hi : i = phase
+    · simpa [hi] using hnewInd
+    · exact ApproxIndepFun.chronological_extension_of_resetPrefix_map_eq
+        q I phase i hphase.le (by omega) source reference hprefix
+          (hsource.approxIndep i (by omega))
+
 /-- Once the finite recurrence has supplied all chronological coordinates,
 the remaining global trace comparison is exactly the input expected by the
 single final witness constructor. -/
@@ -114,6 +211,7 @@ noncomputable def GlobalResetReferenceWitness.of_completed_prefixInvariant
 
 #print axioms
   scheduledBalancedInitialAcceptedTraceReference_prefixInvariant
+#print axioms ScheduledGlobalResetPrefixInvariant.extend
 #print axioms GlobalResetReferenceWitness.of_completed_prefixInvariant
 
 end
