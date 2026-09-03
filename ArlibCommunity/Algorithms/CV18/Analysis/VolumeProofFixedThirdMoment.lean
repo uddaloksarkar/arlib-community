@@ -39,6 +39,225 @@ theorem fixedRate_thirdMoment_precisionFactor_le
   rw [← hfactor] at hnonneg
   nlinarith
 
+/-- Dimension-dependent sharp endpoint bound for the precision factor of a
+fixed-rate cooling step. -/
+theorem fixedRate_thirdMoment_precisionFactor_le_dimension
+    {n s t : ℝ} (hn : 3 ≤ n) (hs : 0 < s) (hst : s ≤ t)
+    (hstep : t ≤ s * (1 + 1 / n)) :
+    s ^ 3 / (t ^ 2 * (3 * s - 2 * t)) ≤
+      n ^ 3 / ((n + 1) ^ 2 * (n - 2)) := by
+  have hnpos : 0 < n := lt_of_lt_of_le (by norm_num) hn
+  have ht : 0 < t := hs.trans_le hst
+  have hstepThree : t ≤ s * (4 / 3 : ℝ) := by
+    have hinv : 1 / n ≤ 1 / 3 :=
+      one_div_le_one_div_of_le (by norm_num) hn
+    calc
+      t ≤ s * (1 + 1 / n) := hstep
+      _ ≤ s * (4 / 3 : ℝ) := by
+        apply mul_le_mul_of_nonneg_left _ hs.le
+        linarith
+  have hthree : 0 < 3 * s - 2 * t := by nlinarith
+  have hcap : 0 ≤ (n + 1) * s - n * t := by
+    have hmul := mul_le_mul_of_nonneg_left hstep hnpos.le
+    field_simp [hnpos.ne'] at hmul
+    nlinarith
+  have htSub : 0 ≤ t - s := sub_nonneg.mpr hst
+  have hinner :
+      0 ≤ 2 * n ^ 2 * t ^ 2 - n * (n - 2) * s * t -
+        (n + 1) * (n - 2) * s ^ 2 := by
+    have hfirst : 0 ≤ 2 * n ^ 2 * t * (t - s) := by positivity
+    have hsecond : 0 ≤ n * (n + 2) * s * (t - s) := by positivity
+    have hthird : 0 ≤ (3 * n + 2) * s ^ 2 := by positivity
+    nlinarith
+  have hfactor :
+      n ^ 3 * (t ^ 2 * (3 * s - 2 * t)) -
+          (n + 1) ^ 2 * (n - 2) * s ^ 3 =
+        ((n + 1) * s - n * t) *
+          (2 * n ^ 2 * t ^ 2 - n * (n - 2) * s * t -
+            (n + 1) * (n - 2) * s ^ 2) := by
+    ring
+  have hnonneg :
+      0 ≤ n ^ 3 * (t ^ 2 * (3 * s - 2 * t)) -
+          (n + 1) ^ 2 * (n - 2) * s ^ 3 := by
+    rw [hfactor]
+    positivity
+  rw [div_le_div_iff₀
+    (mul_pos (sq_pos_of_pos ht) hthree)
+    (mul_pos (sq_pos_of_pos (by linarith : 0 < n + 1)) (by linarith))]
+  nlinarith
+
+/-- The dimension-dependent endpoint factor, raised to its Gaussian
+partition exponent, is uniformly worst in dimension three. -/
+theorem fixedRate_thirdMoment_dimensionFactor_pow_le
+    (n : ℕ) (hn : 3 ≤ n) :
+    (((n : ℝ) ^ 3 /
+        (((n : ℝ) + 1) ^ 2 * ((n : ℝ) - 2))) ^ (n + 1)) ≤
+      (27 / 16 : ℝ) ^ 4 := by
+  rcases eq_or_lt_of_le hn with rfl | hn3
+  · norm_num
+  rcases eq_or_lt_of_le (Nat.succ_le_iff.mpr hn3) with rfl | hn4
+  · norm_num
+  have hn5 : 5 ≤ n := Nat.succ_le_iff.mpr hn4
+  let N : ℝ := n
+  have hN5 : (5 : ℝ) ≤ N := by
+    dsimp [N]
+    exact_mod_cast hn5
+  have hNpos : 0 < N := lt_of_lt_of_le (by norm_num) hN5
+  have hNp1 : 0 < N + 1 := by linarith
+  have hNm2 : 0 < N - 2 := by linarith
+  have hdenPos : 0 < (N + 1) ^ 2 * (N - 2) :=
+    mul_pos (sq_pos_of_pos hNp1) hNm2
+  have hbaseEq :
+      N ^ 3 / ((N + 1) ^ 2 * (N - 2)) =
+        1 + (3 * N + 2) / ((N + 1) ^ 2 * (N - 2)) := by
+    rw [div_eq_iff hdenPos.ne']
+    field_simp [hdenPos.ne']
+    ring
+  have hpoly :
+      N ^ 2 * (3 * N + 2) ≤ 5 * ((N + 1) ^ 2 * (N - 2)) := by
+    have hNminus : 0 ≤ N - 5 := by linarith
+    have hsq : 0 ≤ N ^ 2 := sq_nonneg N
+    have hcubic : 5 * N ^ 2 ≤ N ^ 3 := by
+      have := mul_nonneg hsq hNminus
+      nlinarith
+    have hsquareLinear : 5 * N ≤ N ^ 2 := by
+      have := mul_nonneg hNpos.le hNminus
+      nlinarith
+    nlinarith
+  have hfrac :
+      (3 * N + 2) / ((N + 1) ^ 2 * (N - 2)) ≤ 5 / N ^ 2 := by
+    rw [div_le_div_iff₀ hdenPos (sq_pos_of_pos hNpos)]
+    nlinarith [hpoly]
+  have hbase :
+      N ^ 3 / ((N + 1) ^ 2 * (N - 2)) ≤ 1 + 5 / N ^ 2 := by
+    rw [hbaseEq]
+    linarith
+  have hbase0 : 0 ≤ N ^ 3 / ((N + 1) ^ 2 * (N - 2)) := by positivity
+  have hone0 : 0 ≤ 1 + 5 / N ^ 2 := by positivity
+  have hpow :
+      (N ^ 3 / ((N + 1) ^ 2 * (N - 2))) ^ (n + 1) ≤
+        (1 + 5 / N ^ 2) ^ (n + 1) :=
+    pow_le_pow_left₀ hbase0 hbase (n + 1)
+  have honeExp : 1 + 5 / N ^ 2 ≤ Real.exp (5 / N ^ 2) := by
+    simpa [add_comm] using Real.add_one_le_exp (5 / N ^ 2)
+  have hpowExp :
+      (1 + 5 / N ^ 2) ^ (n + 1) ≤
+        Real.exp (((n + 1 : ℕ) : ℝ) * (5 / N ^ 2)) := by
+    have hp := pow_le_pow_left₀ hone0 honeExp (n + 1)
+    rw [← Real.exp_nat_mul] at hp
+    simpa [mul_comm] using hp
+  have hexponent : ((n + 1 : ℕ) : ℝ) * (5 / N ^ 2) ≤ 6 / 5 := by
+    have hNcast : ((n + 1 : ℕ) : ℝ) = N + 1 := by
+      simp [N]
+    rw [hNcast]
+    calc
+      (N + 1) * (5 / N ^ 2) = 5 * (N + 1) / N ^ 2 := by ring
+      _ ≤ 6 / 5 := by
+        rw [div_le_iff₀ (sq_pos_of_pos hNpos)]
+        nlinarith [sq_nonneg (N - 5)]
+  have hexpFour : Real.exp (6 / 5 : ℝ) ≤ 4 := by
+    convert Real.exp_le_two_add_div_two_sub (x := (6 / 5 : ℝ))
+      (by norm_num) (by norm_num) using 1 <;> norm_num
+  calc
+    (N ^ 3 / ((N + 1) ^ 2 * (N - 2))) ^ (n + 1) ≤
+        (1 + 5 / N ^ 2) ^ (n + 1) := hpow
+    _ ≤ Real.exp (((n + 1 : ℕ) : ℝ) * (5 / N ^ 2)) := hpowExp
+    _ ≤ Real.exp (6 / 5) := Real.exp_le_exp.mpr hexponent
+    _ ≤ 4 := hexpFour
+    _ ≤ (27 / 16 : ℝ) ^ 4 := by norm_num
+
+/-- Exact-target relative third moment for every fixed cooling-schedule step.
+The dimension-dependent endpoint factor is uniformly worst in dimension
+three, so the same constant works in every admissible dimension. -/
+theorem scheduleValue_fixedRate_relativeThirdMoment_le
+    (q : VolumeParams) (I : VolumeInput q.n) (k : ℕ)
+    (hsone : scheduleValue q k ≤ 1) :
+    ((∫ x, gaussianRatioWeight (scheduleValue q k) (scheduleValue q (k + 1)) x ^ 3
+        ∂(truncatedGaussianProbability q I (scheduleValue q k)
+          (scheduleValue_pos q k) : Measure (AmbientSpace q.n))) /
+      (∫ x, gaussianRatioWeight (scheduleValue q k) (scheduleValue q (k + 1)) x
+        ∂(truncatedGaussianProbability q I (scheduleValue q k)
+          (scheduleValue_pos q k) : Measure (AmbientSpace q.n))) ^ 3) ≤
+      (27 / 16 : ℝ) ^ 4 := by
+  let s := scheduleValue q k
+  let t := scheduleValue q (k + 1)
+  have hn : (3 : ℝ) ≤ q.n := by exact_mod_cast q.dim_ok
+  have hs : 0 < s := scheduleValue_pos q k
+  have hst : s ≤ t := scheduleValue_mono q (Nat.le_add_right k 1)
+  have ht_next : t = nextVariance q s := by
+    simpa [s, t] using scheduleValue_succ q k
+  have hstep : t ≤ s * (1 + 1 / (q.n : ℝ)) := by
+    rw [ht_next]
+    unfold nextVariance
+    refine (min_le_right _ _).trans ?_
+    rw [coolingRate, if_pos]
+    simpa [s] using hsone
+  have hstepThree : t ≤ s * (4 / 3 : ℝ) := by
+    have hinv : 1 / (q.n : ℝ) ≤ 1 / 3 :=
+      one_div_le_one_div_of_le (by norm_num) hn
+    calc
+      t ≤ s * (1 + 1 / (q.n : ℝ)) := hstep
+      _ ≤ s * (4 / 3 : ℝ) := by
+        apply mul_le_mul_of_nonneg_left _ hs.le
+        linarith
+  have hthree : 2 * t < 3 * s := by nlinarith
+  have hraw := gaussianRatioWeight_relativeThirdMoment_le_of_oneThird
+    q I (truncatedBody_gaussianPartitionOneThirdLogConcave q I)
+      hs hst hthree
+  have hbase := fixedRate_thirdMoment_precisionFactor_le_dimension
+    hn hs hst hstep
+  have hbase0 : 0 ≤ s ^ 3 / (t ^ 2 * (3 * s - 2 * t)) := by positivity
+  have hpow := pow_le_pow_left₀ hbase0 hbase (q.n + 1)
+  have huniform := fixedRate_thirdMoment_dimensionFactor_pow_le q.n q.dim_ok
+  simpa [s, t] using hraw.trans (hpow.trans huniform)
+
+/-- Rational `L³` constant, uniform over every admissible dimension. -/
+theorem scheduleValue_fixedRate_relativeThirdMoment_le_rational_cube
+    (q : VolumeParams) (I : VolumeInput q.n) (k : ℕ)
+    (hsone : scheduleValue q k ≤ 1) :
+    ((∫ x, gaussianRatioWeight (scheduleValue q k) (scheduleValue q (k + 1)) x ^ 3
+        ∂(truncatedGaussianProbability q I (scheduleValue q k)
+          (scheduleValue_pos q k) : Measure (AmbientSpace q.n))) /
+      (∫ x, gaussianRatioWeight (scheduleValue q k) (scheduleValue q (k + 1)) x
+        ∂(truncatedGaussianProbability q I (scheduleValue q k)
+          (scheduleValue_pos q k) : Measure (AmbientSpace q.n))) ^ 3) ≤
+      (129 / 64 : ℝ) ^ 3 := by
+  exact (scheduleValue_fixedRate_relativeThirdMoment_le q I k hsone).trans
+    (by norm_num)
+
+/-- Direct `L³` form of the dimension-uniform fixed-step bound, ready for
+the coordinate premise in the approximate-independence equation-(6)
+estimate. -/
+theorem scheduleValue_fixedRate_thirdMoment_le_rational_mean_cube
+    (q : VolumeParams) (I : VolumeInput q.n) (k : ℕ)
+    (hsone : scheduleValue q k ≤ 1) :
+    let nu : Measure (AmbientSpace q.n) :=
+      truncatedGaussianProbability q I (scheduleValue q k)
+        (scheduleValue_pos q k)
+    let weight := gaussianRatioWeight (n := q.n)
+      (scheduleValue q k) (scheduleValue q (k + 1))
+    (∫ x, weight x ^ 3 ∂nu) ≤
+      ((129 / 64 : ℝ) * ∫ x, weight x ∂nu) ^ 3 := by
+  dsimp only
+  let mean := ∫ x, gaussianRatioWeight (scheduleValue q k)
+    (scheduleValue q (k + 1)) x
+      ∂(truncatedGaussianProbability q I (scheduleValue q k)
+        (scheduleValue_pos q k) : Measure (AmbientSpace q.n))
+  have hmean : 0 < mean := by
+    rw [show mean = gaussianIntegral (truncatedBody q I) (scheduleValue q (k + 1)) /
+        gaussianIntegral (truncatedBody q I) (scheduleValue q k) by
+      simpa [mean] using gaussianRatioWeight_mean_eq q I (scheduleValue_pos q k)]
+    exact div_pos
+      (gaussianIntegral_pos q (truncatedVolumeInput q I)
+        (scheduleValue_pos q (k + 1)))
+      (gaussianIntegral_pos q (truncatedVolumeInput q I)
+        (scheduleValue_pos q k))
+  have hrel := scheduleValue_fixedRate_relativeThirdMoment_le_rational_cube
+    q I k hsone
+  rw [div_le_iff₀ (pow_pos hmean 3)] at hrel
+  change _ ≤ ((129 / 64 : ℝ) * mean) ^ 3
+  nlinarith
+
 /-- Exact-target relative third moment for every fixed schedule step in
 dimension three.  The constant `(27/16)^4` is the direct specialization of
 the convex-body one-third log-concavity theorem. -/
@@ -393,6 +612,11 @@ theorem figureOne_fixedThirdMoment_average_dependence_le_slack_div_eight
     _ = figureOneExecutableMomentSlack q / 8 * mean ^ 2 := by ring
 
 #print axioms fixedRate_thirdMoment_precisionFactor_le
+#print axioms fixedRate_thirdMoment_precisionFactor_le_dimension
+#print axioms fixedRate_thirdMoment_dimensionFactor_pow_le
+#print axioms scheduleValue_fixedRate_relativeThirdMoment_le
+#print axioms scheduleValue_fixedRate_relativeThirdMoment_le_rational_cube
+#print axioms scheduleValue_fixedRate_thirdMoment_le_rational_mean_cube
 #print axioms scheduleValue_fixedRate_relativeThirdMoment_le_dim_three
 #print axioms
   scheduleValue_fixedRate_relativeThirdMoment_le_rational_cube_dim_three
