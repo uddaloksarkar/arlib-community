@@ -404,6 +404,63 @@ theorem figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
   · exact ((measurable_balancedCoolingAverage _).comp measurable_fst).prodMk
       measurable_snd
 
+/-- Retaining or forgetting the terminal phase's estimator coordinates does
+not change its complete query-count distribution. -/
+theorem figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_uniform
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (point : AmbientSpace q.n) :
+    ((figureOneFinalScheduledRetainedTerminalProgram q (some point)).run
+      oracle.query).map Prod.snd =
+    ((scheduledBalancedCoolingUniformRatioEstimate
+      figureOneFinalScheduledBalancedParameters q (terminalVariance q)
+      point).run oracle.query).map Prod.snd := by
+  let raw := scheduledBalancedAccuracyRetryCollect q (terminalVariance q)
+    (uniformRatioWeight (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.proposalCap q
+      (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.properStride q
+      (terminalVariance q))
+    (figureOneFinalScheduledBalancedParameters.retryLimit q
+      (terminalVariance q))
+    (figureOneSampleCount q) (accuracyScaleFactor q • point)
+  have hraw := (scheduledBalancedAccuracyRetryCollect_countedMeasurable
+    q I oracle (terminalVariance_pos' q)
+      (measurable_uniformRatioWeight (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (terminalVariance q))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (terminalVariance q))
+      (figureOneSampleCount q)).2 (accuracyScaleFactor q • point)
+  let withState := scheduledBalancedCoolingUniformEstimateWithState
+    figureOneFinalScheduledBalancedParameters q (terminalVariance q) point
+  have hwithState :=
+    (scheduledBalancedCoolingUniformEstimateWithState_countedMeasurable
+      figureOneFinalScheduledBalancedParameters q I oracle
+      (terminalVariance_pos' q)).2 point
+  calc
+    ((figureOneFinalScheduledRetainedTerminalProgram q (some point)).run
+        oracle.query).map Prod.snd =
+        (raw.run oracle.query).map Prod.snd := by
+      unfold figureOneFinalScheduledRetainedTerminalProgram raw
+      exact MembershipOracleProgram.map_snd_run_bind_pure oracle.query _
+        optionSnd measurable_optionSnd hraw
+    _ = (withState.run oracle.query).map Prod.snd := by
+      unfold withState scheduledBalancedCoolingUniformEstimateWithState raw
+      symm
+      exact MembershipOracleProgram.map_snd_run_bind_pure oracle.query _
+        (balancedCoolingAverage (figureOneSampleCount q))
+        (measurable_balancedCoolingAverage _) hraw
+    _ = ((scheduledBalancedCoolingUniformRatioEstimate
+        figureOneFinalScheduledBalancedParameters q (terminalVariance q)
+        point).run oracle.query).map Prod.snd := by
+      unfold scheduledBalancedCoolingUniformRatioEstimate
+      symm
+      exact MembershipOracleProgram.map_snd_run_bind_pure oracle.query _
+        balancedCoolingForgetState measurable_balancedCoolingForgetState
+        hwithState
+
 /-- Finite chronological reference for every prefix of Gaussian phases.
 The reference has the exact ideal retained-point marginal, additive
 exact-chance loss, and only the sum of warm expected phase costs. -/
@@ -670,6 +727,8 @@ theorem exists_figureOneFinalScheduledRetainedComplete_countedReference
   figureOneFinalScheduledRetainedGaussianPrefixProgram_run
 #print axioms
   figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
+#print axioms
+  figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_uniform
 #print axioms
   exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
 #print axioms figureOneFinalScheduledTerminalIdealExpectedCost_le
