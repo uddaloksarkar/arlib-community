@@ -142,8 +142,209 @@ theorem map_iterated_initializedRetainedSampleHistoryKernel_sum
             (initial.map fun x => (weight x, some x)) tail).bind
               (retainedSumKernel K weight) := by rw [ih]
 
+/-- Tail step `i` creates coordinate `i + 1`; its preceding prefix includes
+the exact first sample and all earlier tail samples. -/
+theorem map_initializedRetainedSample_prefix_next_succ_eq_sequentialPairLaw
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (initial : Measure (RetainedSampleHistory S)) (i : ℕ) :
+    (iteratedKernelLaw
+      (fun j => retainedSampleHistoryKernel K (j + 1))
+      initial (i + 1)).map (fun history =>
+        (sequentialPrefixSum (retainedSampleObservation weight) (i + 1)
+            history,
+          retainedSampleObservation weight (i + 1) history)) =
+      (sequentialPairLaw
+        (iteratedKernelLaw
+          (fun j => retainedSampleHistoryKernel K (j + 1)) initial i)
+        (K ∘ retainedSampleHistoryState)).map (fun pair =>
+          (sequentialPrefixSum (retainedSampleObservation weight) (i + 1)
+              pair.1,
+            retainedOptionWeight weight pair.2)) := by
+  let rho := iteratedKernelLaw
+    (fun j => retainedSampleHistoryKernel K (j + 1)) initial i
+  let pref : RetainedSampleHistory S → ℝ :=
+    sequentialPrefixSum (retainedSampleObservation weight) (i + 1)
+  let observe : RetainedSampleHistory S → ℝ :=
+    retainedSampleObservation weight (i + 1)
+  have hpref : Measurable pref := measurable_sequentialPrefixSum
+    (fun t => measurable_retainedSampleObservation hweight t) (i + 1)
+  have hobserve : Measurable observe :=
+    measurable_retainedSampleObservation hweight (i + 1)
+  have hoptionWeight : Measurable (retainedOptionWeight weight) :=
+    measurable_retainedOptionWeight hweight
+  have hhistoryKernel := retainedSampleHistoryKernel_measurable_and_probability
+    K hK hKprob (i + 1)
+  have hpairKernel : Measurable fun history : RetainedSampleHistory S =>
+      ((K ∘ retainedSampleHistoryState) history).map
+        (fun next => (history, next)) :=
+    measurable_sequentialPairKernel (rho := rho)
+      (hK.comp measurable_snd) (fun history => hKprob history.2)
+  have hleft :
+      (rho.bind (retainedSampleHistoryKernel K (i + 1))).map
+          (fun history => (pref history, observe history)) =
+        rho.bind fun history => (K history.2).map fun next =>
+          (pref history, retainedOptionWeight weight next) := by
+    rw [map_bind_eq_bind_map_of_measurable rho hhistoryKernel.1
+      (hpref.prodMk hobserve)]
+    apply Measure.bind_congr_right
+    filter_upwards with history
+    unfold retainedSampleHistoryKernel
+    have hupdate : Measurable fun next : Option S =>
+        retainedSampleHistoryUpdate (i + 1) history next :=
+      (measurable_retainedSampleHistoryUpdate (i + 1)).comp
+        (measurable_const.prodMk measurable_id)
+    rw [Measure.map_map (hpref.prodMk hobserve) hupdate]
+    apply Measure.map_congr
+    filter_upwards with next
+    apply Prod.ext
+    · exact retainedSampleHistory_prefixSum_update_same
+        weight (i + 1) history next
+    · exact retainedSampleObservation_update_same
+        weight (i + 1) history next
+  have hright :
+      (sequentialPairLaw rho (K ∘ retainedSampleHistoryState)).map
+          (fun pair =>
+            (pref pair.1, retainedOptionWeight weight pair.2)) =
+        rho.bind fun history => (K history.2).map fun next =>
+          (pref history, retainedOptionWeight weight next) := by
+    unfold sequentialPairLaw
+    let transform : RetainedSampleHistory S × Option S → ℝ × ℝ :=
+      fun pair => (pref pair.1, retainedOptionWeight weight pair.2)
+    have htransform : Measurable transform :=
+      (hpref.comp measurable_fst).prodMk
+        (hoptionWeight.comp measurable_snd)
+    calc
+      (rho.bind fun history => (K history.2).map
+          fun next => (history, next)).map transform =
+          rho.bind fun history =>
+            ((K history.2).map fun next => (history, next)).map transform :=
+        map_bind_eq_bind_map_of_measurable rho hpairKernel htransform
+      _ = rho.bind fun history => (K history.2).map fun next =>
+          (pref history, retainedOptionWeight weight next) := by
+        apply Measure.bind_congr_right
+        filter_upwards with history
+        have hpair : Measurable fun next : Option S => (history, next) :=
+          measurable_const.prodMk measurable_id
+        calc
+          ((K history.2).map fun next => (history, next)).map transform =
+              (K history.2).map
+                (transform ∘ fun next => (history, next)) :=
+            Measure.map_map htransform hpair
+          _ = (K history.2).map fun next =>
+              (pref history, retainedOptionWeight weight next) := by rfl
+  rw [iteratedKernelLaw_succ]
+  exact hleft.trans hright.symm
+
+/-- A written initialized-history coordinate and its preceding prefix are
+unchanged by all later shifted tail transitions. -/
+theorem map_initializedRetainedSample_prefix_next_eq_of_le
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (initial : Measure (RetainedSampleHistory S)) (i start stop : ℕ)
+    (hi : i < start) (hstart : start ≤ stop) :
+    (iteratedKernelLaw
+      (fun j => retainedSampleHistoryKernel K (j + 1)) initial stop).map
+        (fun history =>
+          (sequentialPrefixSum (retainedSampleObservation weight) (i + 1)
+              history,
+            retainedSampleObservation weight (i + 1) history)) =
+      (iteratedKernelLaw
+        (fun j => retainedSampleHistoryKernel K (j + 1)) initial start).map
+          (fun history =>
+            (sequentialPrefixSum (retainedSampleObservation weight) (i + 1)
+                history,
+              retainedSampleObservation weight (i + 1) history)) := by
+  let X : RetainedSampleHistory S → ℝ :=
+    sequentialPrefixSum (retainedSampleObservation weight) (i + 1)
+  let Y : RetainedSampleHistory S → ℝ :=
+    retainedSampleObservation weight (i + 1)
+  have hX : Measurable X := measurable_sequentialPrefixSum
+    (fun t => measurable_retainedSampleObservation hweight t) (i + 1)
+  have hY : Measurable Y :=
+    measurable_retainedSampleObservation hweight (i + 1)
+  induction stop, hstart using Nat.le_induction with
+  | base => rfl
+  | succ stop hstartStop ih =>
+      rw [iteratedKernelLaw_succ]
+      calc
+        ((iteratedKernelLaw
+              (fun j => retainedSampleHistoryKernel K (j + 1))
+              initial stop).bind
+            (retainedSampleHistoryKernel K (stop + 1))).map
+              (fun history => (X history, Y history)) =
+            (iteratedKernelLaw
+              (fun j => retainedSampleHistoryKernel K (j + 1))
+              initial stop).map (fun history => (X history, Y history)) := by
+          apply Measure.map_pair_bind_eq_of_ae_eq
+            (iteratedKernelLaw
+              (fun j => retainedSampleHistoryKernel K (j + 1)) initial stop)
+            (retainedSampleHistoryKernel K (stop + 1))
+            (retainedSampleHistoryKernel_measurable_and_probability
+              K hK hKprob (stop + 1)).1
+            (retainedSampleHistoryKernel_measurable_and_probability
+              K hK hKprob (stop + 1)).2 X Y X Y hX hY hX hY
+          filter_upwards with history
+          unfold retainedSampleHistoryKernel
+          have hupdate : Measurable fun next : Option S =>
+              retainedSampleHistoryUpdate (stop + 1) history next :=
+            (measurable_retainedSampleHistoryUpdate (stop + 1)).comp
+              (measurable_const.prodMk measurable_id)
+          apply (ae_map_iff hupdate.aemeasurable
+            ((measurableSet_eq_fun hX measurable_const).inter
+              (measurableSet_eq_fun hY measurable_const))).2
+          filter_upwards with next
+          exact retainedSampleHistory_prefix_next_update_of_lt weight
+            (by omega : i + 1 < stop + 1) history next
+        _ = _ := ih
+
+/-- Creation-time approximate independence for tail coordinate `i + 1`
+persists to the final shifted history horizon. -/
+theorem initializedRetainedSampleHistory_approxIndep_prefix_next_final
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (initial : Measure (RetainedSampleHistory S))
+    {epsilon : ℝ} {i tail : ℕ} (hi : i < tail)
+    (hpair : ApproxIndepFun epsilon
+      (fun pair => sequentialPrefixSum
+        (retainedSampleObservation weight) (i + 1) pair.1)
+      (fun pair => retainedOptionWeight weight pair.2)
+      (sequentialPairLaw
+        (iteratedKernelLaw
+          (fun j => retainedSampleHistoryKernel K (j + 1)) initial i)
+        (K ∘ retainedSampleHistoryState))) :
+    ApproxIndepFun epsilon
+      (sequentialPrefixSum (retainedSampleObservation weight) (i + 1))
+      (retainedSampleObservation weight (i + 1))
+      (iteratedKernelLaw
+        (fun j => retainedSampleHistoryKernel K (j + 1))
+        initial tail) := by
+  apply ApproxIndepFun.of_map_pair_eq
+    ((measurable_sequentialPrefixSum
+      (fun t => measurable_retainedSampleObservation hweight t)
+      (i + 1)).comp measurable_fst)
+    ((measurable_retainedOptionWeight hweight).comp measurable_snd)
+    (measurable_sequentialPrefixSum
+      (fun t => measurable_retainedSampleObservation hweight t) (i + 1))
+    (measurable_retainedSampleObservation hweight (i + 1)) ?_ hpair
+  rw [map_initializedRetainedSample_prefix_next_eq_of_le
+    K hK hKprob weight hweight initial i (i + 1) tail (by omega) (by omega)]
+  exact (map_initializedRetainedSample_prefix_next_succ_eq_sequentialPairLaw
+    K hK hKprob weight hweight initial i).symm
+
 #print axioms measurable_retainedSampleHistoryWithFirst
 #print axioms map_retainedSampleHistoryWithFirst_state
 #print axioms map_iterated_initializedRetainedSampleHistoryKernel_sum
+#print axioms
+  map_initializedRetainedSample_prefix_next_succ_eq_sequentialPairLaw
+#print axioms map_initializedRetainedSample_prefix_next_eq_of_le
+#print axioms
+  initializedRetainedSampleHistory_approxIndep_prefix_next_final
 
 end ArlibCommunity.Algorithms.CV18
