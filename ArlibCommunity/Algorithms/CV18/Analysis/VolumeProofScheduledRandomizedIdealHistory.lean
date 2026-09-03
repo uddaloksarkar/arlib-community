@@ -47,6 +47,46 @@ theorem MeasureLeUpTo.iteratedKernelLaw_le_lawSequence
         (hactualMeas t) (hactualProb t) (hstep t (Nat.lt_succ_self t))
       simpa only [iteratedKernelLaw_succ, succ_nsmul] using hnext
 
+/-- Independent fresh randomness can be exposed as a bind from the prefix
+law.  This is the generic identity used to turn a latent product experiment
+into a genuinely randomized next-history kernel. -/
+theorem bind_map_fresh_eq_map_append_of_indepFun
+    {Omega H B T : Type*} [MeasurableSpace Omega] [MeasurableSpace H]
+    [MeasurableSpace B] [MeasurableSpace T]
+    (mu : Measure Omega) [IsFiniteMeasure mu]
+    (past : Omega → H) (fresh : Omega → B)
+    (append : H → B → T)
+    (hpast : Measurable past) (hfresh : Measurable fresh)
+    (happend : Measurable (Function.uncurry append))
+    (hind : IndepFun past fresh mu) :
+    (mu.map past).bind (fun history =>
+        (mu.map fresh).map (append history)) =
+      mu.map (fun omega => append (past omega) (fresh omega)) := by
+  have hleft :
+      ((mu.map past).prod (mu.map fresh)).map
+          (Function.uncurry append) =
+        (mu.map past).bind (fun history =>
+          (mu.map fresh).map (append history)) := by
+    have hprodKernel : Measurable fun history : H =>
+        (mu.map fresh).map (Prod.mk history) :=
+      Measurable.map_prodMk_left
+    rw [Measure.prod]
+    rw [map_bind_eq_bind_map_of_measurable
+      (mu.map past) hprodKernel happend]
+    apply Measure.bind_congr_right
+    filter_upwards with history
+    calc
+      ((mu.map fresh).map (Prod.mk history)).map
+          (Function.uncurry append) =
+        (mu.map fresh).map
+          (Function.uncurry append ∘ Prod.mk history) :=
+        Measure.map_map happend (measurable_const.prodMk measurable_id)
+      _ = (mu.map fresh).map (append history) := by rfl
+  rw [← hleft, ← hind.map_prod_eq_prod_map_map
+    hpast.aemeasurable hfresh.aemeasurable]
+  rw [Measure.map_map happend (hpast.prodMk hfresh)]
+  rfl
+
 /-- The ideal chronological prefix after future ideal randomness has been
 projected away.  Distributionally, this is the history obtained by drawing a
 fresh independent ideal block at each completed phase. -/
@@ -281,6 +321,7 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_randomized
     q I oracle hpost
 
 #print axioms MeasureLeUpTo.iteratedKernelLaw_le_lawSequence
+#print axioms bind_map_fresh_eq_map_append_of_indepFun
 #print axioms figureOneRandomizedIdealHistoryLaw_isProbabilityMeasure
 #print axioms figureOneRandomizedIdealHistoryLaw_zero
 #print axioms figureOneRandomizedIdealHistoryLaw_map_output
