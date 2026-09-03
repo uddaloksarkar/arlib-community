@@ -55,6 +55,44 @@ noncomputable def figureOneFinalScheduledTerminalCostEnvelope
       (terminalVariance q) + 2) : ℕ) : ENNReal) *
     figureOneScheduledRetainedError q (terminalPhaseSteps q)
 
+/-- The part of the explicit envelope charged to the accumulated retained-law
+error.  This is the only numerical remainder after the standard warm-work
+sum is extracted. -/
+noncomputable def figureOneFinalScheduledRetainedErrorCost
+    (q : VolumeParams) : ENNReal :=
+  (∑ phase ∈ Finset.range (terminalPhaseSteps q),
+    ((figureOnePhaseSampleCount q (scheduleValue q phase) *
+      figureOneSafeRetryCount q *
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase) + 2) : ℕ) : ENNReal) *
+      figureOneScheduledRetainedError q phase) +
+  ((figureOneSampleCount q * figureOneSafeRetryCount q *
+    (figureOneFinalScheduledBalancedParameters.proposalCap q
+      (terminalVariance q) + 2) : ℕ) : ENNReal) *
+    figureOneScheduledRetainedError q (terminalPhaseSteps q)
+
+/-- Exact separation of the finite cost envelope into the familiar scheduled
+proper work and the retained-error charge. -/
+theorem figureOneFinalScheduledCostEnvelopes_eq_warm_add_error
+    (q : VolumeParams) :
+    (∑ phase ∈ Finset.range (terminalPhaseSteps q),
+        figureOneFinalScheduledGaussianPhaseCostEnvelope q phase) +
+      figureOneFinalScheduledTerminalCostEnvelope q =
+    ((384 * (figureOneSafeRetryCount q *
+      figureOneScheduledProperWork q) : ℕ) : ENNReal) +
+      figureOneFinalScheduledRetainedErrorCost q := by
+  simp only [figureOneFinalScheduledGaussianPhaseCostEnvelope,
+    figureOneFinalScheduledTerminalCostEnvelope,
+    figureOneFinalScheduledRetainedErrorCost, Finset.sum_add_distrib,
+    Nat.cast_add, Nat.cast_mul,
+    figureOneScheduledProperWork,
+    figureOneScheduledBalancedParameters_properStride,
+    figureOneFinalScheduledBalancedParameters_properStride]
+  push_cast
+  simp only [mul_add, Finset.mul_sum]
+  ring_nf
+  ac_rfl
+
 theorem figureOneFinalScheduledGaussianPhaseExpectedCost_le_envelope
     (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
     (phase : ℕ) (hphase : phase < terminalPhaseSteps q) :
@@ -118,7 +156,31 @@ theorem figureOneFinalScheduledAbortBaseProgram_cost_le_envelopes
             (terminalPhaseSteps q) (by omega)
       · exact figureOneFinalScheduledTerminalExpectedCost_le_envelope q I oracle
 
+/-- Rate-ready reduction: the live/warm portion is the already-bounded
+scheduled work; all remaining arithmetic is isolated in one error charge. -/
+theorem figureOneFinalScheduledAbortBaseProgram_cost_le_warm_add_error
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    countedQueryCost
+        ((figureOneFinalScheduledAbortBaseProgram q).run oracle.query) ≤
+      1 + (((384 * (figureOneSafeRetryCount q *
+          figureOneScheduledProperWork q) : ℕ) : ENNReal) +
+        figureOneFinalScheduledRetainedErrorCost q) := by
+  rw [← figureOneFinalScheduledCostEnvelopes_eq_warm_add_error q]
+  exact figureOneFinalScheduledAbortBaseProgram_cost_le_envelopes q I oracle
+
+/-- The extracted live/warm work occupies at most nine tenths of the selected
+`10^30` scheduled-rate constant. -/
+theorem figureOneFinalScheduledWarmCost_le_rate (q : VolumeParams) :
+    ((384 * (figureOneSafeRetryCount q *
+      figureOneScheduledProperWork q) : ℕ) : ENNReal) ≤
+      ENNReal.ofReal ((9 * 10 ^ 29) *
+        volumeScheduledBaseComplexityRate q) := by
+  simpa only [ENNReal.ofReal_natCast] using
+    ENNReal.ofReal_le_ofReal (figureOneWarmShadowScheduledWork_cast_le q)
+
 #print axioms figureOneFinalScheduledAbortBaseProgram_cost_le_retained
 #print axioms figureOneFinalScheduledAbortBaseProgram_cost_le_envelopes
+#print axioms figureOneFinalScheduledAbortBaseProgram_cost_le_warm_add_error
+#print axioms figureOneFinalScheduledWarmCost_le_rate
 
 end ArlibCommunity.Algorithms.CV18
