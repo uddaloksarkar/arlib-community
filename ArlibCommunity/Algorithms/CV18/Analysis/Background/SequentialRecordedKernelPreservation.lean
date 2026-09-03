@@ -173,9 +173,11 @@ theorem ApproxIndepFun.map_uncurry_update_of_ae_preserved
 
 /-- The direct recorded-output reset with update identities that need only
 hold on a product of an almost-sure old-state invariant and an almost-sure
-target-output invariant.  This is the form used by trace append operations:
-the old trace is valid almost surely and the reset score is nonnegative almost
-surely, but neither fact is pointwise true on the ambient types. -/
+output invariant.  The output invariant is required under both the raw output
+marginal and the reset target.  This is the form used by trace append
+operations: the old trace is valid almost surely and both raw and reset scores
+are nonnegative/live almost surely, but none of these facts is pointwise true
+on the ambient types. -/
 theorem exists_sequentialRecordedOutputReset_of_tvLe_with_approxIndep_ae
     {H Z Y P S : Type*} [MeasurableSpace H] [MeasurableSpace Z]
     [MeasurableSpace Y] [MeasurableSpace P] [MeasurableSpace S]
@@ -195,12 +197,14 @@ theorem exists_sequentialRecordedOutputReset_of_tvLe_with_approxIndep_ae
     (hNewMeas : MeasurableSet {result | NewGood result})
     (hGoodMeas : MeasurableSet {state | Good state})
     (hOld : ∀ᵐ state ∂source, OldGood state)
+    (hNewRaw : ∀ᵐ result
+      ∂((sequentialPairLaw source K).map Prod.snd), NewGood result)
     (hNew : ∀ᵐ result ∂target, NewGood result)
-    (hreadUpdate : ∀ state result, OldGood state →
+    (hreadUpdate : ∀ state result, OldGood state → NewGood result →
       readNew (update state result) = observe result)
-    (hprojectUpdate : ∀ state result, OldGood state →
+    (hprojectUpdate : ∀ state result, OldGood state → NewGood result →
       projectOld (update state result) = projectOld state)
-    (holdUpdate : ∀ state result, OldGood state →
+    (holdUpdate : ∀ state result, OldGood state → NewGood result →
       oldStatistic (update state result) = oldStatistic state)
     (hGoodUpdate : ∀ state result, OldGood state → NewGood result →
       Good (update state result))
@@ -232,11 +236,11 @@ theorem exists_sequentialRecordedOutputReset_of_tvLe_with_approxIndep_ae
     dsimp only [raw]
     exact map_sequentialPairLaw_fst source K hK hKprob
   have hresetFst : reset.map Prod.fst = source := hresetOld.trans hrawFst
-  have hrawOld : ∀ᵐ state ∂raw, OldGood state.1 := by
-    have hmapped : ∀ᵐ state ∂raw.map Prod.fst, OldGood state := by
-      rw [hrawFst]
-      exact hOld
-    exact (ae_map_iff measurable_fst.aemeasurable hOldMeas).1 hmapped
+  have hrawGood : ∀ᵐ state ∂raw,
+      OldGood state.1 ∧ NewGood state.2 :=
+    ae_fst_and_snd_of_map_eq raw source (raw.map Prod.snd)
+      OldGood NewGood hOldMeas hNewMeas hrawFst rfl hOld (by
+        simpa only [raw] using hNewRaw)
   have hresetGood : ∀ᵐ state ∂reset,
       OldGood state.1 ∧ NewGood state.2 :=
     ae_fst_and_snd_of_map_eq reset source target OldGood NewGood
@@ -263,7 +267,7 @@ theorem exists_sequentialRecordedOutputReset_of_tvLe_with_approxIndep_ae
       _ = reset.map (observe ∘ Prod.snd) := by
         apply Measure.map_congr
         filter_upwards [hresetGood] with state hstate
-        exact hreadUpdate state.1 state.2 hstate.1
+        exact hreadUpdate state.1 state.2 hstate.1 hstate.2
       _ = (reset.map Prod.snd).map observe :=
         (Measure.map_map hobserve measurable_snd).symm
       _ = target.map observe := by rw [hresetTarget]
@@ -274,7 +278,7 @@ theorem exists_sequentialRecordedOutputReset_of_tvLe_with_approxIndep_ae
       _ = reset.map (projectOld ∘ Prod.fst) := by
         apply Measure.map_congr
         filter_upwards [hresetGood] with state hstate
-        exact hprojectUpdate state.1 state.2 hstate.1
+        exact hprojectUpdate state.1 state.2 hstate.1 hstate.2
       _ = (reset.map Prod.fst).map projectOld :=
         (Measure.map_map hprojectOld measurable_fst).symm
       _ = source.map projectOld := by rw [hresetFst]
@@ -288,10 +292,10 @@ theorem exists_sequentialRecordedOutputReset_of_tvLe_with_approxIndep_ae
           raw.map ((fun state =>
             (oldStatistic state, readNew state)) ∘ applyUpdate) := by
         apply Measure.map_congr
-        filter_upwards [hrawOld] with state hstate
+        filter_upwards [hrawGood] with state hstate
         exact Prod.ext
-          (holdUpdate state.1 state.2 hstate).symm
-          (hreadUpdate state.1 state.2 hstate).symm
+          (holdUpdate state.1 state.2 hstate.1 hstate.2).symm
+          (hreadUpdate state.1 state.2 hstate.1 hstate.2).symm
       _ = actual.map (fun state =>
           (oldStatistic state, readNew state)) := by
         rw [show actual = raw.map applyUpdate by rfl]
