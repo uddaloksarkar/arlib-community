@@ -31,13 +31,19 @@ structure GlobalResetReferenceWitness
     (q : VolumeParams) (I : VolumeInput q.n) where
   reference : Measure (ScheduledBalancedCoolingTrace q.n)
   isProbabilityMeasure : IsProbabilityMeasure reference
+  /-- Reference coordinates may differ from the public trace projection
+  outside the finite recorded range.  In particular, the chronological
+  construction extends those coordinates by their positive raw means. -/
+  W : ℕ → ScheduledBalancedCoolingTrace q.n → ℝ
+  coordinate_measurable : ∀ j, Measurable (W j)
+  coordinate_nonnegative : ∀ j trace, 0 ≤ W j trace
   coordinate_memLp : ∀ j,
-    MemLp (scheduledBalancedTracePhaseVariable q j) 2 reference
+    MemLp (W j) 2 reference
   coordinate_mean : ∀ j,
-    (∫ trace, scheduledBalancedTracePhaseVariable q j trace ∂reference) =
+    (∫ trace, W j trace ∂reference) =
       figureOneChronologicalRawMean q I j
   coordinate_second : ∀ j,
-    (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2 ∂reference) ≤
+    (∫ trace, W j trace ^ 2 ∂reference) ≤
       (figureOneChronologicalMomentFactor q j +
           figureOneExecutableMomentSlack q / 8) *
         figureOneChronologicalRawMean q I j ^ 2
@@ -49,11 +55,11 @@ structure GlobalResetReferenceWitness
     ApproxIndepFun epsilon
       (dependentTruncatedProduct (figureOneDependentAlpha q)
         (figureOneChronologicalTruncatedMean q I reference
-          (scheduledBalancedTracePhaseVariable q))
+          W)
         (figureOneChronologicalTruncatedPhase q I
-          (scheduledBalancedTracePhaseVariable q)) i)
+          W) i)
       (figureOneChronologicalTruncatedPhase q I
-        (scheduledBalancedTracePhaseVariable q) (i + 1)) reference
+        W (i + 1)) reference
   error : ENNReal
   boundary : ENNReal
   product_leUpTo : MeasureLeUpTo
@@ -65,8 +71,7 @@ structure GlobalResetReferenceWitness
           (scheduledBalancedTracePhaseVariable q)
           (figureOneDependentPhaseCount q) trace))
     (reference.map (fun trace => initialGaussianIntegral q *
-      dependentPhaseSampleProduct
-        (scheduledBalancedTracePhaseVariable q)
+      dependentPhaseSampleProduct W
         (figureOneDependentPhaseCount q) trace)) error
   error_le : error ≤
     figureOneScheduledGlobalResetReferenceError q + boundary
@@ -90,10 +95,8 @@ theorem figureOneFinalScheduledAbortBase_failure_le_of_globalResetReferenceExist
   let _ : IsProbabilityMeasure witness.reference :=
     witness.isProbabilityMeasure
   exact figureOneFinalScheduledAbortBase_failure_le_of_globalResetReference
-    q I oracle hrounded witness.reference
-      (scheduledBalancedTracePhaseVariable q)
-      (measurable_scheduledBalancedTracePhaseVariable q)
-      (scheduledBalancedTracePhaseVariable_nonnegative q)
+    q I oracle hrounded witness.reference witness.W
+      witness.coordinate_measurable witness.coordinate_nonnegative
       witness.coordinate_memLp witness.coordinate_mean
       witness.coordinate_second witness.epsilon_nonnegative
       witness.epsilon_le witness.approxIndep witness.product_leUpTo
