@@ -211,6 +211,173 @@ theorem scheduledBalancedTracePhaseObservationLaw_ae_total_positive
       · exact scheduledBalancedCoolingUniformTransitionLaw_ae_ratio_positive
           parameters q I (terminalVariance_pos' q) history.2.2.2
 
+def BalancedCoolingHistoryHasPositiveCoordinates (m : ℕ) :
+    Option (BalancedCoolingHistory n) → Prop
+  | none => True
+  | some history =>
+      history.2.1 = m ∧ ∀ j, j < m → 0 < history.1 j
+
+theorem measurableSet_balancedCoolingHistoryHasPositiveCoordinates
+    (m : ℕ) :
+    MeasurableSet {history : Option (BalancedCoolingHistory n) |
+      BalancedCoolingHistoryHasPositiveCoordinates m history} := by
+  let A : Set (BalancedCoolingHistory n) := {history |
+    history.2.1 = m ∧ ∀ j, j < m → 0 < history.1 j}
+  let B : Set (BalancedCoolingHistory n) :=
+    ⋂ j ∈ Finset.range m, {history | 0 < history.1 j}
+  have hB : MeasurableSet B := by
+    dsimp only [B]
+    apply Finset.measurableSet_biInter
+    intro j hj
+    exact measurableSet_lt measurable_const <|
+      (measurable_pi_apply j).comp
+        (measurable_fst : Measurable fun history : BalancedCoolingHistory n =>
+          history.1)
+  have hAB : A =
+      {history : BalancedCoolingHistory n | history.2.1 = m} ∩ B := by
+    ext history
+    simp only [A, B, Set.mem_inter_iff, Set.mem_setOf_eq, Set.mem_iInter,
+      Finset.mem_range]
+  have hA : MeasurableSet A := by
+    rw [hAB]
+    exact (measurableSet_eq_fun (by fun_prop) measurable_const).inter hB
+  rw [show {history : Option (BalancedCoolingHistory n) |
+      BalancedCoolingHistoryHasPositiveCoordinates m history} =
+      {none} ∪ optionSomeEvent A by
+    ext history
+    cases history <;> simp [BalancedCoolingHistoryHasPositiveCoordinates,
+      optionSomeEvent, A]]
+  exact measurableSet_option_none.union (measurableSet_optionSomeEvent hA)
+
+theorem BalancedCoolingHistoryHasPositiveCoordinates.snocTerminal
+    {history : BalancedCoolingHistory n}
+    (hcoordinates :
+      BalancedCoolingHistoryHasPositiveCoordinates m (some history))
+    {terminal : Option (ℝ × AmbientSpace n)}
+    (hterminal : ScheduledCollectedTotalPositive terminal) :
+    BalancedCoolingHistoryHasPositiveCoordinates (m + 1)
+      (balancedCoolingHistorySnocTerminal history terminal) := by
+  cases terminal with
+  | none => trivial
+  | some terminal =>
+      simp only [BalancedCoolingHistoryHasPositiveCoordinates,
+        balancedCoolingHistorySnocTerminal] at hcoordinates ⊢
+      constructor
+      · omega
+      · intro j hj
+        by_cases heq : j = history.2.1
+        · change 0 < terminal.1 at hterminal
+          simpa [heq] using hterminal
+        · simp only [heq, if_false]
+          exact hcoordinates.2 j (by omega)
+
+/-- Dead traces are irrelevant to positivity; every coordinate stored by a
+live trace is strictly positive. -/
+def ScheduledBalancedCoolingTraceLiveCoordinatesPositive (m : ℕ)
+    (trace : ScheduledBalancedCoolingTrace n) : Prop :=
+  trace.2 = false ∨
+    BalancedCoolingHistoryHasPositiveCoordinates m (some trace.1)
+
+theorem measurableSet_scheduledBalancedCoolingTraceLiveCoordinatesPositive
+    (m : ℕ) :
+    MeasurableSet {trace : ScheduledBalancedCoolingTrace n |
+      ScheduledBalancedCoolingTraceLiveCoordinatesPositive m trace} := by
+  let dead : Set (ScheduledBalancedCoolingTrace n) :=
+    {trace | trace.2 = false}
+  let positive : Set (ScheduledBalancedCoolingTrace n) :=
+    {trace | BalancedCoolingHistoryHasPositiveCoordinates m (some trace.1)}
+  have hdead : MeasurableSet dead :=
+    measurableSet_eq_fun measurable_snd measurable_const
+  have hpositive : MeasurableSet positive :=
+    (measurableSet_balancedCoolingHistoryHasPositiveCoordinates m).preimage
+      (measurable_some.comp measurable_fst)
+  change MeasurableSet (dead ∪ positive)
+  exact hdead.union hpositive
+
+theorem ScheduledBalancedCoolingTraceLiveCoordinatesPositive.append
+    {trace : ScheduledBalancedCoolingTrace n}
+    (hcoordinates :
+      ScheduledBalancedCoolingTraceLiveCoordinatesPositive m trace)
+    {result : Option (ℝ × AmbientSpace n)}
+    (hresult : ScheduledCollectedTotalPositive result) :
+    ScheduledBalancedCoolingTraceLiveCoordinatesPositive (m + 1)
+      (scheduledBalancedCoolingTraceAppend trace result) := by
+  rcases trace with ⟨history, live⟩
+  cases live with
+  | false =>
+      cases result <;>
+        simp [ScheduledBalancedCoolingTraceLiveCoordinatesPositive,
+          scheduledBalancedCoolingTraceAppend]
+  | true =>
+      cases result with
+      | none =>
+          simp [ScheduledBalancedCoolingTraceLiveCoordinatesPositive,
+            scheduledBalancedCoolingTraceAppend]
+      | some result =>
+          simp only [ScheduledBalancedCoolingTraceLiveCoordinatesPositive,
+            scheduledBalancedCoolingTraceAppend, if_true,
+            Bool.true_eq_false, false_or] at hcoordinates ⊢
+          have h := hcoordinates.snocTerminal hresult
+          rw [balancedCoolingHistorySnocTerminal_some] at h
+          exact h
+
+theorem scheduledBalancedTracePhaseKernel_ae_liveCoordinatesPositive
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase m : ℕ)
+    (trace : ScheduledBalancedCoolingTrace q.n)
+    (hcoordinates :
+      ScheduledBalancedCoolingTraceLiveCoordinatesPositive m trace) :
+    ∀ᵐ next ∂scheduledBalancedTracePhaseKernel parameters q I phase trace,
+      ScheduledBalancedCoolingTraceLiveCoordinatesPositive (m + 1) next := by
+  unfold scheduledBalancedTracePhaseKernel
+  apply (ae_map_iff
+    ((measurable_scheduledBalancedCoolingTraceAppend (n := q.n)).comp
+      (measurable_const.prodMk measurable_id)).aemeasurable
+    (measurableSet_scheduledBalancedCoolingTraceLiveCoordinatesPositive _)).2
+  filter_upwards [
+    scheduledBalancedTracePhaseObservationLaw_ae_total_positive
+      parameters q I phase trace] with result hresult
+  exact hcoordinates.append hresult
+
+theorem scheduledBalancedForwardTraceLaw_ae_liveCoordinatesPositive
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) : ∀ phases,
+    ∀ᵐ trace ∂scheduledBalancedForwardTraceLaw parameters q I phases,
+      ScheduledBalancedCoolingTraceLiveCoordinatesPositive phases trace := by
+  intro phases
+  induction phases with
+  | zero =>
+      unfold scheduledBalancedForwardTraceLaw iteratedKernelLaw
+      apply (ae_map_iff measurable_scheduledBalancedInitialTrace.aemeasurable
+        (measurableSet_scheduledBalancedCoolingTraceLiveCoordinatesPositive 0)).2
+      filter_upwards with point
+      simp [ScheduledBalancedCoolingTraceLiveCoordinatesPositive,
+        BalancedCoolingHistoryHasPositiveCoordinates,
+        scheduledBalancedInitialTrace]
+  | succ phases ih =>
+      let prefixLaw :=
+        scheduledBalancedForwardTraceLaw parameters q I phases
+      let kernel := scheduledBalancedTracePhaseKernel parameters q I phases
+      let good : Set (ScheduledBalancedCoolingTrace q.n) :=
+        {trace | ScheduledBalancedCoolingTraceLiveCoordinatesPositive
+          (phases + 1) trace}
+      have hgood : MeasurableSet good :=
+        measurableSet_scheduledBalancedCoolingTraceLiveCoordinatesPositive _
+      have hkernel : Measurable kernel :=
+        (scheduledBalancedTracePhaseKernel_measurable_and_probability
+          parameters q I phases).1
+      change ∀ᵐ trace ∂prefixLaw.bind kernel,
+        ScheduledBalancedCoolingTraceLiveCoordinatesPositive
+          (phases + 1) trace
+      apply MeasureTheory.mem_ae_iff.mpr
+      change (prefixLaw.bind kernel) goodᶜ = 0
+      rw [Measure.bind_apply hgood.compl hkernel.aemeasurable]
+      apply lintegral_eq_zero_of_ae_eq_zero
+      filter_upwards [ih] with trace htrace
+      exact MeasureTheory.mem_ae_iff.mp <|
+        scheduledBalancedTracePhaseKernel_ae_liveCoordinatesPositive
+          parameters q I phases phases trace htrace
+
 /-- The ideal factor attached to the actual chronological phase is at most
 two. -/
 theorem figureOneChronologicalMomentFactor_le_two
@@ -823,6 +990,7 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_sharp_trace_moments
 #print axioms scheduledBalancedCoolingRatioTransitionLaw_ae_ratio_positive
 #print axioms scheduledBalancedCoolingUniformTransitionLaw_ae_ratio_positive
 #print axioms scheduledBalancedTracePhaseObservationLaw_ae_total_positive
+#print axioms scheduledBalancedForwardTraceLaw_ae_liveCoordinatesPositive
 #print axioms scheduledFigureOneTrace_truncatedSecond_le_rawSecond
 #print axioms scheduledFigureOneTrace_rawMean_le_one_add_inv_alpha_mul_truncatedMean
 #print axioms scheduledFigureOneTrace_rawMeanProduct_le_pow_mul_truncatedMeanProduct
