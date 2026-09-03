@@ -59,6 +59,71 @@ theorem figureOneExecutableMomentFactor_perturbation_budget
   dsimp only [f, s] at hscale ⊢
   nlinarith
 
+/-- Direct ideal-to-executable comparison form of the sharp phase-moment
+transfer.  This is the interface needed by a paper-faithful within-phase
+coupling argument: it may establish the executable second moment directly,
+without first proving total variation closeness of the entire (unbounded)
+phase-estimator law. -/
+theorem scheduledFigureOneTrace_second_le_executableMomentFactor_of_ideal_bounds
+    (q : VolumeParams) (I : VolumeInput q.n) (j : ℕ)
+    (hmeanLower :
+      (1 - figureOneExecutableMomentSlack q / 8) *
+          figureOneIdealPhaseMean q I
+            (figureOneChronologicalPhaseAt q j) ≤
+        scheduledFigureOneTraceRawMean q I j)
+    (hsecondUpper :
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        (figureOneChronologicalMomentFactor q j +
+            figureOneExecutableMomentSlack q / 8) *
+          figureOneIdealPhaseMean q I
+            (figureOneChronologicalPhaseAt q j) ^ 2) :
+    (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+      ∂scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)) ≤
+      figureOneExecutableMomentFactor q j *
+        scheduledFigureOneTraceRawMean q I j ^ 2 := by
+  let slack := figureOneExecutableMomentSlack q
+  let factor := figureOneChronologicalMomentFactor q j
+  let idealMean := figureOneIdealPhaseMean q I
+    (figureOneChronologicalPhaseAt q j)
+  let actualMean := scheduledFigureOneTraceRawMean q I j
+  have hslack0 : 0 ≤ slack := figureOneExecutableMomentSlack_nonneg q
+  have hslack1 : slack ≤ 1 := figureOneExecutableMomentSlack_le_one q
+  have hideal0 : 0 ≤ idealMean :=
+    (figureOneIdealPhaseMean_pos q I
+      (figureOneChronologicalPhaseAt q j)).le
+  have hlower0 : 0 ≤ (1 - slack / 8) * idealMean := by
+    exact mul_nonneg (by nlinarith) hideal0
+  have hactual0 : 0 ≤ actualMean := hlower0.trans hmeanLower
+  have hsquare : ((1 - slack / 8) * idealMean) ^ 2 ≤ actualMean ^ 2 :=
+    (sq_le_sq₀ hlower0 hactual0).2 hmeanLower
+  have hcoefficient0 : 0 ≤ factor * (1 + slack) :=
+    mul_nonneg
+      (zero_le_one.trans (figureOneChronologicalMomentFactor_one_le q j))
+      (by linarith)
+  calc
+    (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        (factor + slack / 8) * idealMean ^ 2 := hsecondUpper
+    _ ≤ (factor * (1 + slack) * (1 - slack / 8) ^ 2) *
+          idealMean ^ 2 :=
+      mul_le_mul_of_nonneg_right
+        (figureOneExecutableMomentFactor_perturbation_budget q j)
+        (sq_nonneg idealMean)
+    _ = factor * (1 + slack) *
+          ((1 - slack / 8) * idealMean) ^ 2 := by ring
+    _ ≤ factor * (1 + slack) * actualMean ^ 2 :=
+      mul_le_mul_of_nonneg_left hsquare hcoefficient0
+    _ = figureOneExecutableMomentFactor q j *
+          scheduledFigureOneTraceRawMean q I j ^ 2 := by
+      rfl
+
 /-- A sufficiently small scalar-law perturbation of the ideal chronological
 phase preserves its paper factor, enlarged only by the executable moment
 slack. -/
@@ -223,6 +288,8 @@ theorem scheduledFigureOneTrace_second_le_executableMomentFactor_of_mapped_tv_ei
   · exact hsecondError
   · exact figureOneExecutableMomentFactor_perturbation_budget q j
 
+#print axioms
+  scheduledFigureOneTrace_second_le_executableMomentFactor_of_ideal_bounds
 #print axioms
   scheduledFigureOneTrace_second_le_executableMomentFactor_of_mapped_tv
 #print axioms
