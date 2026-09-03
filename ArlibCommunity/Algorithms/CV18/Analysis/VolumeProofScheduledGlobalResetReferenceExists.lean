@@ -3,6 +3,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.Background.FiniteReferenceSequenc
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledForwardTraceEndpoint
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGlobalOuterStepErrorSum
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGlobalResetReferenceConstruction
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianPrefixInvariantStep
 
 /-!
 # Finite assembly of the global chronological reset reference
@@ -108,7 +109,39 @@ theorem exists_globalResetReferenceWitness_of_gaussianStep
   exact ⟨GlobalResetReferenceWitness.of_completed_prefixInvariant
     q I reference hreferenceProb hreferenceInvariant htrace⟩
 
+/-- The chronological reset-reference witness required by the final CV18
+capstone exists for every parameter/input pair. -/
+theorem globalResetReferenceExists : GlobalResetReferenceExists := by
+  intro q I _
+  apply exists_globalResetReferenceWitness_of_gaussianStep q I
+  intro phase hphase source hsourceProb hsource
+  let _ : IsProbabilityMeasure source := hsourceProb
+  exact exists_scheduledGlobalGaussianPrefixInvariant_succ
+    q I phase hphase source hsource
+
+/-- Premise-free, end-to-end scheduled formalization of CV18 Theorem 1.1.
+The returned constant is universal; the probability and oracle-query bounds
+are those of the executable amplified membership-oracle program. -/
+theorem volumeTheorem_finalScheduled :
+    ∃ C : ℝ, 0 < C ∧
+      ∀ (q : VolumeParams) (I : VolumeInput q.n)
+        (oracle : MembershipOracle I), WellRounded q I →
+          1 - q.p ≤ outcomeProbability
+            (volumeAlgorithmLaw
+              (amplifyOracleProgram figureOneFinalScheduledCappedValueProgram)
+              q I oracle) (accurateOutcome q I) ∧
+          ∃ calls,
+            (amplifyOracleProgram
+              figureOneFinalScheduledCappedValueProgram q).QueryBound calls ∧
+            calls ≤ Nat.ceil
+              (C * (volumeScheduledBaseComplexityRate q *
+                protectedLog (1 / q.p))) :=
+  volumeTheorem_finalScheduled_of_globalResetReferenceExists
+    globalResetReferenceExists
+
 #print axioms exists_globalResetReferenceWitness_of_gaussianStep
+#print axioms globalResetReferenceExists
+#print axioms volumeTheorem_finalScheduled
 
 end
 
