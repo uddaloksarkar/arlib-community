@@ -326,6 +326,31 @@ theorem map_shadowRecorded_operationalState_eq_of_reset_history
   rw [heq, ← Measure.map_map measurable_snd measurable_fst,
     ← Measure.map_map measurable_snd measurable_fst, hhistory]
 
+/-- Any measurable moment of a freshly recorded exact shadow is exactly the
+corresponding target moment.  In particular, use `moment y = y` or
+`moment y = y ^ 2` to obtain the coordinate premises of CV18 equation (6)
+without transferring an unbounded score through TV. -/
+theorem integral_shadowRecorded_newCoordinate_eq_target
+    {H X Y : Type*} [MeasurableSpace H] [MeasurableSpace X]
+    [MeasurableSpace Y]
+    (reference : Measure (H × X)) (target : Measure X)
+    (observe : X → Y) (readNew : H → Y) (moment : Y → ℝ)
+    (hobserve : Measurable observe) (hreadNew : Measurable readNew)
+    (hmoment : Measurable moment)
+    (hcoordinate : reference.map (readNew ∘ Prod.fst) =
+      target.map observe) :
+    (∫ state, moment (readNew state.1) ∂reference) =
+      ∫ x, moment (observe x) ∂target := by
+  calc
+    (∫ state, moment (readNew state.1) ∂reference) =
+        ∫ y, moment y ∂reference.map (readNew ∘ Prod.fst) := by
+      simpa [Function.comp_apply] using
+        (integral_map (hreadNew.comp measurable_fst).aemeasurable
+          hmoment.aestronglyMeasurable).symm
+    _ = ∫ y, moment y ∂target.map observe := by rw [hcoordinate]
+    _ = ∫ x, moment (observe x) ∂target := by
+      exact integral_map hobserve.aemeasurable hmoment.aestronglyMeasurable
+
 #print axioms historyRawNextKernel_measurable_and_probability
 #print axioms historyOperationalRecordKernel_measurable_and_probability
 #print axioms bind_historyRawNextKernel_map_record_eq
@@ -336,6 +361,7 @@ theorem map_shadowRecorded_operationalState_eq_of_reset_history
 #print axioms MeasureLeUpTo.historyOperationalRecord_of_shadowReset
 #print axioms map_shadowRecorded_newCoordinate_eq_of_reset_marginal
 #print axioms map_shadowRecorded_operationalState_eq_of_reset_history
+#print axioms integral_shadowRecorded_newCoordinate_eq_target
 
 end
 
