@@ -480,6 +480,39 @@ theorem figureOneWarmShadowScheduledWork_cast_le
       have hrate := (volumeScheduledBaseComplexityRate_pos q).le
       nlinarith
 
+/-- The one-query initializer plus the complete warm chronological shadow
+still fits strictly inside the `9·10^29` reference-cost allowance. -/
+theorem one_add_figureOneWarmShadowScheduledWork_le
+    (q : VolumeParams) :
+    (1 : ENNReal) +
+        ((384 * (figureOneSafeRetryCount q *
+          figureOneScheduledProperWork q) : ℕ) : ENNReal) ≤
+      ENNReal.ofReal ((9 * 10 ^ 29) *
+        volumeScheduledBaseComplexityRate q) := by
+  have hmain :=
+    figureOneSafeRetryCount_mul_scheduledProperWork_cast_le_sharp q
+  have hrate := volumeScheduledBaseComplexityRate_one_le q
+  have hmain' :
+      ((384 * (figureOneSafeRetryCount q *
+        figureOneScheduledProperWork q) : ℕ) : ℝ) ≤
+        384 * ((2322 * 10 ^ 24) *
+          volumeScheduledBaseComplexityRate q) := by
+    calc
+      _ = 384 * ((figureOneSafeRetryCount q *
+          figureOneScheduledProperWork q : ℕ) : ℝ) := by push_cast; ring
+      _ ≤ _ := by gcongr
+  have hreal :
+      (1 : ℝ) +
+          ((384 * (figureOneSafeRetryCount q *
+            figureOneScheduledProperWork q) : ℕ) : ℝ) ≤
+        (9 * 10 ^ 29) * volumeScheduledBaseComplexityRate q := by
+    nlinarith
+  have hofReal := ENNReal.ofReal_le_ofReal hreal
+  rw [ENNReal.ofReal_add (by norm_num : (0 : ℝ) ≤ 1)
+    (Nat.cast_nonneg _), ENNReal.ofReal_one,
+    ENNReal.ofReal_natCast] at hofReal
+  exact hofReal
+
 /-- The apparently large local cap has the paper's essential cancellation:
 after multiplication by one corrected block-error budget, its ceiling costs
 only an absolute constant times the scheduled stride. -/
@@ -674,6 +707,7 @@ theorem figureOneFinalScheduledProposalCap_mul_stationaryTargetError_le
 #print axioms figureOneSafeRetryCount_mul_scheduledProperWork_cast_le_sharp
 #print axioms figureOneSafeRetryCount_mul_scheduledProperWork_cast_le
 #print axioms figureOneWarmShadowScheduledWork_cast_le
+#print axioms one_add_figureOneWarmShadowScheduledWork_le
 #print axioms figureOneFinalScheduledLocalCapCeil_mul_blockError_le
 #print axioms figureOneFinalScheduledProposalCap_add_two_mul_blockError_le
 #print axioms
