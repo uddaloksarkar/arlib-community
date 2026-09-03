@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKilledCollectorInitializedSampleHistory
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKilledCollectorConditionedTransition
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianEndpointMean
 
 /-!
 # Prefix independence for the scheduled initialized collector
@@ -15,12 +16,65 @@ namespace ArlibCommunity.Algorithms.CV18
 
 open _root_.Arlib
 
+/-- Asymmetric form of Lemma 7.17(b): conditioned and unconditional starts
+may have different additive errors relative to their common target. -/
+theorem approxIndepFun_history_next_of_state_warm_base_leUpTo
+    {H S T : Type*} [MeasurableSpace H] [MeasurableSpace S]
+    [MeasurableSpace T]
+    (rho : Measure H) [IsProbabilityMeasure rho]
+    (state : H → S) (hstate : Measurable state)
+    (K : S → Measure T) (hK : Measurable K)
+    (hKprob : ∀ s, IsProbabilityMeasure (K s))
+    (target : Measure T) [IsProbabilityMeasure target]
+    {conditionedError baseError : ENNReal}
+    (hconditionedTop : conditionedError ≠ ⊤)
+    (hbaseTop : baseError ≠ ⊤)
+    (hconditioned : ∀ mu : Measure S, IsProbabilityMeasure mu →
+      Arlib.IsWarm 2 mu (rho.map state) →
+      MeasureLeUpTo (mu.bind K) target conditionedError)
+    (hbase : MeasureLeUpTo ((rho.map state).bind K) target baseError) :
+    ApproxIndepFun (conditionedError + baseError).toReal Prod.fst Prod.snd
+      (sequentialPairLaw rho (K ∘ state)) := by
+  apply approxIndepFun_fst_snd_sequentialPairLaw_of_condOn_bind_tv
+    rho (hK.comp hstate) (fun history => hKprob (state history))
+      (ENNReal.add_ne_top.mpr ⟨hconditionedTop, hbaseTop⟩)
+  intro A hA hhalf
+  have hAposReal : 0 < rho.real A := lt_of_lt_of_le (by norm_num) hhalf
+  have hA0 : rho A ≠ 0 := by
+    intro hzero
+    rw [measureReal_def, hzero] at hAposReal
+    simp at hAposReal
+  let hcondProb : IsProbabilityMeasure (Arlib.condOn rho A) :=
+    Arlib.isProbabilityMeasure_condOn rho hA0 (measure_ne_top rho A)
+  let _ : IsProbabilityMeasure (Arlib.condOn rho A) := hcondProb
+  let _ : IsProbabilityMeasure
+      ((Arlib.condOn rho A).bind (K ∘ state)) :=
+    isProbabilityMeasure_bind (hK.comp hstate).aemeasurable
+      (ae_of_all _ fun history => hKprob (state history))
+  let _ : IsProbabilityMeasure (rho.bind (K ∘ state)) :=
+    isProbabilityMeasure_bind (hK.comp hstate).aemeasurable
+      (ae_of_all _ fun history => hKprob (state history))
+  have hprojectedProb : IsProbabilityMeasure
+      ((Arlib.condOn rho A).map state) :=
+    Measure.isProbabilityMeasure_map hstate.aemeasurable
+  have hcond := hconditioned ((Arlib.condOn rho A).map state)
+    hprojectedProb (isWarm_map (isWarm_condOn_two_of_half rho hA hhalf) hstate)
+  rw [map_bind_eq_bind_comp_state (Arlib.condOn rho A) hstate hK] at hcond
+  rw [map_bind_eq_bind_comp_state rho hstate hK] at hbase
+  exact hcond.to_tvLe.trans hbase.to_tvLe.symm
+
 /-- Conditioned one-step error at tail time `i`. -/
 noncomputable def scheduledRetainedConditioningError
     (q : VolumeParams) (i : ℕ) : ENNReal :=
   figureOneCorrectedTransitionBudget q +
     2 * (scheduledBalancedStationaryTargetError q +
       i • figureOneCorrectedTransitionBudget q)
+
+/-- Unconditional exact-start endpoint error after `i` transitions. -/
+noncomputable def scheduledRetainedEndpointError
+    (q : VolumeParams) (i : ℕ) : ENNReal :=
+  2 * scheduledBalancedStationaryTargetError q +
+    i • figureOneCorrectedTransitionBudget q
 
 theorem scheduledRetainedConditioningError_ne_top
     (q : VolumeParams) (i : ℕ) :
@@ -38,6 +92,20 @@ theorem scheduledRetainedConditioningError_ne_top
     · rw [nsmul_eq_mul]
       exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
         ENNReal.ofReal_ne_top
+
+theorem scheduledRetainedEndpointError_ne_top
+    (q : VolumeParams) (i : ℕ) :
+    scheduledRetainedEndpointError q i ≠ ⊤ := by
+  unfold scheduledRetainedEndpointError
+  apply ENNReal.add_ne_top.mpr
+  constructor
+  · exact ENNReal.mul_ne_top (by norm_num) <|
+      ne_top_of_le_ne_top
+        (ENNReal.div_ne_top ENNReal.ofReal_ne_top (by norm_num))
+        (scheduledBalancedStationaryTargetError_le_targetBudget q)
+  · rw [nsmul_eq_mul]
+    exact ENNReal.mul_ne_top (ENNReal.natCast_ne_top _)
+      ENNReal.ofReal_ne_top
 
 /-- The initialized coordinate-recording law for one scheduled phase. -/
 noncomputable def initializedScheduledRetainedHistoryLaw
@@ -113,7 +181,7 @@ theorem approxIndepFun_initializedScheduledRetainedHistory_prefix_next
     {i tail : ℕ} (hi : i < tail) :
     ApproxIndepFun
       (scheduledRetainedConditioningError q i +
-        scheduledRetainedConditioningError q i).toReal
+        scheduledRetainedEndpointError q (i + 1)).toReal
       (sequentialPrefixSum
         (retainedSampleObservation
           (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
@@ -146,9 +214,18 @@ theorem approxIndepFun_initializedScheduledRetainedHistory_prefix_next
     exact Measure.isProbabilityMeasure_map measurable_some.aemeasurable
   let _ : IsProbabilityMeasure rho := hrho
   let _ : IsProbabilityMeasure exactSome := hexactSome
-  have hbase := approxIndepFun_history_next_of_state_warm_leUpTo
-    rho retainedSampleHistoryState measurable_snd hK.1 hK.2 exactSome
+  have hbaseEndpoint : MeasureLeUpTo
+      ((rho.map retainedSampleHistoryState).bind K) exactSome
+      (scheduledRetainedEndpointError q (i + 1)) := by
+    rw [map_initializedScheduledRetainedHistoryLaw_state q I phase i]
+    rw [← iteratedKernelLaw_succ]
+    simpa [K, exactSome, exact, scheduledRetainedEndpointError] using
+      iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_exact_leUpTo
+        q I phase (i + 1)
+  have hbase := approxIndepFun_history_next_of_state_warm_base_leUpTo
+    rho retainedSampleHistoryState measurable_snd K hK.1 hK.2 exactSome
       (scheduledRetainedConditioningError_ne_top q i)
+      (scheduledRetainedEndpointError_ne_top q (i + 1))
       (fun mu hmu hwarm => by
         let _ : IsProbabilityMeasure mu := hmu
         apply
@@ -157,6 +234,7 @@ theorem approxIndepFun_initializedScheduledRetainedHistory_prefix_next
         simpa [rho, K, exactSome, exact,
           map_initializedScheduledRetainedHistoryLaw_state q I phase i] using
           hwarm)
+      hbaseEndpoint
   have hpair := hbase.comp
     (measurable_sequentialPrefixSum
       (fun t => measurable_retainedSampleObservation
@@ -173,6 +251,8 @@ theorem approxIndepFun_initializedScheduledRetainedHistory_prefix_next
     initializedScheduledRetainedHistoryLaw, Function.comp_def] using hpair
 
 #print axioms scheduledRetainedConditioningError_ne_top
+#print axioms scheduledRetainedEndpointError_ne_top
+#print axioms approxIndepFun_history_next_of_state_warm_base_leUpTo
 #print axioms initializedScheduledRetainedHistoryLaw_isProbabilityMeasure
 #print axioms map_initializedScheduledRetainedHistoryLaw_state
 #print axioms
