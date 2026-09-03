@@ -77,7 +77,7 @@ trace.  Later failure no longer changes earlier phase variables.  Structural
 support, product, projection, and nonnegativity premises are discharged; the
 remaining hypotheses are exactly finite executable moments, phasewise Lemma
 7.17(c), and the product-center estimates. -/
-theorem figureOneFinalScheduledBalancedBase_failure_le_of_trace_lemma717bc
+theorem figureOnePostInitialDirectFailureBoundFor_of_trace_lemma717bc
     (q : VolumeParams) (I : VolumeInput q.n)
     (oracle : MembershipOracle I) (hrounded : WellRounded q I)
     (hpoint : ∀ point,
@@ -136,8 +136,10 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_trace_lemma717bc
       (dependentPhaseMeanProduct
         (scheduledFigureOneTraceTruncatedMean q I)
         (figureOneDependentPhaseCount q))) :
-    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
-        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+    FigureOnePostInitialDirectFailureBoundFor q I fun point =>
+      (scheduledBalancedFigureOnePointContinuation
+        figureOneFinalScheduledBalancedParameters q point).runEstimate
+          oracle.query := by
   let parameters := figureOneFinalScheduledBalancedParameters
   let mu := scheduledBalancedForwardTraceLaw parameters q I
     (figureOneDependentPhaseCount q)
@@ -219,9 +221,79 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_trace_lemma717bc
     q I continuation (figureOneRadialTruncationBound q I hrounded) mu
       (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q))
       hX hmeanApprox hlaw htail
-  exact figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
-    q I oracle hpost
+  exact hpost
 
+/-- The direct trace argument, followed by the legacy non-aborting base
+transport.  The direct theorem above is also reusable by the faithful
+aborting implementation. -/
+theorem figureOneFinalScheduledBalancedBase_failure_le_of_trace_lemma717bc
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (hpoint : ∀ point,
+      MembershipOracleProgram.runEstimate oracle.query
+          (scheduledBalancedFigureOnePointContinuation
+            figureOneFinalScheduledBalancedParameters q point) =
+        (scheduledBalancedForwardHistoryLawFromPoint
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q) point).map
+            (balancedFigureOneHistoryEstimate q))
+    (hWint : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      Integrable (scheduledBalancedTracePhaseVariable q j)
+        (scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)))
+    (hmeanPos : ∀ j, 0 < scheduledFigureOneTraceTruncatedMean q I j)
+    (hrawMeanPos : ∀ j, 0 < scheduledFigureOneTraceRawMean q I j)
+    (hrawMean_le : ∀ j,
+      scheduledFigureOneTraceRawMean q I j ≤
+        2 * scheduledFigureOneTraceTruncatedMean q I j)
+    (hmeanSecond : ∀ j,
+      scheduledFigureOneTraceTruncatedMean q I j ^ 2 ≤
+        scheduledFigureOneTraceTruncatedSecond q I j)
+    (hrawSecond : ∀ j,
+      scheduledFigureOneTraceRawMean q I j ^ 2 ≤
+        2 * scheduledFigureOneTraceTruncatedSecond q I j)
+    (hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
+        (dependentTruncatedProduct (figureOneDependentAlpha q)
+          (scheduledFigureOneTraceTruncatedMean q I)
+          (scheduledFigureOneTraceTruncatedPhase q I) i)
+        (scheduledFigureOneTraceTruncatedPhase q I (i + 1))
+        (scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)))
+    (hrelative : ∀ i, i ≤ figureOneDependentPhaseCount q →
+      (1 + 2 * figureOneDependentEpsilon q *
+          figureOneDependentAlpha q ^ 4 * i) *
+          dependentPhaseMeanProduct
+            (scheduledFigureOneTraceTruncatedSecond q I) i ≤
+        2 * dependentPhaseMeanProduct
+          (scheduledFigureOneTraceTruncatedMean q I) i ^ 2)
+    (htailSecond :
+      (1 + 2 * figureOneDependentEpsilon q *
+          figureOneDependentAlpha q ^ 4 *
+            figureOneDependentPhaseCount q) *
+          dependentPhaseMeanProduct
+            (scheduledFigureOneTraceTruncatedSecond q I)
+            (figureOneDependentPhaseCount q) ≤
+        (1 + q.eps ^ 2 / 16) *
+          dependentPhaseMeanProduct
+            (scheduledFigureOneTraceTruncatedMean q I)
+            (figureOneDependentPhaseCount q) ^ 2)
+    (hmeanApprox : RelativeApprox (q.eps / 32)
+      (∏ phase, figureOneIdealPhaseMean q I phase)
+      (dependentPhaseMeanProduct
+        (scheduledFigureOneTraceTruncatedMean q I)
+        (figureOneDependentPhaseCount q))) :
+    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  apply figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
+    q I oracle
+  exact figureOnePostInitialDirectFailureBoundFor_of_trace_lemma717bc
+    q I oracle hrounded hpoint hWint hmeanPos hrawMeanPos hrawMean_le
+      hmeanSecond hrawSecond hind hrelative htailSecond hmeanApprox
+
+#print axioms figureOnePostInitialDirectFailureBoundFor_of_trace_lemma717bc
 #print axioms figureOneFinalScheduledBalancedBase_failure_le_of_trace_lemma717bc
 
 end ArlibCommunity.Algorithms.CV18
