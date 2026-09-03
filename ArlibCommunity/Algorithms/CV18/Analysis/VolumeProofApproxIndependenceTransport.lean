@@ -129,7 +129,40 @@ theorem Measure.map_pair_bind_eq_of_ae_eq
     _ = mu.map (fun omega => (X omega, Y omega)) :=
       Measure.bind_dirac_eq_map mu hpair
 
+/-- Iterating kernels which preserve two observables almost surely preserves
+their complete joint law. -/
+theorem Measure.map_pair_iteratedKernelLaw_eq_of_ae_eq
+    {Omega S T : Type*} [MeasurableSpace Omega]
+    [MeasurableSpace S] [MeasurableSpace T]
+    (K : ℕ → Omega → Measure Omega)
+    (hK : ∀ phase, Measurable (K phase))
+    (hKprob : ∀ phase omega, IsProbabilityMeasure (K phase omega))
+    (X : Omega → S) (Y : Omega → T)
+    (hX : Measurable X) (hY : Measurable Y)
+    (hpreserve : ∀ phase omega, ∀ᵐ next ∂K phase omega,
+      X next = X omega ∧ Y next = Y omega)
+    (mu : Measure Omega) : ∀ steps,
+    (iteratedKernelLaw K mu steps).map (fun omega => (X omega, Y omega)) =
+      mu.map (fun omega => (X omega, Y omega)) := by
+  intro steps
+  induction steps with
+  | zero => rfl
+  | succ steps ih =>
+      rw [iteratedKernelLaw_succ]
+      calc
+        ((iteratedKernelLaw K mu steps).bind (K steps)).map
+            (fun omega => (X omega, Y omega)) =
+            (iteratedKernelLaw K mu steps).map
+              (fun omega => (X omega, Y omega)) := by
+          apply Measure.map_pair_bind_eq_of_ae_eq
+            (iteratedKernelLaw K mu steps) (K steps)
+              (hK steps) (hKprob steps) X Y X Y hX hY hX hY
+          filter_upwards with omega
+          exact hpreserve steps omega
+        _ = mu.map (fun omega => (X omega, Y omega)) := ih
+
 #print axioms ApproxIndepFun.of_map_pair_eq
 #print axioms Measure.map_pair_bind_eq_of_ae_eq
+#print axioms Measure.map_pair_iteratedKernelLaw_eq_of_ae_eq
 
 end ArlibCommunity.Algorithms.CV18
