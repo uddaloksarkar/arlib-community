@@ -55,6 +55,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceSlackMom
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceRawMeanApprox
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledCheapAbortCap
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledTheoremAssembly
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledPhasewiseCapstone
 
 /-!
 # CV18 accelerated Gaussian cooling
@@ -65,9 +66,10 @@ all discharged analytic infrastructure are exposed here. Radial truncation,
 stationary sharp moments, proper-step cost at the advertised Figure-1 step,
 the executable lazy proper-step clock, speedy-Gaussian mixing, and amplification
 are unconditional. The current final scheduled assembly is
-`volumeTheorem_finalScheduled_of_baseFailure`; its sole remaining premise is
-the conclusion of the executable trace-accuracy lane. The counted-reference
-global-cap lane is unconditional. The concrete Lemma 7.17(c) dependence
+`volumeTheorem_finalScheduled_of_phasewise_ideal_bounds`; its two remaining
+local inputs are the executable phase-mean comparison and the corresponding
+sharp phase-average second-moment bound. The counted-reference global-cap lane
+is unconditional. The concrete Lemma 7.17(c) dependence
 bridge, finite executable moment-factor budget, phasewise raw-mean product
 assembly, and counted-reference cap theorem are exposed here. The older
 `volumeTheorem_of_postInitialMixing` remains available as a compact legacy
