@@ -153,10 +153,28 @@ theorem MembershipOracleProgram.run_bind_pure_eq_map
   rw [Measure.bind_dirac_eq_map]
   exact hf.comp measurable_fst |>.prodMk measurable_snd
 
+/-- In particular, query-free postprocessing leaves the entire distribution
+of the interpreter-counted query total unchanged. -/
+theorem MembershipOracleProgram.map_snd_run_bind_pure
+    {n : ℕ} {A B : Type} [MeasurableSpace A] [MeasurableSpace B]
+    (oracle : AmbientSpace n → Bool)
+    (program : MembershipOracleProgram n A)
+    (f : A → B) (hf : Measurable f)
+    (hprogram : program.CountedStronglyMeasurable oracle) :
+    ((program.bind fun result => .pure (f result)).run oracle).map Prod.snd =
+      (program.run oracle).map Prod.snd := by
+  rw [MembershipOracleProgram.run_bind_pure_eq_map oracle program f hf hprogram]
+  rw [Measure.map_map (μ := program.run oracle)
+    (f := fun outcome : A × ℕ => (f outcome.1, outcome.2))
+    (g := Prod.snd) measurable_snd
+      ((hf.comp measurable_fst).prodMk measurable_snd)]
+  congr 1
+
 #print axioms MembershipOracleProgram.countedContinuation_fst
 #print axioms MembershipOracleProgram.fst_bind_countedContinuation
 #print axioms MembershipOracleProgram.countedQueryCost_bind_countedContinuation
 #print axioms MembershipOracleProgram.countedContinuation_step
 #print axioms MembershipOracleProgram.run_bind_pure_eq_map
+#print axioms MembershipOracleProgram.map_snd_run_bind_pure
 
 end ArlibCommunity.Algorithms.CV18
