@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.SequentialRecordedKernelPreservation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledChronologicalResetReference
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledReferenceCoordinateExtension
 
 /-!
 # Joint preservation of completed chronological coordinates
@@ -246,12 +247,234 @@ theorem ApproxIndepFun.scheduledTrace_of_resetPrefix_map_eq
     (measurable_scheduledResetPrefixTruncatedPhase q I phase (i + 1))
     hlaw hind
 
+/-! ## Final-capstone chronological truncation -/
+
+/-- Prefix-side version of the truncation used by the final reset-reference
+capstone.  Its cap is the ideal chronological raw mean, not the executable
+trace mean. -/
+noncomputable def scheduledResetPrefixChronologicalTruncatedPhase
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ) :
+    ℕ → (Fin phase → ℝ) → ℝ :=
+  dependentTruncatedPhase (figureOneDependentAlpha q)
+    (figureOneChronologicalRawMean q I)
+    (scheduledResetPrefixPhaseVariable phase)
+
+theorem measurable_scheduledResetPrefixChronologicalTruncatedPhase
+    (q : VolumeParams) (I : VolumeInput q.n) (phase j : ℕ) :
+    Measurable
+      (scheduledResetPrefixChronologicalTruncatedPhase q I phase j) :=
+  (measurable_scheduledResetPrefixPhaseVariable phase j).min measurable_const
+
+/-- Prefix-side recursively truncated product with an arbitrary deterministic
+mean function.  In the recurrence this is instantiated with the truncated
+means under the evolving reference law. -/
+noncomputable def scheduledResetPrefixChronologicalTruncatedProduct
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (mean : ℕ → ℝ) (i : ℕ) : (Fin phase → ℝ) → ℝ :=
+  dependentTruncatedProduct (figureOneDependentAlpha q) mean
+    (scheduledResetPrefixChronologicalTruncatedPhase q I phase) i
+
+theorem measurable_scheduledResetPrefixChronologicalTruncatedProduct
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (mean : ℕ → ℝ) (i : ℕ) :
+    Measurable
+      (scheduledResetPrefixChronologicalTruncatedProduct q I phase mean i) :=
+  measurable_dependentTruncatedProduct (figureOneDependentAlpha q) mean
+    (scheduledResetPrefixChronologicalTruncatedPhase q I phase)
+    (measurable_scheduledResetPrefixChronologicalTruncatedPhase q I phase) i
+
+/-- On the used interval, the final capstone's chronological truncated
+coordinate factors through the finite score prefix. -/
+theorem figureOneChronologicalTruncatedPhase_extension_factor_prefix
+    (q : VolumeParams) (I : VolumeInput q.n) (phase j : ℕ)
+    (hphase : phase ≤ figureOneDependentPhaseCount q)
+    (hj1 : 1 ≤ j) (hjphase : j ≤ phase) :
+    figureOneChronologicalTruncatedPhase q I
+        (figureOneScheduledReferenceCoordinateExtension q I) j =
+      scheduledResetPrefixChronologicalTruncatedPhase q I phase j ∘
+        scheduledResetPrefixCoordinates q phase := by
+  funext trace
+  unfold figureOneChronologicalTruncatedPhase
+    scheduledResetPrefixChronologicalTruncatedPhase dependentTruncatedPhase
+  simp only [Function.comp_apply]
+  rw [figureOneScheduledReferenceCoordinateExtension_apply_of_used q I
+      hj1 (hjphase.trans hphase),
+    scheduledResetPrefixPhaseVariable_apply q phase j hj1 hjphase trace]
+
+/-- The truncated mean of any already completed coordinate is unchanged by
+an exact reset-prefix law identity. -/
+theorem figureOneChronologicalTruncatedMean_extension_eq_of_prefix_map_eq
+    (q : VolumeParams) (I : VolumeInput q.n) (phase j : ℕ)
+    (hphase : phase ≤ figureOneDependentPhaseCount q)
+    (hj1 : 1 ≤ j) (hjphase : j ≤ phase)
+    (source reference : Measure (ScheduledBalancedCoolingTrace q.n))
+    (hlaw : reference.map (scheduledResetPrefixCoordinates q phase) =
+      source.map (scheduledResetPrefixCoordinates q phase)) :
+    figureOneChronologicalTruncatedMean q I reference
+        (figureOneScheduledReferenceCoordinateExtension q I) j =
+      figureOneChronologicalTruncatedMean q I source
+        (figureOneScheduledReferenceCoordinateExtension q I) j := by
+  let F := scheduledResetPrefixChronologicalTruncatedPhase q I phase j
+  have hF : Measurable F :=
+    measurable_scheduledResetPrefixChronologicalTruncatedPhase q I phase j
+  have hprefix := measurable_scheduledResetPrefixCoordinates q phase
+  have hfactor :=
+    figureOneChronologicalTruncatedPhase_extension_factor_prefix
+      q I phase j hphase hj1 hjphase
+  unfold figureOneChronologicalTruncatedMean
+  rw [hfactor]
+  calc
+    (∫ trace, (F ∘ scheduledResetPrefixCoordinates q phase) trace
+        ∂reference) =
+        ∫ values, F values
+          ∂reference.map (scheduledResetPrefixCoordinates q phase) :=
+      (integral_map hprefix.aemeasurable hF.aestronglyMeasurable).symm
+    _ = ∫ values, F values
+          ∂source.map (scheduledResetPrefixCoordinates q phase) := by rw [hlaw]
+    _ = (∫ trace, (F ∘ scheduledResetPrefixCoordinates q phase) trace
+        ∂source) :=
+      integral_map hprefix.aemeasurable hF.aestronglyMeasurable
+
+/-- A recursively truncated product only inspects deterministic means at the
+coordinates it has already accumulated. -/
+theorem dependentTruncatedProduct_congr_mean_prefix
+    {Omega : Type*} [MeasurableSpace Omega]
+    (alpha : ℝ) (mean mean' : ℕ → ℝ) (V : ℕ → Omega → ℝ)
+    (i : ℕ)
+    (hmean : ∀ j, 1 ≤ j → j ≤ i → mean j = mean' j) :
+    dependentTruncatedProduct alpha mean V i =
+      dependentTruncatedProduct alpha mean' V i := by
+  induction i with
+  | zero => rfl
+  | succ i ih =>
+      funext omega
+      rw [dependentTruncatedProduct_succ,
+        dependentTruncatedProduct_succ]
+      have ihMean : ∀ j, 1 ≤ j → j ≤ i → mean j = mean' j := by
+        intro j hj1 hji
+        exact hmean j hj1 (hji.trans (Nat.le_succ i))
+      rw [congrFun (ih ihMean) omega]
+      congr 2
+      unfold dependentPhaseMeanProduct
+      apply Finset.prod_congr rfl
+      intro k hk
+      exact hmean (k + 1) (by omega) (by
+        have := Finset.mem_range.mp hk
+        omega)
+
+/-- The final capstone's recursively truncated statistic factors through the
+finite prefix for any supplied deterministic truncated-mean function. -/
+theorem dependentTruncatedProduct_chronological_extension_factor_prefix
+    (q : VolumeParams) (I : VolumeInput q.n) (phase i : ℕ)
+    (hphase : phase ≤ figureOneDependentPhaseCount q)
+    (hi : i ≤ phase) (mean : ℕ → ℝ) :
+    dependentTruncatedProduct (figureOneDependentAlpha q) mean
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneScheduledReferenceCoordinateExtension q I)) i =
+      scheduledResetPrefixChronologicalTruncatedProduct q I phase mean i ∘
+        scheduledResetPrefixCoordinates q phase := by
+  induction i with
+  | zero => rfl
+  | succ i ih =>
+      funext trace
+      change dependentTruncatedProduct (figureOneDependentAlpha q) mean
+          (figureOneChronologicalTruncatedPhase q I
+            (figureOneScheduledReferenceCoordinateExtension q I))
+            (i + 1) trace =
+        dependentTruncatedProduct (figureOneDependentAlpha q) mean
+          (scheduledResetPrefixChronologicalTruncatedPhase q I phase)
+            (i + 1) (scheduledResetPrefixCoordinates q phase trace)
+      rw [dependentTruncatedProduct_succ, dependentTruncatedProduct_succ]
+      have hi' : i ≤ phase := by omega
+      have hcoordinate :=
+        figureOneChronologicalTruncatedPhase_extension_factor_prefix
+          q I phase (i + 1) hphase (by omega) hi
+      rw [congrFun (ih hi') trace, congrFun hcoordinate trace]
+      rfl
+
+/-- Exact preservation of the completed prefix transports every earlier
+final-capstone Lemma 7.17(c) fact, including the change from source-law to
+reference-law truncated means. -/
+theorem ApproxIndepFun.chronological_extension_of_resetPrefix_map_eq
+    (q : VolumeParams) (I : VolumeInput q.n) (phase i : ℕ)
+    (hphase : phase ≤ figureOneDependentPhaseCount q) (hi : i < phase)
+    (source reference : Measure (ScheduledBalancedCoolingTrace q.n))
+    (hlaw : reference.map (scheduledResetPrefixCoordinates q phase) =
+      source.map (scheduledResetPrefixCoordinates q phase))
+    {epsilon : ℝ}
+    (hind : ApproxIndepFun epsilon
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I source
+          (figureOneScheduledReferenceCoordinateExtension q I))
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneScheduledReferenceCoordinateExtension q I)) i)
+      (figureOneChronologicalTruncatedPhase q I
+        (figureOneScheduledReferenceCoordinateExtension q I) (i + 1))
+      source) :
+    ApproxIndepFun epsilon
+      (dependentTruncatedProduct (figureOneDependentAlpha q)
+        (figureOneChronologicalTruncatedMean q I reference
+          (figureOneScheduledReferenceCoordinateExtension q I))
+        (figureOneChronologicalTruncatedPhase q I
+          (figureOneScheduledReferenceCoordinateExtension q I)) i)
+      (figureOneChronologicalTruncatedPhase q I
+        (figureOneScheduledReferenceCoordinateExtension q I) (i + 1))
+      reference := by
+  let meanSource := figureOneChronologicalTruncatedMean q I source
+    (figureOneScheduledReferenceCoordinateExtension q I)
+  let meanReference := figureOneChronologicalTruncatedMean q I reference
+    (figureOneScheduledReferenceCoordinateExtension q I)
+  have hmean : ∀ j, 1 ≤ j → j ≤ i → meanSource j = meanReference j := by
+    intro j hj1 hji
+    exact (figureOneChronologicalTruncatedMean_extension_eq_of_prefix_map_eq
+      q I phase j hphase hj1 (hji.trans hi.le) source reference hlaw).symm
+  have hproductMean :
+      dependentTruncatedProduct (figureOneDependentAlpha q) meanSource
+          (figureOneChronologicalTruncatedPhase q I
+            (figureOneScheduledReferenceCoordinateExtension q I)) i =
+        dependentTruncatedProduct (figureOneDependentAlpha q) meanReference
+          (figureOneChronologicalTruncatedPhase q I
+            (figureOneScheduledReferenceCoordinateExtension q I)) i :=
+    dependentTruncatedProduct_congr_mean_prefix _ _ _ _ i hmean
+  have hsourceFactor :=
+    dependentTruncatedProduct_chronological_extension_factor_prefix
+      q I phase i hphase hi.le meanSource
+  have hreferenceFactor :=
+    dependentTruncatedProduct_chronological_extension_factor_prefix
+      q I phase i hphase hi.le meanReference
+  have hcoordinateFactor :=
+    figureOneChronologicalTruncatedPhase_extension_factor_prefix
+      q I phase (i + 1) hphase (by omega) (by omega)
+  rw [hsourceFactor, hcoordinateFactor] at hind
+  have htransport := ApproxIndepFun.of_shared_prefix_law source reference
+    (scheduledResetPrefixCoordinates q phase)
+    (scheduledResetPrefixCoordinates q phase)
+    (scheduledResetPrefixChronologicalTruncatedProduct
+      q I phase meanSource i)
+    (scheduledResetPrefixChronologicalTruncatedPhase q I phase (i + 1))
+    (measurable_scheduledResetPrefixCoordinates q phase)
+    (measurable_scheduledResetPrefixCoordinates q phase)
+    (measurable_scheduledResetPrefixChronologicalTruncatedProduct
+      q I phase meanSource i)
+    (measurable_scheduledResetPrefixChronologicalTruncatedPhase
+      q I phase (i + 1)) hlaw hind
+  rw [← hsourceFactor, hproductMean, ← hcoordinateFactor] at htransport
+  simpa only [meanReference] using htransport
+
 #print axioms map_scheduledResetPrefixCoordinates_resetAppend_eq
 #print axioms coordinate_moments_of_shared_prefix_law
 #print axioms ApproxIndepFun.of_shared_prefix_law
 #print axioms scheduledFigureOneTraceTruncatedPhase_factor_prefix
 #print axioms dependentTruncatedProduct_scheduledTrace_factor_prefix
 #print axioms ApproxIndepFun.scheduledTrace_of_resetPrefix_map_eq
+#print axioms figureOneChronologicalTruncatedPhase_extension_factor_prefix
+#print axioms
+  figureOneChronologicalTruncatedMean_extension_eq_of_prefix_map_eq
+#print axioms dependentTruncatedProduct_congr_mean_prefix
+#print axioms
+  dependentTruncatedProduct_chronological_extension_factor_prefix
+#print axioms
+  ApproxIndepFun.chronological_extension_of_resetPrefix_map_eq
 
 end
 
