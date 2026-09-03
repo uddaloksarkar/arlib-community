@@ -38,6 +38,23 @@ theorem sub_min_rpow_three_halves_le_cube_div_rpow
         rw [← Real.rpow_natCast_mul hx 2 (3 / 2 : ℝ)]
         norm_num [Real.rpow_natCast]
 
+/-- The real-power normalization behind the optimized `L³` tail cost. -/
+theorem cube_div_mul_rpow_three_halves_rpow_two_thirds
+    {A r : ℝ} (hA : 0 < A) (hr : 0 < r) :
+    (A ^ 3 / (A * r) ^ (3 / 2 : ℝ)) ^ (2 / 3 : ℝ) = A / r := by
+  rw [Real.div_rpow (pow_nonneg hA.le 3)
+    (Real.rpow_nonneg (mul_nonneg hA.le hr.le) _)]
+  rw [← Real.rpow_natCast A 3, ← Real.rpow_mul hA.le]
+  rw [← Real.rpow_mul (mul_nonneg hA.le hr.le)]
+  norm_num [Real.rpow_natCast]
+  field_simp [hA.ne']
+
+/-- Taking the one-third real power reverses cubing on a nonnegative real. -/
+theorem cube_rpow_one_third {A : ℝ} (hA : 0 ≤ A) :
+    (A ^ 3) ^ (1 / 3 : ℝ) = A := by
+  convert Real.pow_rpow_inv_natCast (n := 3) hA (by norm_num) using 1
+  norm_num
+
 set_option maxHeartbeats 1000000 in
 /-- One-sided covariance control obtained by truncating two nonnegative
 `L³` observables.  The two tail terms use Hölder with conjugate exponents
@@ -252,8 +269,109 @@ theorem ApproxIndepFun.integral_mul_le_mul_integral_add_thirdMoment_tails
       gcongr
     _ ≤ _ := by gcongr
 
+/-- Scale-normalized `L³` covariance bound.  If the two third moments are at
+most `A³` and `B³`, truncating at `A*r` and `B*r` costs
+`epsilon * A * B * r² + 2 * A * B / r`.  Taking
+`r = epsilon^(-1/3)` gives the expected `3 * epsilon^(1/3) * A * B` rate. -/
+theorem ApproxIndepFun.integral_mul_le_mul_integral_add_thirdMoment_scaled
+    {Omega : Type*} [MeasurableSpace Omega]
+    (mu : Measure Omega) [IsProbabilityMeasure mu]
+    {X Y : Omega → ℝ} (hX : Measurable X) (hY : Measurable Y)
+    (hX3 : MemLp X 3 mu) (hY3 : MemLp Y 3 mu)
+    {A B r epsilon : ℝ} (hA : 0 < A) (hB : 0 < B) (hr : 0 < r)
+    (hepsilon : 0 ≤ epsilon)
+    (hX0 : ∀ omega, 0 ≤ X omega) (hY0 : ∀ omega, 0 ≤ Y omega)
+    (hXcube : (∫ omega, X omega ^ 3 ∂mu) ≤ A ^ 3)
+    (hYcube : (∫ omega, Y omega ^ 3 ∂mu) ≤ B ^ 3)
+    (hind : ApproxIndepFun epsilon X Y mu) :
+    (∫ omega, X omega * Y omega ∂mu) ≤
+      (∫ omega, X omega ∂mu) * (∫ omega, Y omega ∂mu) +
+        epsilon * A * B * r ^ 2 + 2 * A * B / r := by
+  have hraw := hind.integral_mul_le_mul_integral_add_thirdMoment_tails
+    mu hX hY hX3 hY3 (mul_pos hA hr) (mul_pos hB hr) hepsilon hX0 hY0
+  have hMX0 : 0 ≤ ∫ omega, X omega ^ 3 ∂mu :=
+    integral_nonneg fun omega => pow_nonneg (hX0 omega) 3
+  have hMY0 : 0 ≤ ∫ omega, Y omega ^ 3 ∂mu :=
+    integral_nonneg fun omega => pow_nonneg (hY0 omega) 3
+  have hAr0 : 0 ≤ A * r := (mul_pos hA hr).le
+  have hBr0 : 0 ≤ B * r := (mul_pos hB hr).le
+  have hdenA0 : 0 ≤ (A * r) ^ (3 / 2 : ℝ) := Real.rpow_nonneg hAr0 _
+  have hdenB0 : 0 ≤ (B * r) ^ (3 / 2 : ℝ) := Real.rpow_nonneg hBr0 _
+  have hfracX :
+      (∫ omega, X omega ^ 3 ∂mu) / (A * r) ^ (3 / 2 : ℝ) ≤
+        A ^ 3 / (A * r) ^ (3 / 2 : ℝ) :=
+    div_le_div_of_nonneg_right hXcube hdenA0
+  have hfracY :
+      (∫ omega, Y omega ^ 3 ∂mu) / (B * r) ^ (3 / 2 : ℝ) ≤
+        B ^ 3 / (B * r) ^ (3 / 2 : ℝ) :=
+    div_le_div_of_nonneg_right hYcube hdenB0
+  have hfracX0 : 0 ≤
+      (∫ omega, X omega ^ 3 ∂mu) / (A * r) ^ (3 / 2 : ℝ) :=
+    div_nonneg hMX0 hdenA0
+  have hfracY0 : 0 ≤
+      (∫ omega, Y omega ^ 3 ∂mu) / (B * r) ^ (3 / 2 : ℝ) :=
+    div_nonneg hMY0 hdenB0
+  have htailRootX :
+      ((∫ omega, X omega ^ 3 ∂mu) / (A * r) ^ (3 / 2 : ℝ)) ^
+          (2 / 3 : ℝ) ≤ A / r := by
+    calc
+      _ ≤ (A ^ 3 / (A * r) ^ (3 / 2 : ℝ)) ^ (2 / 3 : ℝ) :=
+        Real.rpow_le_rpow hfracX0 hfracX (by norm_num)
+      _ = A / r := cube_div_mul_rpow_three_halves_rpow_two_thirds hA hr
+  have htailRootY :
+      ((∫ omega, Y omega ^ 3 ∂mu) / (B * r) ^ (3 / 2 : ℝ)) ^
+          (2 / 3 : ℝ) ≤ B / r := by
+    calc
+      _ ≤ (B ^ 3 / (B * r) ^ (3 / 2 : ℝ)) ^ (2 / 3 : ℝ) :=
+        Real.rpow_le_rpow hfracY0 hfracY (by norm_num)
+      _ = B / r := cube_div_mul_rpow_three_halves_rpow_two_thirds hB hr
+  have hcubeRootX :
+      (∫ omega, X omega ^ 3 ∂mu) ^ (1 / 3 : ℝ) ≤ A := by
+    calc
+      _ ≤ (A ^ 3) ^ (1 / 3 : ℝ) :=
+        Real.rpow_le_rpow hMX0 hXcube (by norm_num)
+      _ = A := cube_rpow_one_third hA.le
+  have hcubeRootY :
+      (∫ omega, Y omega ^ 3 ∂mu) ^ (1 / 3 : ℝ) ≤ B := by
+    calc
+      _ ≤ (B ^ 3) ^ (1 / 3 : ℝ) :=
+        Real.rpow_le_rpow hMY0 hYcube (by norm_num)
+      _ = B := cube_rpow_one_third hB.le
+  have htailX :
+      ((∫ omega, X omega ^ 3 ∂mu) / (A * r) ^ (3 / 2 : ℝ)) ^
+          (2 / 3 : ℝ) *
+        (∫ omega, Y omega ^ 3 ∂mu) ^ (1 / 3 : ℝ) ≤ A * B / r := by
+    calc
+      _ ≤ (A / r) * B := mul_le_mul htailRootX hcubeRootY
+        (Real.rpow_nonneg hMY0 _) (div_nonneg hA.le hr.le)
+      _ = A * B / r := by ring
+  have htailY :
+      (∫ omega, X omega ^ 3 ∂mu) ^ (1 / 3 : ℝ) *
+        ((∫ omega, Y omega ^ 3 ∂mu) / (B * r) ^ (3 / 2 : ℝ)) ^
+          (2 / 3 : ℝ) ≤ A * B / r := by
+    calc
+      _ ≤ A * (B / r) := mul_le_mul hcubeRootX htailRootY
+        (Real.rpow_nonneg hfracY0 _) hA.le
+      _ = A * B / r := by ring
+  calc
+    (∫ omega, X omega * Y omega ∂mu) ≤
+        (∫ omega, X omega ∂mu) * (∫ omega, Y omega ∂mu) +
+          epsilon * (A * r) * (B * r) +
+          ((∫ omega, X omega ^ 3 ∂mu) / (A * r) ^ (3 / 2 : ℝ)) ^
+              (2 / 3 : ℝ) *
+            (∫ omega, Y omega ^ 3 ∂mu) ^ (1 / 3 : ℝ) +
+          (∫ omega, X omega ^ 3 ∂mu) ^ (1 / 3 : ℝ) *
+            ((∫ omega, Y omega ^ 3 ∂mu) / (B * r) ^ (3 / 2 : ℝ)) ^
+              (2 / 3 : ℝ) := hraw
+    _ ≤ (∫ omega, X omega ∂mu) * (∫ omega, Y omega ∂mu) +
+          epsilon * (A * r) * (B * r) + A * B / r + A * B / r := by
+      gcongr
+    _ = _ := by ring
+
 #print axioms sub_min_rpow_three_halves_le_cube_div_rpow
 #print axioms
   ApproxIndepFun.integral_mul_le_mul_integral_add_thirdMoment_tails
+#print axioms
+  ApproxIndepFun.integral_mul_le_mul_integral_add_thirdMoment_scaled
 
 end ArlibCommunity.Algorithms.CV18
