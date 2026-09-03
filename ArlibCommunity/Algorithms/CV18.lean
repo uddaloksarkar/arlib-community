@@ -91,6 +91,12 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledChronological
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledChronologicalPreservation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledChronologicalResetStep
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalTraceReset
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianChronologicalReset
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGlobalOuterStepErrorSum
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGlobalResetReferenceConstruction
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianPrefixInvariantStep
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledForwardTraceEndpoint
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGlobalResetReferenceExists
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalResetDeviation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalResetJoint
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalTraceDeviation
@@ -107,15 +113,11 @@ accelerated Gaussian-cooling volume algorithm [CV18]. The implementation and
 all discharged analytic infrastructure are exposed here. Radial truncation,
 stationary sharp moments, proper-step cost at the advertised Figure-1 step,
 the executable lazy proper-step clock, speedy-Gaussian mixing, and amplification
-are unconditional. The current final scheduled assembly is
-`volumeTheorem_finalScheduled_of_baseFailure`; its sole remaining input is the
-uncapped executable base-accuracy bound. The counted-reference global-cap lane
-is unconditional. Equation-(6) reset-reference moment bounds for Gaussian and
-terminal phases, their event transfers (including the final terminal trace
-coordinate), the concrete Lemma 7.17(c) dependence bridge, finite executable
-moment-factor budget, phasewise raw-mean product assembly, and counted-reference
-cap theorem are exposed here. The remaining accuracy work is the single global
-history-preserving reference coupling and its mapped-product tail assembly.
+are unconditional.  The chronological history-preserving reset construction,
+equation-(6) moments, Lemma 7.17(c) dependence recurrence, terminal phase,
+mapped-product accuracy bound, query cap, and amplification are assembled in
+the premise-free theorem `volumeTheorem_finalScheduled`, the end-to-end
+formalization of CV18 Theorem 1.1 for the executable scheduled implementation.
 The older `volumeTheorem_of_postInitialMixing` remains available as a compact
 legacy interface.
 
