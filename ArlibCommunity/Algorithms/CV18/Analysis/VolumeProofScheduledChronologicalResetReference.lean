@@ -321,10 +321,223 @@ theorem exists_scheduledGaussianAcceptedPairTarget
   · rw [← hmeanChronological]
     exact htargetSecond
 
+/-- The exact-endpoint form used for the *first* outer reset.  Keeping this
+separate from `exists_scheduledGaussianAcceptedPairTarget` is essential: the
+public-to-equation-(6) reset is the only reset charged to the new-coordinate
+independence coefficient. -/
+theorem exists_scheduledGaussianExactPairTarget
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < terminalPhaseSteps q) :
+    ∃ target : Measure (ℝ × Option (AmbientSpace q.n)),
+      IsProbabilityMeasure target ∧
+      MeasureLeUpTo
+        ((figureOneScheduledGaussianPhaseTarget q I phase).map
+          scheduledResetPairOutput)
+        target
+        (scheduledResetReferenceError q
+          (figureOnePhaseSampleCount q (scheduleValue q phase) - 1)) ∧
+      target.map Prod.snd = scheduledRetainedExactSome q I phase ∧
+      MemLp Prod.fst 2 target ∧
+      (∫ result, result.1 ∂target) =
+        figureOneChronologicalRawMean q I (phase + 1) ∧
+      (∫ result, result.1 ^ 2 ∂target) ≤
+        (figureOneChronologicalMomentFactor q (phase + 1) +
+            figureOneExecutableMomentSlack q / 8) *
+          figureOneChronologicalRawMean q I (phase + 1) ^ 2 := by
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let mean :=
+    ∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+        (scheduleValue q (phase + 1)) x
+      ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))
+  let factor := if scheduleValue q phase ≤ 1 then
+    1 + 2 / (q.n : ℝ)
+  else
+    1 + scheduleValue q phase / terminalVariance q
+  have hcount : 0 < count := by
+    simpa [count] using
+      figureOnePhaseSampleCount_pos q (scheduleValue q phase)
+  have hcountMax : count ≤ figureOneDependentMaxSampleCount q := by
+    simpa [count] using
+      figureOnePhaseSampleCount_le_dependentMax q (scheduleValue q phase)
+  have hmeanPos : 0 < mean := by
+    rw [show mean =
+        gaussianIntegral (truncatedBody q I) (scheduleValue q (phase + 1)) /
+          gaussianIntegral (truncatedBody q I) (scheduleValue q phase) by
+      simpa [mean] using
+        gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
+    exact div_pos
+      (gaussianIntegral_pos q (truncatedVolumeInput q I)
+        (scheduleValue_pos q (phase + 1)))
+      (gaussianIntegral_pos q (truncatedVolumeInput q I)
+        (scheduleValue_pos q phase))
+  have hcoordinateSecond :
+      (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x ^ 2
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) ≤
+        factor * mean ^ 2 := by
+    apply (div_le_iff₀ (pow_pos hmeanPos 2)).mp
+    simpa [factor, mean] using
+      scheduleValue_gaussian_relativeSecondMoment_le_branchFactor
+        q I phase hphase
+  have hcoordinateThird :
+      (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x ^ 3
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) ≤
+        ((129 / 64 : ℝ) * mean) ^ 3 := by
+    simpa [mean] using
+      scheduleValue_gaussian_thirdMoment_le_rational_mean_cube q I phase
+  obtain ⟨joint, hjointProb, hjoint, hstate, hmem, hmean, hsecond⟩ :=
+    exists_figureOneScheduledGaussianResetJointTarget q I phase count
+      (by rfl) hcount hcountMax
+      (mul_pos (by norm_num) hmeanPos) hmeanPos.le le_rfl
+      hcoordinateSecond hcoordinateThird
+  let _ : IsProbabilityMeasure joint := hjointProb
+  have hbudget :=
+    scheduledGaussianResetReference_equationSix_budget_chronological
+      q I phase hphase
+  have hsecond' :
+      (∫ result, figureOneScheduledTraceLiveRawOutput result ^ 2
+          ∂joint) ≤
+        (figureOneChronologicalMomentFactor q (phase + 1) +
+            figureOneExecutableMomentSlack q / 8) * mean ^ 2 :=
+    hsecond.trans (by simpa [count, mean, factor] using hbudget)
+  let target := joint.map (scheduledResetPairOutput (n := q.n))
+  have houtput := measurable_scheduledResetPairOutput (n := q.n)
+  have htargetProb : IsProbabilityMeasure target :=
+    Measure.isProbabilityMeasure_map houtput.aemeasurable
+  have hstateTarget : target.map Prod.snd =
+      scheduledRetainedExactSome q I phase := by
+    calc
+      target.map Prod.snd = joint.map optionSnd := by
+        rw [Measure.map_map measurable_snd houtput]
+        rfl
+      _ = _ := hstate
+  have hmemTarget : MemLp Prod.fst 2 target := by
+    apply (memLp_map_measure_iff measurable_fst.aestronglyMeasurable
+      houtput.aemeasurable).2
+    convert hmem using 1 <;> rfl
+  have hmeanTarget : (∫ result, result.1 ∂target) = mean := by
+    rw [show target = joint.map scheduledResetPairOutput by rfl,
+      integral_map houtput.aemeasurable measurable_fst.aestronglyMeasurable]
+    exact hmean
+  have hsecondTarget : (∫ result, result.1 ^ 2 ∂target) ≤
+      (figureOneChronologicalMomentFactor q (phase + 1) +
+          figureOneExecutableMomentSlack q / 8) * mean ^ 2 := by
+    rw [show target = joint.map scheduledResetPairOutput by rfl,
+      integral_map houtput.aemeasurable
+        (measurable_fst.pow_const 2).aestronglyMeasurable]
+    exact hsecond'
+  have hphaseDependent : phase < figureOneDependentPhaseCount q := by
+    rw [figureOneDependentPhaseCount]
+    omega
+  have horder :
+      figureOneChronologicalPhaseOrder q ⟨phase, hphaseDependent⟩ =
+        if hs : scheduleValue q phase ≤ 1 then
+          FigureOneIdealPhase.fixed ⟨⟨phase, hphase⟩, hs⟩
+        else
+          FigureOneIdealPhase.accelerated ⟨⟨phase, hphase⟩, hs⟩ := by
+    simpa using figureOneChronologicalPhaseOrder_apply_transition q
+      (⟨phase, hphase⟩ : Fin (terminalPhaseSteps q))
+  have hmeanChronological : mean =
+      figureOneChronologicalRawMean q I (phase + 1) := by
+    rw [figureOneChronologicalRawMean,
+      figureOneChronologicalPhaseAt_succ q phase hphaseDependent, horder]
+    by_cases hs : scheduleValue q phase ≤ 1
+    · simp [hs, figureOneIdealPhaseMean, mean,
+        gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
+    · simp [hs, figureOneIdealPhaseMean, mean,
+        gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
+  refine ⟨target, htargetProb, ?_, hstateTarget, hmemTarget, ?_, ?_⟩
+  · simpa [target, count] using hjoint.map houtput
+  · exact hmeanTarget.trans hmeanChronological
+  · rw [← hmeanChronological]
+    exact hsecondTarget
+
+/-- The terminal uniform-ratio analogue.  No accepted-endpoint reset is
+needed after the last coordinate, so only the collector reset is charged. -/
+theorem exists_scheduledTerminalPairTarget
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    ∃ target : Measure (ℝ × Option (AmbientSpace q.n)),
+      IsProbabilityMeasure target ∧
+      MeasureLeUpTo
+        ((figureOneScheduledTerminalPhaseTarget q I).map
+          scheduledResetPairOutput)
+        target
+        (scheduledResetReferenceError q (figureOneSampleCount q - 1)) ∧
+      target.map Prod.snd =
+        scheduledRetainedExactSome q I (terminalPhaseSteps q) ∧
+      MemLp Prod.fst 2 target ∧
+      (∫ result, result.1 ∂target) =
+        figureOneChronologicalRawMean q I (terminalPhaseSteps q + 1) ∧
+      (∫ result, result.1 ^ 2 ∂target) ≤
+        (figureOneChronologicalMomentFactor q (terminalPhaseSteps q + 1) +
+            figureOneExecutableMomentSlack q / 8) *
+          figureOneChronologicalRawMean q I
+            (terminalPhaseSteps q + 1) ^ 2 := by
+  obtain ⟨joint, hjointProb, hjoint, hstate, hmem, hmean, hsecond⟩ :=
+    exists_terminalScheduledResetJointTarget q I
+  let _ : IsProbabilityMeasure joint := hjointProb
+  let target := joint.map (scheduledResetPairOutput (n := q.n))
+  have houtput := measurable_scheduledResetPairOutput (n := q.n)
+  have htargetProb : IsProbabilityMeasure target :=
+    Measure.isProbabilityMeasure_map houtput.aemeasurable
+  have hstateTarget : target.map Prod.snd =
+      scheduledRetainedExactSome q I (terminalPhaseSteps q) := by
+    calc
+      target.map Prod.snd = joint.map optionSnd := by
+        rw [Measure.map_map measurable_snd houtput]
+        rfl
+      _ = _ := hstate
+  have hmemTarget : MemLp Prod.fst 2 target := by
+    apply (memLp_map_measure_iff measurable_fst.aestronglyMeasurable
+      houtput.aemeasurable).2
+    convert hmem using 1 <;> rfl
+  have hmeanTarget : (∫ result, result.1 ∂target) =
+      figureOneIdealPhaseMean q I .terminal := by
+    rw [show target = joint.map scheduledResetPairOutput by rfl,
+      integral_map houtput.aemeasurable measurable_fst.aestronglyMeasurable]
+    exact hmean
+  have hsecondTarget : (∫ result, result.1 ^ 2 ∂target) ≤
+      (1 + (Real.exp (1 / 2) - 1) / (figureOneSampleCount q : ℝ) +
+          figureOneExecutableMomentSlack q / 8) *
+        (figureOneIdealPhaseMean q I .terminal) ^ 2 := by
+    rw [show target = joint.map scheduledResetPairOutput by rfl,
+      integral_map houtput.aemeasurable
+        (measurable_fst.pow_const 2).aestronglyMeasurable]
+    exact hsecond
+  have hphaseDependent : terminalPhaseSteps q <
+      figureOneDependentPhaseCount q := by
+    rw [figureOneDependentPhaseCount]
+    omega
+  have hterminal : figureOneChronologicalPhaseAt q
+      (terminalPhaseSteps q + 1) = .terminal := by
+    rw [figureOneChronologicalPhaseAt_succ q (terminalPhaseSteps q)
+      hphaseDependent]
+    exact figureOneChronologicalPhaseOrder_apply_terminal q
+  have hmeanChronological : figureOneChronologicalRawMean q I
+      (terminalPhaseSteps q + 1) =
+        figureOneIdealPhaseMean q I .terminal := by
+    rw [figureOneChronologicalRawMean, hterminal]
+  have hfactorChronological : figureOneChronologicalMomentFactor q
+      (terminalPhaseSteps q + 1) =
+        1 + (Real.exp (1 / 2) - 1) / (figureOneSampleCount q : ℝ) := by
+    rw [figureOneChronologicalMomentFactor, hterminal]
+    rfl
+  refine ⟨target, htargetProb, ?_, hstateTarget, hmemTarget, ?_, ?_⟩
+  · simpa [target] using hjoint.map houtput
+  · simpa [hmeanChronological] using hmeanTarget
+  · simpa [hmeanChronological, hfactorChronological, add_assoc] using
+      hsecondTarget
+
 #print axioms scheduledRetainedExactSome_tvLe_acceptedSome
 #print axioms exists_acceptedEndpointResetJoint
 #print axioms exists_acceptedEndpointResetJoint_of_joint
 #print axioms exists_scheduledGaussianAcceptedPairTarget
+#print axioms exists_scheduledGaussianExactPairTarget
+#print axioms exists_scheduledTerminalPairTarget
 
 end
 
