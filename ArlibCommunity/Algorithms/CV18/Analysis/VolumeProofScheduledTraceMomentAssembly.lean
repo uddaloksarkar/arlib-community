@@ -1343,6 +1343,39 @@ theorem figureOneFinalScheduledAbortBase_failure_le_of_sharp_trace_moments
   exact figureOnePostInitialDirectFailureBoundFor_of_sharp_trace_moments
     q I oracle hrounded hrawPos hsecond hind hrawApprox
 
+/-- Raw-mean positivity is intrinsic to the finite executable trace, so the
+actual aborting estimator only retains the paper's quantitative phase
+second moment, Lemma 7.17(c), and raw-product bias premises. -/
+theorem figureOneFinalScheduledAbortBase_failure_le_of_trace_quantitative_moments
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (hsecond : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        figureOneChronologicalMomentFactor q j *
+          scheduledFigureOneTraceRawMean q I j ^ 2)
+    (hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
+        (dependentTruncatedProduct (figureOneDependentAlpha q)
+          (scheduledFigureOneTraceTruncatedMean q I)
+          (scheduledFigureOneTraceTruncatedPhase q I) i)
+        (scheduledFigureOneTraceTruncatedPhase q I (i + 1))
+        (scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)))
+    (hrawApprox : RelativeApprox (q.eps / 64)
+      (∏ phase, figureOneIdealPhaseMean q I phase)
+      (dependentPhaseMeanProduct (scheduledFigureOneTraceRawMean q I)
+        (figureOneDependentPhaseCount q))) :
+    (figureOneFinalScheduledAbortBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  exact figureOneFinalScheduledAbortBase_failure_le_of_sharp_trace_moments
+    q I oracle hrounded
+      (fun j hj1 hjm => scheduledFigureOneTraceRawMean_pos q I j hj1 hjm)
+      hsecond hind hrawApprox
+
 #print axioms figureOneChronologicalMomentFactor_le_two
 #print axioms scheduledBalancedTransitionCollectLaw_ae_total_positive
 #print axioms gaussianRatioWeight_pos
@@ -1365,5 +1398,6 @@ theorem figureOneFinalScheduledAbortBase_failure_le_of_sharp_trace_moments
 #print axioms figureOnePostInitialDirectFailureBoundFor_of_sharp_trace_moments
 #print axioms figureOneFinalScheduledBalancedBase_failure_le_of_sharp_trace_moments
 #print axioms figureOneFinalScheduledAbortBase_failure_le_of_sharp_trace_moments
+#print axioms figureOneFinalScheduledAbortBase_failure_le_of_trace_quantitative_moments
 
 end ArlibCommunity.Algorithms.CV18
