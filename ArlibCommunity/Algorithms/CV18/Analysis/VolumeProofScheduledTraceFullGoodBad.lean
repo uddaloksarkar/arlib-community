@@ -2002,6 +2002,181 @@ theorem bind_figureOneScheduledScaledTerminalPhaseLaw_leUpTo_target_of_warmSixte
     simp [figureOneScheduledTerminalPhaseTarget, count, collect]
   congr 1
 
+theorem bind_scheduledBalancedTerminalTracePhaseOutputLaw_eq_live_dead
+    {T : Type*} [MeasurableSpace T]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (law : Measure (ScheduledBalancedCoolingTrace q.n))
+    (liveOutput : Option (ℝ × AmbientSpace q.n) → T)
+    (deadOutput : T) (hliveOutput : Measurable liveOutput) :
+    law.bind (scheduledBalancedTracePhaseOutputLaw
+        figureOneFinalScheduledBalancedParameters q I
+          (terminalPhaseSteps q) liveOutput deadOutput) =
+      (scheduledBalancedTraceLiveStateLaw law
+          (fun x => accuracyScaleFactor q • x)).bind
+        (fun current =>
+          (figureOneScheduledScaledTerminalPhaseLaw q I current).map liveOutput) +
+      (scheduledBalancedTraceDeadStateLaw law
+          (fun x => accuracyScaleFactor q • x)) Set.univ •
+        Measure.dirac deadOutput := by
+  let liveSet := scheduledBalancedTraceLiveSet q.n
+  let deadSet := scheduledBalancedTraceDeadSet q.n
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    accuracyScaleFactor q • x
+  let state : ScheduledBalancedCoolingTrace q.n → AmbientSpace q.n :=
+    scale ∘ scheduledBalancedTraceRetainedState
+  let outK := scheduledBalancedTracePhaseOutputLaw
+    figureOneFinalScheduledBalancedParameters q I (terminalPhaseSteps q)
+      liveOutput deadOutput
+  let K : AmbientSpace q.n → Measure T := fun current =>
+    (figureOneScheduledScaledTerminalPhaseLaw q I current).map liveOutput
+  have houtK := scheduledBalancedTracePhaseOutputLaw_measurable_and_probability
+    figureOneFinalScheduledBalancedParameters q I (terminalPhaseSteps q)
+      liveOutput deadOutput hliveOutput
+  have hrawK :=
+    figureOneScheduledScaledTerminalPhaseLaw_measurable_and_probability q I
+  have hK : Measurable K :=
+    (Measure.measurable_map _ hliveOutput).comp hrawK.1
+  have hstate : Measurable state := by
+    dsimp only [state, scale]
+    exact ((measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      accuracyScaleFactor q).smul measurable_id).comp
+        measurable_scheduledBalancedTraceRetainedState
+  have hsplit : law = law.restrict liveSet + law.restrict deadSet := by
+    rw [show deadSet = liveSetᶜ by
+      exact scheduledBalancedTraceDeadSet_eq_compl,
+      Measure.restrict_add_restrict_compl
+        measurableSet_scheduledBalancedTraceLiveSet]
+  have hlive : (law.restrict liveSet).bind outK =
+      ((law.restrict liveSet).map state).bind K := by
+    rw [map_bind_eq_bind_comp_state (law.restrict liveSet) hstate hK]
+    apply Measure.bind_congr_right
+    filter_upwards [ae_restrict_mem
+      (measurableSet_scheduledBalancedTraceLiveSet (n := q.n))]
+      with trace htrace
+    rcases trace with ⟨history, live⟩
+    cases live with
+    | false => simp [liveSet, scheduledBalancedTraceLiveSet] at htrace
+    | true =>
+        simp only [outK, scheduledBalancedTracePhaseOutputLaw, if_true,
+          K, state, scale, Function.comp_apply,
+          scheduledBalancedTraceRetainedState]
+        simp only [scheduledBalancedTracePhaseObservationLaw,
+          lt_self_iff_false, if_false,
+          scheduledBalancedCoolingUniformTransitionLaw,
+          figureOneScheduledScaledTerminalPhaseLaw]
+        simp only [if_true]
+  have hdead : (law.restrict deadSet).bind outK =
+      (law.restrict deadSet) Set.univ • Measure.dirac deadOutput := by
+    have heq : ∀ᵐ trace ∂(law.restrict deadSet),
+        outK trace = Measure.dirac deadOutput := by
+      filter_upwards [ae_restrict_mem
+        (measurableSet_scheduledBalancedTraceDeadSet (n := q.n))]
+        with trace htrace
+      rcases trace with ⟨history, live⟩
+      cases live with
+      | false =>
+          simp [outK, scheduledBalancedTracePhaseOutputLaw,
+            scheduledBalancedTracePhaseObservationLaw]
+      | true => simp [deadSet, scheduledBalancedTraceDeadSet] at htrace
+    rw [Measure.bind_congr_right heq, Measure.bind_const]
+  calc
+    law.bind outK =
+        (law.restrict liveSet + law.restrict deadSet).bind outK :=
+      congrArg (fun mu => mu.bind outK) hsplit
+    _ = (law.restrict liveSet).bind outK +
+        (law.restrict deadSet).bind outK :=
+      measure_bind_add_left _ _ houtK.1
+    _ = ((law.restrict liveSet).map state).bind K +
+        (law.restrict deadSet) Set.univ • Measure.dirac deadOutput := by
+      rw [hlive, hdead]
+    _ = _ := by
+      congr 2
+      rw [Measure.restrict_apply MeasurableSet.univ]
+      simp only [Set.univ_inter]
+      symm
+      exact scheduledBalancedTraceDeadStateLaw_apply_univ law scale
+        (by fun_prop)
+
+theorem bind_scheduledBalancedTerminalTracePhaseOutputLaw_leUpTo_of_live_good_bad
+    {T : Type*} [MeasurableSpace T]
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (law : Measure (ScheduledBalancedCoolingTrace q.n))
+    [IsProbabilityMeasure law]
+    (good bad : Measure (AmbientSpace q.n)) [IsFiniteMeasure bad]
+    {M eta : ENNReal} (hM : 1 ≤ M) (hMtop : M ≠ ⊤)
+    (hM16 : M ≤ ENNReal.ofReal (16 * speedyAdjacentWarmConstant q))
+    (hlive : scheduledBalancedTraceLiveStateLaw law
+      (fun x => accuracyScaleFactor q • x) ≤ good + bad)
+    (hgood : Arlib.IsWarm M good
+      (figureOneScheduledSpeedyPiAt q I (terminalPhaseSteps q)))
+    (herror : bad Set.univ +
+        scheduledBalancedTraceDeadStateLaw law
+          (fun x => accuracyScaleFactor q • x) Set.univ ≤ eta)
+    (liveOutput : Option (ℝ × AmbientSpace q.n) → T)
+    (deadOutput : T) (hliveOutput : Measurable liveOutput) :
+    MeasureLeUpTo
+      (law.bind (scheduledBalancedTracePhaseOutputLaw
+        figureOneFinalScheduledBalancedParameters q I
+          (terminalPhaseSteps q) liveOutput deadOutput))
+      ((figureOneScheduledTerminalPhaseTarget q I).map liveOutput)
+      (figureOneCorrectedTransitionBudget q + eta) := by
+  let rawK := figureOneScheduledScaledTerminalPhaseLaw q I
+  let K : AmbientSpace q.n → Measure T := fun current =>
+    (rawK current).map liveOutput
+  have hrawK :=
+    figureOneScheduledScaledTerminalPhaseLaw_measurable_and_probability q I
+  have hK : Measurable K :=
+    (Measure.measurable_map _ hliveOutput).comp hrawK.1
+  have hKprob : ∀ current, IsProbabilityMeasure (K current) := by
+    intro current
+    let _ := hrawK.2 current
+    exact Measure.isProbabilityMeasure_map hliveOutput.aemeasurable
+  let target := (figureOneScheduledTerminalPhaseTarget q I).map liveOutput
+  let _ : IsProbabilityMeasure target := by
+    let _ := figureOneScheduledTerminalPhaseTarget_isProbabilityMeasure q I
+    exact Measure.isProbabilityMeasure_map hliveOutput.aemeasurable
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    accuracyScaleFactor q • x
+  let live := scheduledBalancedTraceLiveStateLaw law scale
+  let dead := scheduledBalancedTraceDeadStateLaw law scale
+  let pi := figureOneScheduledSpeedyPiAt q I (terminalPhaseSteps q)
+  let _ : IsProbabilityMeasure pi :=
+    figureOneScheduledSpeedyPiAt_isProbabilityMeasure q I
+      (terminalPhaseSteps q)
+  have hscale : Measurable scale := by
+    dsimp only [scale]
+    fun_prop
+  have hmass : live Set.univ + dead Set.univ = 1 := by
+    rw [← Measure.add_apply,
+      ← scheduledBalancedTraceStateLaw_eq_live_add_dead law scale hscale]
+    unfold scheduledBalancedTraceStateLaw
+    rw [Measure.map_apply
+      (hscale.comp measurable_scheduledBalancedTraceRetainedState)
+      MeasurableSet.univ, Set.preimage_univ, measure_univ]
+  let _ : IsFiniteMeasure live :=
+    ⟨(le_add_right (le_refl (live Set.univ)) |>.trans_eq hmass).trans_lt
+      ENNReal.one_lt_top⟩
+  let _ : IsFiniteMeasure dead :=
+    ⟨(le_add_left (le_refl (dead Set.univ)) |>.trans_eq hmass).trans_lt
+      ENNReal.one_lt_top⟩
+  have hmlu := measureLeUpTo_live_dead_bind_of_good_bad
+    live dead good bad pi hM hMtop hmass
+    (by simpa [live, scale] using hlive)
+    (by simpa [pi] using hgood)
+    (by simpa [dead, scale] using herror)
+    K hK hKprob (Measure.dirac deadOutput) target
+    (fun nu hnu hwarm => by
+      let _ : IsProbabilityMeasure nu := hnu
+      have hraw :=
+        bind_figureOneScheduledScaledTerminalPhaseLaw_leUpTo_target_of_warmSixteen
+          q I nu (hwarm.mono hM16)
+      have hmapped := hraw.map hliveOutput
+      rw [map_bind_eq_bind_map_of_measurable nu hrawK.1 hliveOutput] at hmapped
+      simpa [K, rawK, target] using hmapped)
+  rw [bind_scheduledBalancedTerminalTracePhaseOutputLaw_eq_live_dead
+    q I law liveOutput deadOutput hliveOutput]
+  simpa [live, dead, K, rawK, target, scale] using hmlu
+
 #print axioms figureOneScheduledTrace_deadState_mass_le_retainedError
 #print axioms exists_figureOneScheduledTraceScaledState_good_bad
 
