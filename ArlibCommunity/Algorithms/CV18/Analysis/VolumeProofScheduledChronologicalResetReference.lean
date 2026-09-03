@@ -129,8 +129,83 @@ theorem exists_acceptedEndpointResetJoint
         (measurable_scheduledResetPairOutput (n := q.n))]
       rfl
 
+/-- Compose a phase's equation-(6) reset with the endpoint reset.  The
+result is expressed on the pair carrier consumed by the chronological trace
+append operation. -/
+theorem exists_acceptedEndpointResetJoint_of_joint
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (source joint : Measure (Option (ℝ × AmbientSpace q.n)))
+    [IsProbabilityMeasure source] [IsProbabilityMeasure joint]
+    {resetError : ENNReal}
+    (hjoint : MeasureLeUpTo source joint resetError)
+    (hstate : joint.map optionSnd = scheduledRetainedExactSome q I phase)
+    (hmem : MemLp figureOneScheduledTraceLiveRawOutput 2 joint)
+    {mean secondBound : ℝ}
+    (hmean : (∫ result, figureOneScheduledTraceLiveRawOutput result
+        ∂joint) = mean)
+    (hsecond : (∫ result,
+        figureOneScheduledTraceLiveRawOutput result ^ 2 ∂joint) ≤
+      secondBound) :
+    ∃ target : Measure (ℝ × Option (AmbientSpace q.n)),
+      IsProbabilityMeasure target ∧
+      MeasureLeUpTo (source.map scheduledResetPairOutput) target
+        (resetError + scheduledBalancedStationaryTargetError q) ∧
+      target.map Prod.snd =
+        (figureOneScheduledAcceptedTargetAt q I phase).map some ∧
+      MemLp Prod.fst 2 target ∧
+      (∫ result, result.1 ∂target) = mean ∧
+      (∫ result, result.1 ^ 2 ∂target) ≤ secondBound := by
+  obtain ⟨target, htargetProb, hendpoint, hscore, htargetState⟩ :=
+    exists_acceptedEndpointResetJoint q I phase joint hstate
+  let _ : IsProbabilityMeasure target := htargetProb
+  have hsourcePair := hjoint.map
+    (measurable_scheduledResetPairOutput (n := q.n))
+  have hcomparison := hsourcePair.trans hendpoint
+  have hmemId : MemLp id 2
+      (joint.map figureOneScheduledTraceLiveRawOutput) := by
+    apply (memLp_map_measure_iff measurable_id.aestronglyMeasurable
+      measurable_figureOneScheduledTraceLiveRawOutput.aemeasurable).2
+    convert hmem using 1 <;> rfl
+  rw [← hscore] at hmemId
+  have hmemFst : MemLp Prod.fst 2 target := by
+    exact (memLp_map_measure_iff measurable_id.aestronglyMeasurable
+      measurable_fst.aemeasurable).1
+        (by convert hmemId using 1 <;> rfl)
+  have hmeanTarget : (∫ result, result.1 ∂target) = mean := by
+    calc
+      (∫ result, result.1 ∂target) =
+          ∫ value, value ∂(target.map Prod.fst) := by
+        exact (integral_map measurable_fst.aemeasurable
+          measurable_id.aestronglyMeasurable).symm
+      _ = ∫ value, value
+          ∂(joint.map figureOneScheduledTraceLiveRawOutput) := by rw [hscore]
+      _ = ∫ result, figureOneScheduledTraceLiveRawOutput result
+          ∂joint := by
+        exact integral_map
+          measurable_figureOneScheduledTraceLiveRawOutput.aemeasurable
+          measurable_id.aestronglyMeasurable
+      _ = mean := hmean
+  have hsecondTarget : (∫ result, result.1 ^ 2 ∂target) ≤
+      secondBound := by
+    calc
+      (∫ result, result.1 ^ 2 ∂target) =
+          ∫ value, value ^ 2 ∂(target.map Prod.fst) := by
+        exact (integral_map measurable_fst.aemeasurable
+          (measurable_id.pow_const 2).aestronglyMeasurable).symm
+      _ = ∫ value, value ^ 2
+          ∂(joint.map figureOneScheduledTraceLiveRawOutput) := by rw [hscore]
+      _ = ∫ result, figureOneScheduledTraceLiveRawOutput result ^ 2
+          ∂joint := by
+        exact integral_map
+          measurable_figureOneScheduledTraceLiveRawOutput.aemeasurable
+          (measurable_id.pow_const 2).aestronglyMeasurable
+      _ ≤ secondBound := hsecond
+  exact ⟨target, htargetProb, hcomparison, htargetState, hmemFst,
+    hmeanTarget, hsecondTarget⟩
+
 #print axioms scheduledRetainedExactSome_tvLe_acceptedSome
 #print axioms exists_acceptedEndpointResetJoint
+#print axioms exists_acceptedEndpointResetJoint_of_joint
 
 end
 
