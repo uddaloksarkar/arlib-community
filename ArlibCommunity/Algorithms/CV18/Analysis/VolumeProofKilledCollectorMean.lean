@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledCollectorEndpoint
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofBoundedObservableAETransfer
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledAcceptedMean
 
 /-!
 # Marginal means of a killed retained collector
@@ -698,6 +699,46 @@ theorem integral_retainedLiveTotal_loss_le
       _ = C * mu.real {state | state.2 = none} := by
         rw [mul_comm]
 
+/-! ## Scheduled Gaussian endpoint marginals -/
+
+/-- Starting the retained within-phase chain from the exact truncated
+Gaussian law, every finite endpoint is close to the scheduled accepted
+target.  This is the marginal (rather than joint-history) replacement used
+in the first-moment argument. -/
+theorem iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_leUpTo
+    (q : VolumeParams) (I : VolumeInput q.n) (phase samples : ℕ) :
+    MeasureLeUpTo
+      (iteratedKernelLaw
+        (fun _ => figureOneFinalScheduledRetainedOptionKernel q I
+          (scheduleValue q phase))
+        ((truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map some)
+        samples)
+      ((figureOneScheduledAcceptedTargetAt q I phase).map some)
+      (scheduledBalancedStationaryTargetError q +
+        samples • figureOneCorrectedTransitionBudget q) := by
+  let exact : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I (scheduleValue q phase)
+      (scheduleValue_pos q phase)
+  let target : Measure (AmbientSpace q.n) :=
+    figureOneScheduledAcceptedTargetAt q I phase
+  let _ : IsProbabilityMeasure exact := inferInstance
+  let _ : IsProbabilityMeasure target :=
+    figureOneScheduledAcceptedTargetAt_isProbabilityMeasure q I phase
+  have htv : Arlib.TVLe target exact
+      (scheduledBalancedStationaryTargetError q) := by
+    simpa [target, exact, figureOneScheduledAcceptedTargetAt,
+      figureOneScheduledSpeedyPiAt] using
+        scheduledBalancedAccuracyGaussianAcceptedTargetLaw_tv
+          q I (scheduleValue_pos q phase)
+  have hinitial : MeasureLeUpTo (exact.map some) (target.map some)
+      (scheduledBalancedStationaryTargetError q) :=
+    (MeasureLeUpTo.of_tvLe htv.symm).map measurable_some
+  simpa [exact, target, figureOneScheduledAcceptedTargetAt,
+    figureOneScheduledSpeedyPiAt] using
+    (iterated_figureOneFinalScheduledRetainedOptionKernel_leUpTo
+      q I (scheduleValue_pos q phase) (exact.map some) hinitial samples)
+
 #print axioms retainedSumKernel_measurable_and_probability
 #print axioms map_iterated_retainedSumKernel_state
 #print axioms iterated_retainedSumKernel_ae_total_le
@@ -705,5 +746,7 @@ theorem integral_retainedLiveTotal_loss_le
 #print axioms integral_iterated_retainedSumKernel_total_eq_sum_marginals
 #print axioms scheduledBalancedTransitionCollectLaw_eq_map_retainedSumKernel
 #print axioms integral_retainedLiveTotal_loss_le
+#print axioms
+  iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_leUpTo
 
 end ArlibCommunity.Algorithms.CV18
