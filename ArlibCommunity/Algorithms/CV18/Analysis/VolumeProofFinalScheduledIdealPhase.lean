@@ -1061,6 +1061,37 @@ theorem exists_figureOneFinalScheduledRetainedComplete_countedReference
     exact add_le_add hgaussianCost
       (figureOneFinalScheduledTerminalIdealExpectedCost_le q I oracle)
 
+/-- The explicit cost envelope carried by the retained chronological
+reference is the warm-shadow work already bounded by the scheduled rate. -/
+theorem figureOneFinalScheduledRetainedCompleteCostEnvelope_le
+    (q : VolumeParams) :
+    1 + ∑ phase ∈ Finset.range (terminalPhaseSteps q),
+          ((384 * (figureOnePhaseSampleCount q (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.retryLimit q
+              (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.properStride q
+              (scheduleValue q phase)) : ℕ) : ENNReal) +
+        ((384 * (figureOneSampleCount q *
+          figureOneFinalScheduledBalancedParameters.retryLimit q
+            (terminalVariance q) *
+          figureOneFinalScheduledBalancedParameters.properStride q
+            (terminalVariance q)) : ℕ) : ENNReal) ≤
+      ENNReal.ofReal ((9 * 10 ^ 29) *
+        volumeScheduledBaseComplexityRate q) := by
+  calc
+    _ = (1 : ENNReal) +
+        ((384 * (figureOneSafeRetryCount q *
+          figureOneScheduledProperWork q) : ℕ) : ENNReal) := by
+      simp only [figureOneFinalScheduledBalancedParameters_retryLimit,
+        figureOneScheduledProperWork, Nat.cast_add, Nat.cast_mul,
+        figureOneScheduledBalancedParameters_properStride,
+        figureOneFinalScheduledBalancedParameters_properStride]
+      push_cast
+      simp only [Finset.mul_sum, mul_add]
+      ring_nf
+      ac_rfl
+    _ ≤ _ := one_add_figureOneWarmShadowScheduledWork_le q
+
 /-- Forgetting the numerical volume output, the retained chronological
 interpreter and the actual aborting Figure-1 base program have exactly the
 same complete query-count distribution. -/
@@ -1180,6 +1211,7 @@ theorem figureOneFinalScheduledRetainedCompleteProgram_map_snd_eq_abortBase
 #print axioms figureOneFinalScheduledTerminalIdealExpectedCost_le
 #print axioms
   exists_figureOneFinalScheduledRetainedComplete_countedReference
+#print axioms figureOneFinalScheduledRetainedCompleteCostEnvelope_le
 #print axioms
   figureOneFinalScheduledRetainedCompleteProgram_map_snd_eq_abortBase
 
