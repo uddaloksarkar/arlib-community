@@ -380,6 +380,204 @@ theorem figureOneScheduledScaledGaussianPhaseLaw_measurable_and_probability
             (scheduleValue q phase)) count 0 current) := hcollect.2 0 current
     exact Measure.isProbabilityMeasure_map havg.aemeasurable
 
+/-- Common ideal output law for a complete Gaussian phase: its first point
+is exactly stationary and all remaining scheduled collector steps are common
+postprocessing. -/
+noncomputable def figureOneScheduledGaussianPhaseTarget
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ) :
+    Measure (Option (ℝ × AmbientSpace q.n)) :=
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let first := (truncatedGaussianProbability q I (scheduleValue q phase)
+    (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map some
+  let tail : Option (AmbientSpace q.n) →
+      Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+    match result with
+    | none => Measure.dirac none
+    | some point =>
+        scheduledBalancedTransitionCollectLaw q I (scheduleValue q phase)
+          (gaussianRatioWeight (scheduleValue q phase)
+            (scheduleValue q (phase + 1)))
+          (figureOneFinalScheduledBalancedParameters.proposalCap q
+            (scheduleValue q phase))
+          (figureOneFinalScheduledBalancedParameters.properStride q
+            (scheduleValue q phase))
+          (figureOneFinalScheduledBalancedParameters.retryLimit q
+            (scheduleValue q phase))
+          (count - 1) (gaussianRatioWeight (scheduleValue q phase)
+            (scheduleValue q (phase + 1)) point)
+          (accuracyScaleFactor q • point)
+  (first.bind tail).map (balancedCoolingAverage count)
+
+theorem figureOneScheduledGaussianPhaseTarget_isProbabilityMeasure
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ) :
+    IsProbabilityMeasure
+      (figureOneScheduledGaussianPhaseTarget q I phase) := by
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let first := (truncatedGaussianProbability q I (scheduleValue q phase)
+    (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map some
+  let tail : Option (AmbientSpace q.n) →
+      Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+    match result with
+    | none => Measure.dirac none
+    | some point =>
+        scheduledBalancedTransitionCollectLaw q I (scheduleValue q phase)
+          (gaussianRatioWeight (scheduleValue q phase)
+            (scheduleValue q (phase + 1)))
+          (figureOneFinalScheduledBalancedParameters.proposalCap q
+            (scheduleValue q phase))
+          (figureOneFinalScheduledBalancedParameters.properStride q
+            (scheduleValue q phase))
+          (figureOneFinalScheduledBalancedParameters.retryLimit q
+            (scheduleValue q phase))
+          (count - 1) (gaussianRatioWeight (scheduleValue q phase)
+            (scheduleValue q (phase + 1)) point)
+          (accuracyScaleFactor q • point)
+  have htailCollect :=
+    scheduledBalancedTransitionCollectLaw_measurable_and_probability
+      q I (scheduleValue_pos q phase)
+      (measurable_gaussianRatioWeight (scheduleValue q phase)
+        (scheduleValue q (phase + 1)))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase)) (count - 1)
+  have htail : Measurable tail := by
+    have hsome : Measurable fun point : AmbientSpace q.n =>
+        scheduledBalancedTransitionCollectLaw q I (scheduleValue q phase)
+          (gaussianRatioWeight (scheduleValue q phase)
+            (scheduleValue q (phase + 1)))
+          (figureOneFinalScheduledBalancedParameters.proposalCap q
+            (scheduleValue q phase))
+          (figureOneFinalScheduledBalancedParameters.properStride q
+            (scheduleValue q phase))
+          (figureOneFinalScheduledBalancedParameters.retryLimit q
+            (scheduleValue q phase))
+          (count - 1) (gaussianRatioWeight (scheduleValue q phase)
+            (scheduleValue q (phase + 1)) point)
+          (accuracyScaleFactor q • point) := by
+      exact htailCollect.1.comp <|
+        (measurable_gaussianRatioWeight _ _).prodMk
+          ((measurable_const : Measurable fun _ : AmbientSpace q.n =>
+            accuracyScaleFactor q).smul measurable_id)
+    convert Measurable.optionElim
+      (Measure.dirac (none : Option (ℝ × AmbientSpace q.n))) hsome using 1
+    funext result
+    cases result <;> rfl
+  have htailProb : ∀ result, IsProbabilityMeasure (tail result) := by
+    intro result
+    cases result with
+    | none => infer_instance
+    | some point => exact htailCollect.2 _ _
+  let _ : IsProbabilityMeasure first :=
+    Measure.isProbabilityMeasure_map measurable_some.aemeasurable
+  let _ : IsProbabilityMeasure (first.bind tail) :=
+    isProbabilityMeasure_bind htail.aemeasurable (ae_of_all _ htailProb)
+  unfold figureOneScheduledGaussianPhaseTarget
+  exact Measure.isProbabilityMeasure_map
+    (measurable_balancedCoolingAverage count).aemeasurable
+
+/-- A warm speedy start is replaced only at the first transition of the
+complete phase; the collector tail and average are common postprocessing. -/
+theorem bind_figureOneScheduledScaledGaussianPhaseLaw_leUpTo_target_of_warmSixteen
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (mu : Measure (AmbientSpace q.n)) [IsProbabilityMeasure mu]
+    (hwarm : Arlib.IsWarm
+      (ENNReal.ofReal (16 * speedyAdjacentWarmConstant q)) mu
+      (figureOneScheduledSpeedyPiAt q I phase)) :
+    MeasureLeUpTo
+      (mu.bind (figureOneScheduledScaledGaussianPhaseLaw q I phase))
+      (figureOneScheduledGaussianPhaseTarget q I phase)
+      (figureOneCorrectedTransitionBudget q) := by
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let collect := fun current =>
+    scheduledBalancedTransitionCollectLaw q I (scheduleValue q phase)
+      (gaussianRatioWeight (scheduleValue q phase)
+        (scheduleValue q (phase + 1)))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase)) count 0 current
+  have hcollect :=
+    scheduledBalancedTransitionCollectLaw_measurable_and_probability
+      q I (scheduleValue_pos q phase)
+      (measurable_gaussianRatioWeight (scheduleValue q phase)
+        (scheduleValue q (phase + 1)))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase)) count
+  have hcollectCurrent : Measurable collect :=
+    hcollect.1.comp (measurable_const.prodMk measurable_id)
+  let transition := scheduledBalancedAccuracyTransitionLawAux q I
+    (scheduleValue q phase)
+    (figureOneFinalScheduledBalancedParameters.proposalCap q
+      (scheduleValue q phase))
+    (figureOneFinalScheduledBalancedParameters.properStride q
+      (scheduleValue q phase))
+    (figureOneFinalScheduledBalancedParameters.retryLimit q
+      (scheduleValue q phase))
+  have htransition :=
+    scheduledBalancedAccuracyTransitionLawAux_measurable_and_probability
+      q I (scheduleValue_pos q phase)
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase))
+  let _ : IsProbabilityMeasure (mu.bind transition) :=
+    isProbabilityMeasure_bind htransition.1.aemeasurable
+      (ae_of_all _ htransition.2)
+  let _ : IsProbabilityMeasure
+      ((truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map some) :=
+    Measure.isProbabilityMeasure_map measurable_some.aemeasurable
+  have hfirst : MeasureLeUpTo
+      (mu.bind transition)
+      ((truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map some)
+      (figureOneCorrectedTransitionBudget q) := by
+    apply MeasureLeUpTo.of_tvLe
+    simpa [transition, figureOneScheduledSpeedyPiAt] using
+      bind_figureOneFinalScheduledBalancedTransition_tvLe_of_warmSixteen
+        q I (scheduleValue_pos q phase) mu hwarm
+  have hcomplete :=
+    MeasureLeUpTo.bind_scheduledBalancedTransitionCollectLaw_of_first
+      q I (scheduleValue_pos q phase)
+      (measurable_gaussianRatioWeight (scheduleValue q phase)
+        (scheduleValue q (phase + 1)))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase)) (count - 1) mu _ hfirst
+  have hcount : 0 < count := by
+    dsimp only [count]
+    unfold figureOnePhaseSampleCount
+    split_ifs
+    · exact figureOneFixedSampleCount_pos q
+    · exact figureOneSampleCount_pos q
+  rw [Nat.sub_add_cancel hcount] at hcomplete
+  have hmapped := hcomplete.map
+    (measurable_balancedCoolingAverage (n := q.n) count)
+  rw [map_bind_eq_bind_map_of_measurable mu hcollectCurrent
+    (measurable_balancedCoolingAverage (n := q.n) count)] at hmapped
+  change MeasureLeUpTo
+    (mu.bind fun current => (collect current).map
+      (balancedCoolingAverage count))
+    (figureOneScheduledGaussianPhaseTarget q I phase)
+    (figureOneCorrectedTransitionBudget q)
+  convert hmapped using 1 <;>
+    simp [figureOneScheduledGaussianPhaseTarget, count, collect]
+  congr 1
+
 /-- Splitting a trace law into live and dead restrictions identifies its
 next Gaussian observation law exactly.  Live states run the scaled complete
 phase kernel; dead states emit `none` and consume no randomness. -/
