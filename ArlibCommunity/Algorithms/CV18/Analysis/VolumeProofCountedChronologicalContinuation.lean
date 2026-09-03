@@ -120,9 +120,43 @@ theorem MembershipOracleProgram.countedContinuation_step
       oracle rho program hprogramRun hprogram, hmarginal]
     gcongr
 
+/-- A measurable query-free output map preserves the full counted execution
+law up to applying the same map to the result coordinate. -/
+theorem MembershipOracleProgram.run_bind_pure_eq_map
+    {n : ℕ} {A B : Type} [MeasurableSpace A] [MeasurableSpace B]
+    (oracle : AmbientSpace n → Bool)
+    (program : MembershipOracleProgram n A)
+    (f : A → B) (hf : Measurable f)
+    (hprogram : program.CountedStronglyMeasurable oracle) :
+    (program.bind fun result => .pure (f result)).run oracle =
+      (program.run oracle).map fun outcome => (f outcome.1, outcome.2) := by
+  let next : A → MembershipOracleProgram n B := fun result => .pure (f result)
+  have hnext : ∀ result, (next result).CountedStronglyMeasurable oracle := by
+    intro result
+    trivial
+  have hnextRun : Measurable fun result => (next result).run oracle := by
+    simp only [next, MembershipOracleProgram.run]
+    exact Measure.measurable_dirac.comp (hf.prodMk measurable_const)
+  rw [MembershipOracleProgram.run_bind_counted oracle program next
+    hprogram hnext hnextRun]
+  unfold countedContinuation next
+  simp only [MembershipOracleProgram.run]
+  have hkernel : (fun first : A × ℕ =>
+      (Measure.dirac (f first.1, 0)).map fun second : B × ℕ =>
+        (second.1, first.2 + second.2)) =
+      fun first => Measure.dirac (f first.1, first.2) := by
+    funext first
+    rw [Measure.map_dirac']
+    · simp
+    · fun_prop
+  rw [hkernel]
+  rw [Measure.bind_dirac_eq_map]
+  exact hf.comp measurable_fst |>.prodMk measurable_snd
+
 #print axioms MembershipOracleProgram.countedContinuation_fst
 #print axioms MembershipOracleProgram.fst_bind_countedContinuation
 #print axioms MembershipOracleProgram.countedQueryCost_bind_countedContinuation
 #print axioms MembershipOracleProgram.countedContinuation_step
+#print axioms MembershipOracleProgram.run_bind_pure_eq_map
 
 end ArlibCommunity.Algorithms.CV18
