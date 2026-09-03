@@ -14,6 +14,51 @@ open MeasureTheory ProbabilityTheory
 
 namespace ArlibCommunity.Algorithms.CV18
 
+theorem figureOneExecutableMomentSlack_le_one (q : VolumeParams) :
+    figureOneExecutableMomentSlack q ≤ 1 := by
+  have hm : (1 : ℝ) ≤ figureOneDependentPhaseCount q := by
+    exact_mod_cast figureOneDependentPhaseCount_pos q
+  have he2 : q.eps ^ 2 ≤ 1 := by nlinarith [q.heps.1, q.heps.2]
+  unfold figureOneExecutableMomentSlack
+  apply (div_le_one (by positivity :
+    (0 : ℝ) < 4096 * figureOneDependentPhaseCount q)).2
+  calc
+    q.eps ^ 2 ≤ 1 := he2
+    _ ≤ 4096 * (figureOneDependentPhaseCount q : ℝ) := by nlinarith
+
+/-- Reserving one eighth of the executable slack for the mean perturbation
+and one eighth for the second-moment perturbation still fits the enlarged
+phase factor. -/
+theorem figureOneExecutableMomentFactor_perturbation_budget
+    (q : VolumeParams) (j : ℕ) :
+    figureOneChronologicalMomentFactor q j +
+        figureOneExecutableMomentSlack q / 8 ≤
+      figureOneChronologicalMomentFactor q j *
+        (1 + figureOneExecutableMomentSlack q) *
+          (1 - figureOneExecutableMomentSlack q / 8) ^ 2 := by
+  let f := figureOneChronologicalMomentFactor q j
+  let s := figureOneExecutableMomentSlack q
+  have hf : 1 ≤ f := figureOneChronologicalMomentFactor_one_le q j
+  have hs0 : 0 ≤ s := figureOneExecutableMomentSlack_nonneg q
+  have hs1 : s ≤ 1 := figureOneExecutableMomentSlack_le_one q
+  have hs2 : s ^ 2 ≤ s := by nlinarith [sq_nonneg s]
+  have hs3 : 0 ≤ s ^ 3 := pow_nonneg hs0 3
+  have hgain : s / 8 ≤
+      (1 + s) * (1 - s / 8) ^ 2 - 1 := by
+    nlinarith
+  have hscale : s / 8 ≤ f *
+      ((1 + s) * (1 - s / 8) ^ 2 - 1) := by
+    have hgain0 : 0 ≤
+        (1 + s) * (1 - s / 8) ^ 2 - 1 :=
+      (div_nonneg hs0 (by norm_num)).trans hgain
+    calc
+      s / 8 ≤ (1 + s) * (1 - s / 8) ^ 2 - 1 := hgain
+      _ ≤ f * ((1 + s) * (1 - s / 8) ^ 2 - 1) := by
+        simpa only [one_mul] using
+          mul_le_mul_of_nonneg_right hf hgain0
+  dsimp only [f, s] at hscale ⊢
+  nlinarith
+
 /-- A sufficiently small scalar-law perturbation of the ideal chronological
 phase preserves its paper factor, enlarged only by the executable moment
 slack. -/
@@ -133,7 +178,54 @@ theorem scheduledFigureOneTrace_second_le_executableMomentFactor_of_mapped_tv
   rw [hmeanMap, hsecondMap] at htransport
   simpa only [mu, figureOneExecutableMomentFactor] using htransport
 
+/-- Concrete one-eighth-slack form of the sharp trace moment transfer. -/
+theorem scheduledFigureOneTrace_second_le_executableMomentFactor_of_mapped_tv_eighth
+    (q : VolumeParams) (I : VolumeInput q.n) (j : ℕ)
+    {epsilon : ENNReal} (hepsilonTop : epsilon ≠ ⊤)
+    {B : ℝ} (hB : 0 < B)
+    (hscalar : Arlib.TVLe
+      ((scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)).map
+          (scheduledBalancedTracePhaseVariable q j))
+      ((figureOneIdealPhaseLaw q I (figureOneChronologicalPhaseAt q j)).map
+        (figureOneIdealPhaseEstimator q
+          (figureOneChronologicalPhaseAt q j))) epsilon)
+    (hWB : ∀ᵐ trace ∂scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q),
+      scheduledBalancedTracePhaseVariable q j trace ≤ B)
+    (hidealB : ∀ᵐ samples
+        ∂figureOneIdealPhaseLaw q I (figureOneChronologicalPhaseAt q j),
+      figureOneIdealPhaseEstimator q (figureOneChronologicalPhaseAt q j)
+        samples ≤ B)
+    (hmeanError : B * epsilon.toReal ≤
+      figureOneExecutableMomentSlack q / 8 *
+        figureOneIdealPhaseMean q I
+          (figureOneChronologicalPhaseAt q j))
+    (hsecondError : B ^ 2 * epsilon.toReal ≤
+      figureOneExecutableMomentSlack q / 8 *
+        figureOneIdealPhaseMean q I
+          (figureOneChronologicalPhaseAt q j) ^ 2) :
+    (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+      ∂scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q)) ≤
+      figureOneExecutableMomentFactor q j *
+        scheduledFigureOneTraceRawMean q I j ^ 2 := by
+  apply scheduledFigureOneTrace_second_le_executableMomentFactor_of_mapped_tv
+    q I j hepsilonTop hB hscalar hWB hidealB
+    (eta := figureOneExecutableMomentSlack q / 8)
+    (zeta := figureOneExecutableMomentSlack q / 8)
+  · have hs := figureOneExecutableMomentSlack_le_one q
+    nlinarith
+  · exact hmeanError
+  · exact hsecondError
+  · exact figureOneExecutableMomentFactor_perturbation_budget q j
+
 #print axioms
   scheduledFigureOneTrace_second_le_executableMomentFactor_of_mapped_tv
+#print axioms
+  scheduledFigureOneTrace_second_le_executableMomentFactor_of_mapped_tv_eighth
 
 end ArlibCommunity.Algorithms.CV18
