@@ -237,6 +237,48 @@ theorem map_bind_historyRawNextWithCopyKernel_snd
       change Measure.map id (K state.2) = K state.2
       exact Measure.map_id
 
+/-- A raw copied transition preserves every measurable observable of the
+old recorded history. -/
+theorem map_bind_historyRawNextWithCopyKernel_old
+    {H X Z : Type*} [MeasurableSpace H] [MeasurableSpace X]
+    [MeasurableSpace Z]
+    (prefixLaw : Measure (H × X))
+    (K : X → Measure X) (projectOld : H → Z)
+    (hK : Measurable K) (hKprob : ∀ x, IsProbabilityMeasure (K x))
+    (hprojectOld : Measurable projectOld) :
+    (prefixLaw.bind (historyRawNextWithCopyKernel K)).map
+        (projectOld ∘ Prod.fst ∘ Prod.fst) =
+      prefixLaw.map (projectOld ∘ Prod.fst) := by
+  have hraw := historyRawNextWithCopyKernel_measurable_and_probability
+    (H := H) K hK hKprob
+  have hout : Measurable (projectOld ∘ Prod.fst ∘ Prod.fst :
+      ((H × X) × X) → Z) :=
+    hprojectOld.comp (measurable_fst.comp measurable_fst)
+  rw [map_bind_eq_bind_map_of_measurable prefixLaw hraw.1 hout]
+  calc
+    prefixLaw.bind (fun state =>
+        (historyRawNextWithCopyKernel K state).map
+          (projectOld ∘ Prod.fst ∘ Prod.fst)) =
+        prefixLaw.bind (fun state => Measure.dirac (projectOld state.1)) := by
+      apply Measure.bind_congr_right
+      filter_upwards with state
+      unfold historyRawNextWithCopyKernel
+      let _ : IsProbabilityMeasure (K state.2) := hKprob state.2
+      have hcopy : Measurable fun next : X => ((state.1, next), next) :=
+        (measurable_const.prodMk measurable_id).prodMk measurable_id
+      calc
+        ((K state.2).map (fun next => ((state.1, next), next))).map
+            (projectOld ∘ Prod.fst ∘ Prod.fst) =
+            (K state.2).map
+              ((projectOld ∘ Prod.fst ∘ Prod.fst) ∘
+                (fun next => ((state.1, next), next))) :=
+          Measure.map_map hout hcopy
+        _ = (K state.2).map (fun _ => projectOld state.1) := by rfl
+        _ = Measure.dirac (projectOld state.1) := by
+          rw [Measure.map_const, measure_univ, one_smul]
+    _ = prefixLaw.map (projectOld ∘ Prod.fst) :=
+      Measure.bind_dirac_eq_map prefixLaw (hprojectOld.comp measurable_fst)
+
 /-- Record the observable of the reset shadow, while carrying the untouched
 operational copy into the next executable step. -/
 def historyRecordShadowState
@@ -445,6 +487,7 @@ theorem exists_shadowRecordedReference_of_nextMarginal_tvLe
 #print axioms map_recorded_newCoordinate_eq_of_reset_marginal
 #print axioms historyRawNextWithCopyKernel_measurable_and_probability
 #print axioms map_bind_historyRawNextWithCopyKernel_snd
+#print axioms map_bind_historyRawNextWithCopyKernel_old
 #print axioms bind_historyRawNextWithCopy_map_recordShadow_eq
 #print axioms MeasureLeUpTo.historyOperationalRecord_of_shadowReset
 #print axioms map_shadowRecorded_newCoordinate_eq_of_reset_marginal
