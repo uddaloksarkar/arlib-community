@@ -263,6 +263,101 @@ theorem figureOneExecutableMomentSlack_nonneg (q : VolumeParams) :
   unfold figureOneExecutableMomentSlack
   positivity
 
+theorem figureOneIdealPhaseFactor_le_five_thirds
+    (q : VolumeParams) (phase : FigureOneIdealPhase q) :
+    figureOneIdealPhaseFactor q phase ≤ 5 / 3 := by
+  cases phase with
+  | fixed k =>
+      simp only [figureOneIdealPhaseFactor]
+      have hn : (3 : ℝ) ≤ q.n := by exact_mod_cast q.dim_ok
+      have hc : (1 : ℝ) ≤ figureOneFixedSampleCount q := by
+        exact_mod_cast figureOneFixedSampleCount_pos q
+      have hn0 : (0 : ℝ) < q.n := by linarith
+      have hden : (3 : ℝ) ≤
+          (q.n : ℝ) * figureOneFixedSampleCount q := by
+        nlinarith [mul_le_mul hn hc (by norm_num) hn0.le]
+      rw [div_div]
+      have hfrac : (2 : ℝ) /
+          ((q.n : ℝ) * figureOneFixedSampleCount q) ≤ 2 / 3 :=
+        div_le_div_of_nonneg_left (by norm_num) (by norm_num) hden
+      linarith
+  | accelerated k =>
+      simp only [figureOneIdealPhaseFactor]
+      have hsT : scheduleValue q k ≤ terminalVariance q :=
+        scheduleValue_le_terminal q k
+      have hT : 0 < terminalVariance q := terminalVariance_pos' q
+      have hH : (1 : ℝ) ≤ protectedLog (terminalVariance q) :=
+        le_max_left _ _
+      have he2 : q.eps ^ 2 ≤ 1 := by
+        nlinarith [q.heps.1, q.heps.2]
+      have hlower := figureOneSampleCount_cast_lower q
+      have hraw : (512 : ℝ) ≤
+          512 * protectedLog (terminalVariance q) / q.eps ^ 2 := by
+        rw [le_div_iff₀ (sq_pos_of_pos q.heps.1)]
+        nlinarith
+      have hc : (512 : ℝ) ≤ figureOneSampleCount q :=
+        hraw.trans hlower
+      have hc0 : (0 : ℝ) < figureOneSampleCount q := by linarith
+      have hratio : scheduleValue q k / terminalVariance q ≤ 1 :=
+        (div_le_one hT).2 hsT
+      have hfrac : scheduleValue q k / terminalVariance q /
+          figureOneSampleCount q ≤ 2 / 3 := by
+        apply (div_le_iff₀ hc0).2
+        nlinarith
+      linarith
+  | terminal =>
+      simp only [figureOneIdealPhaseFactor]
+      have hc : (1 : ℝ) ≤ figureOneSampleCount q := by
+        exact_mod_cast figureOneSampleCount_pos q
+      have hc0 : (0 : ℝ) < figureOneSampleCount q := by linarith
+      have hexp : Real.exp (1 / 2) ≤ (5 / 3 : ℝ) := by
+        convert Real.exp_le_two_add_div_two_sub (x := (1 / 2 : ℝ))
+          (by norm_num) (by norm_num) using 1 <;> norm_num
+      have hfrac : (Real.exp (1 / 2) - 1) /
+          figureOneSampleCount q ≤ 2 / 3 := by
+        apply (div_le_iff₀ hc0).2
+        nlinarith
+      linarith
+
+theorem figureOneChronologicalMomentFactor_le_five_thirds
+    (q : VolumeParams) (j : ℕ) :
+    figureOneChronologicalMomentFactor q j ≤ 5 / 3 :=
+  figureOneIdealPhaseFactor_le_five_thirds q
+    (figureOneChronologicalPhaseAt q j)
+
+theorem figureOneExecutableMomentFactor_nonneg
+    (q : VolumeParams) (j : ℕ) :
+    0 ≤ figureOneExecutableMomentFactor q j := by
+  unfold figureOneExecutableMomentFactor
+  exact mul_nonneg
+    (zero_le_one.trans (figureOneChronologicalMomentFactor_one_le q j))
+    (by linarith [figureOneExecutableMomentSlack_nonneg q])
+
+theorem figureOneExecutableMomentFactor_le_two
+    (q : VolumeParams) (j : ℕ) :
+    figureOneExecutableMomentFactor q j ≤ 2 := by
+  have hm : (1 : ℝ) ≤ figureOneDependentPhaseCount q := by
+    exact_mod_cast figureOneDependentPhaseCount_pos q
+  have he : q.eps ^ 2 ≤ 1 := by
+    nlinarith [q.heps.1, q.heps.2]
+  have hslack : figureOneExecutableMomentSlack q ≤ 1 / 4096 := by
+    unfold figureOneExecutableMomentSlack
+    apply (div_le_iff₀ (by positivity :
+      (0 : ℝ) < 4096 * figureOneDependentPhaseCount q)).2
+    nlinarith
+  unfold figureOneExecutableMomentFactor
+  have hchron0 : 0 ≤ figureOneChronologicalMomentFactor q j :=
+    zero_le_one.trans (figureOneChronologicalMomentFactor_one_le q j)
+  have hslackBase0 : 0 ≤ 1 + figureOneExecutableMomentSlack q := by
+    linarith [figureOneExecutableMomentSlack_nonneg q]
+  calc
+    figureOneChronologicalMomentFactor q j *
+        (1 + figureOneExecutableMomentSlack q) ≤
+        (5 / 3) * (1 + 1 / 4096) :=
+      mul_le_mul (figureOneChronologicalMomentFactor_le_five_thirds q j)
+        (by linarith) hslackBase0 (by norm_num)
+    _ ≤ 2 := by norm_num
+
 theorem figureOne_one_add_executableMomentSlack_pow_le_exp
     (q : VolumeParams) {i : ℕ} (hi : i ≤ figureOneDependentPhaseCount q) :
     (1 + figureOneExecutableMomentSlack q) ^ i ≤
@@ -587,6 +682,33 @@ theorem figureOneFinalScheduledAbortBase_failure_le_of_phase_factor_budget
         q I factor hfactor0 hsecondTwo hsecondFactor hbudget
   · exact hrawApprox
 
+/-- The executable aborting theorem after all Lemma 7.15 product arithmetic
+has been discharged.  Only the finite-walk empirical-average second moment
+with the explicit per-phase slack, and the executable mean-product bias,
+remain analytic inputs. -/
+theorem figureOneFinalScheduledAbortBase_failure_le_of_executable_moments
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (hsecond : ∀ j, 1 ≤ j → j ≤ figureOneDependentPhaseCount q →
+      (∫ trace, scheduledBalancedTracePhaseVariable q j trace ^ 2
+        ∂scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) ≤
+        figureOneExecutableMomentFactor q j *
+          scheduledFigureOneTraceRawMean q I j ^ 2)
+    (hrawApprox : RelativeApprox (q.eps / 64)
+      (∏ phase, figureOneIdealPhaseMean q I phase)
+      (dependentPhaseMeanProduct (scheduledFigureOneTraceRawMean q I)
+        (figureOneDependentPhaseCount q))) :
+    (figureOneFinalScheduledAbortBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  exact figureOneFinalScheduledAbortBase_failure_le_of_phase_factor_budget
+    q I oracle hrounded (figureOneExecutableMomentFactor q)
+    (fun j _ _ => figureOneExecutableMomentFactor_nonneg q j)
+    (fun j _ _ => figureOneExecutableMomentFactor_le_two q j)
+    hsecond (fun i hi => figureOneExecutableMomentFactor_budget q hi)
+    hrawApprox
+
 #print axioms
   scheduledFigureOneTrace_rawMean_le_one_add_inv_alpha_mul_truncatedMean_of_two
 #print axioms
@@ -599,11 +721,14 @@ theorem figureOneFinalScheduledAbortBase_failure_le_of_phase_factor_budget
 #print axioms figureOneExecutableMomentFactor_partialProduct_le_exp
 #print axioms figureOne_exp_113_eps_sq_div_4096_le
 #print axioms figureOneExecutableMomentFactor_budget
+#print axioms figureOneExecutableMomentFactor_le_two
 #print axioms
   scheduledFigureOneTrace_truncatedMeanProduct_relativeApprox_ideal_of_two
 #print axioms
   figureOneFinalScheduledAbortBase_failure_le_of_slack_trace_moments
 #print axioms
   figureOneFinalScheduledAbortBase_failure_le_of_phase_factor_budget
+#print axioms
+  figureOneFinalScheduledAbortBase_failure_le_of_executable_moments
 
 end ArlibCommunity.Algorithms.CV18
