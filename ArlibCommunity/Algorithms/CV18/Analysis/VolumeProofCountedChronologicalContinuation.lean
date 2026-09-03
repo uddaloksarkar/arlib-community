@@ -278,6 +278,73 @@ theorem MembershipOracleProgram.map_bind_countedContinuation_simulation
   · fun_prop
   · fun_prop
 
+/-- A result-map simulation can be weakened to equality of the final query
+count distribution.  This form also composes when the two continuations have
+different result types and agree only after forgetting those results. -/
+theorem MembershipOracleProgram.map_snd_bind_countedContinuation_eq
+    {n : ℕ} {A B C D : Type}
+    [MeasurableSpace A] [MeasurableSpace B]
+    [MeasurableSpace C] [MeasurableSpace D]
+    (oracle : AmbientSpace n → Bool) (rho : Measure (A × ℕ))
+    (f : A → B) (hf : Measurable f)
+    (actualNext : A → MembershipOracleProgram n C)
+    (mappedNext : B → MembershipOracleProgram n D)
+    (hactualRun : Measurable fun result => (actualNext result).run oracle)
+    (hactual : ∀ result, (actualNext result).CountedStronglyMeasurable oracle)
+    (hmappedRun : Measurable fun result => (mappedNext result).run oracle)
+    (hmapped : ∀ result, (mappedNext result).CountedStronglyMeasurable oracle)
+    (hsim : ∀ result,
+      ((mappedNext (f result)).run oracle).map Prod.snd =
+        ((actualNext result).run oracle).map Prod.snd) :
+    (((rho.map fun outcome => (f outcome.1, outcome.2)).bind
+        (countedContinuation oracle mappedNext)).map Prod.snd) =
+      (rho.bind (countedContinuation oracle actualNext)).map Prod.snd := by
+  let liftF : A × ℕ → B × ℕ := fun outcome =>
+    (f outcome.1, outcome.2)
+  have hliftF : Measurable liftF :=
+    (hf.comp measurable_fst).prodMk measurable_snd
+  have hactualCont : Measurable (countedContinuation oracle actualNext) :=
+    measurable_countedContinuation oracle actualNext hactualRun hactual
+  have hmappedCont : Measurable (countedContinuation oracle mappedNext) :=
+    measurable_countedContinuation oracle mappedNext hmappedRun hmapped
+  have hactualCount : Measurable fun first =>
+      (countedContinuation oracle actualNext first).map Prod.snd :=
+    (Measure.measurable_map _ measurable_snd).comp hactualCont
+  have hmappedCount : Measurable fun first =>
+      (countedContinuation oracle mappedNext first).map Prod.snd :=
+    (Measure.measurable_map _ measurable_snd).comp hmappedCont
+  rw [show (fun outcome : A × ℕ => (f outcome.1, outcome.2)) = liftF by rfl]
+  rw [map_bind_eq_bind_map_of_measurable (rho.map liftF) hmappedCont
+    measurable_snd]
+  rw [Measure.map_bind_eq_bind_comp rho hliftF hmappedCount]
+  rw [map_bind_eq_bind_map_of_measurable rho hactualCont measurable_snd]
+  apply Measure.bind_congr_right
+  filter_upwards with first
+  unfold countedContinuation liftF
+  rw [Measure.map_map, Measure.map_map]
+  · let addCount : ℕ → ℕ := fun count => first.2 + count
+    calc
+      ((mappedNext (f first.1)).run oracle).map
+          (fun second => first.2 + second.2) =
+          (((mappedNext (f first.1)).run oracle).map Prod.snd).map
+            addCount := by
+        rw [Measure.map_map]
+        · congr 1
+        · fun_prop
+        · exact measurable_snd
+      _ = (((actualNext first.1).run oracle).map Prod.snd).map
+            addCount := by rw [hsim first.1]
+      _ = ((actualNext first.1).run oracle).map
+          (fun second => first.2 + second.2) := by
+        rw [Measure.map_map]
+        · congr 1
+        · fun_prop
+        · exact measurable_snd
+  · fun_prop
+  · fun_prop
+  · fun_prop
+  · fun_prop
+
 #print axioms MembershipOracleProgram.countedContinuation_fst
 #print axioms MembershipOracleProgram.bind_pure_right_cv18
 #print axioms MembershipOracleProgram.bind_assoc_counted_cv18
@@ -288,5 +355,7 @@ theorem MembershipOracleProgram.map_bind_countedContinuation_simulation
 #print axioms MembershipOracleProgram.map_snd_run_bind_pure
 #print axioms
   MembershipOracleProgram.map_bind_countedContinuation_simulation
+#print axioms
+  MembershipOracleProgram.map_snd_bind_countedContinuation_eq
 
 end ArlibCommunity.Algorithms.CV18
