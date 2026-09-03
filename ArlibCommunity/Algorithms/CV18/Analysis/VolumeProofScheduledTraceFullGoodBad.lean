@@ -7,6 +7,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceDependen
 namespace ArlibCommunity.Algorithms.CV18
 
 open MeasureTheory ProbabilityTheory Set
+open _root_.Arlib _root_.Arlib.MarkovChains
 
 /-! ## The asymmetric form of Lemma 7.17(b) -/
 
@@ -175,6 +176,152 @@ theorem figureOneScheduledRetained_asymmetric_budget
   have hnuProduct := mul_le_mul_of_nonneg_right hk hnu.le
   rw [← figureOne_lemma717c_budget q]
   nlinarith [hphaseProduct, hnuProduct]
+
+/-! ## Completing only the live subprobability -/
+
+/-- A subprobability dominated by a warm good part and a bad part can be
+completed to a warm probability measure while charging only the bad part.
+Unlike completing the full live/dead state marginal, this leaves the dead
+mass available for its actual absorbing output. -/
+theorem exists_warm_probability_of_submeasure_le_good_add_bad
+    {Omega : Type*} [MeasurableSpace Omega]
+    (sub good bad pi : Measure Omega)
+    [IsFiniteMeasure sub] [IsFiniteMeasure bad] [IsProbabilityMeasure pi]
+    {M : ENNReal} (hM : 1 ≤ M) (hMtop : M ≠ ⊤)
+    (hsubMass : sub Set.univ ≤ 1)
+    (hsub : sub ≤ good + bad) (hgood : Arlib.IsWarm M good pi) :
+    ∃ nu : Measure Omega, IsProbabilityMeasure nu ∧
+      Arlib.IsWarm M nu pi ∧ sub ≤ nu + bad := by
+  let residual := sub - bad
+  have hresidualLeGood : residual ≤ good :=
+    Measure.sub_le_of_le_add hsub
+  have hgoodLe : good ≤ M • pi :=
+    (isWarm_iff_le_smul good pi).1 hgood
+  have hresidualLe : residual ≤ M • pi :=
+    hresidualLeGood.trans hgoodLe
+  have hresidualMass : residual Set.univ ≤ 1 :=
+    (Measure.le_iff'.mp (Measure.sub_le (μ := sub) (ν := bad))
+      Set.univ).trans hsubMass
+  let missing := 1 - residual Set.univ
+  let capacity := M • pi - residual
+  have hcapacityMass : capacity Set.univ = M - residual Set.univ := by
+    rw [show capacity = M • pi - residual by rfl,
+      Measure.sub_apply MeasurableSet.univ hresidualLe,
+      Measure.smul_apply, smul_eq_mul, measure_univ, mul_one]
+  have hmissingLeCapacity : missing ≤ capacity Set.univ := by
+    rw [hcapacityMass]
+    exact tsub_le_tsub_right hM (residual Set.univ)
+  by_cases hmissing0 : missing = 0
+  · refine ⟨residual, ?_, ?_, ?_⟩
+    · refine ⟨?_⟩
+      apply le_antisymm hresidualMass
+      exact (tsub_eq_zero_iff_le).mp hmissing0
+    · exact (isWarm_iff_le_smul residual pi).2 hresidualLe
+    · exact (Measure.sub_le_iff_le_add (μ := sub) (ν := bad)
+        (ξ := residual)).mp le_rfl
+  · have hcapacity0 : capacity Set.univ ≠ 0 := by
+      intro hzero
+      apply hmissing0
+      apply bot_unique
+      simpa [hzero] using hmissingLeCapacity
+    have hcapacityTop : capacity Set.univ ≠ ⊤ := by
+      rw [hcapacityMass]
+      exact ne_top_of_le_ne_top hMtop tsub_le_self
+    let coefficient := missing / capacity Set.univ
+    have hcoefficientLe : coefficient ≤ 1 :=
+      ENNReal.div_le_iff_le_mul (Or.inl hcapacity0)
+        (Or.inl hcapacityTop) |>.2 <| by
+          simpa using hmissingLeCapacity
+    let filler := coefficient • capacity
+    let nu := residual + filler
+    have hfillerLe : filler ≤ capacity := by
+      apply Measure.le_iff'.mpr
+      intro S
+      rw [show filler = coefficient • capacity by rfl,
+        Measure.smul_apply, smul_eq_mul]
+      exact mul_le_of_le_one_left bot_le hcoefficientLe
+    have hnuLe : nu ≤ M • pi := by
+      calc
+        nu = residual + filler := rfl
+        _ ≤ residual + capacity := by gcongr
+        _ = M • pi := by
+          rw [show capacity = M • pi - residual by rfl, add_comm,
+            Measure.sub_add_cancel_of_le hresidualLe]
+    have hfillerMass : filler Set.univ = missing := by
+      rw [show filler = coefficient • capacity by rfl,
+        Measure.smul_apply, smul_eq_mul]
+      exact ENNReal.div_mul_cancel hcapacity0 hcapacityTop
+    have hnuMass : nu Set.univ = 1 := by
+      rw [show nu = residual + filler by rfl, Measure.add_apply,
+        hfillerMass, show missing = 1 - residual Set.univ by rfl]
+      exact add_tsub_cancel_of_le hresidualMass
+    let hnuProb : IsProbabilityMeasure nu := ⟨hnuMass⟩
+    refine ⟨nu, hnuProb, (isWarm_iff_le_smul nu pi).2 hnuLe, ?_⟩
+    calc
+      sub ≤ residual + bad :=
+        (Measure.sub_le_iff_le_add (μ := sub) (ν := bad)
+          (ξ := residual)).mp le_rfl
+      _ ≤ nu + bad := by
+        gcongr
+        exact Measure.le_add_right le_rfl
+
+/-- Run a common transition on the live submeasure and emit an arbitrary
+probability output on the absorbing dead mass.  The warm completion above
+shows that the total additive loss is the transition budget plus the sum of
+the live bad mass and dead mass, with neither charged twice. -/
+theorem measureLeUpTo_live_dead_bind_of_good_bad
+    {S T : Type*} [MeasurableSpace S] [MeasurableSpace T]
+    (live dead good bad pi : Measure S)
+    [IsFiniteMeasure live] [IsFiniteMeasure dead] [IsFiniteMeasure bad]
+    [IsProbabilityMeasure pi]
+    {M eta budget : ENNReal} (hM : 1 ≤ M) (hMtop : M ≠ ⊤)
+    (hmass : live Set.univ + dead Set.univ = 1)
+    (hlive : live ≤ good + bad) (hgood : Arlib.IsWarm M good pi)
+    (herror : bad Set.univ + dead Set.univ ≤ eta)
+    (K : S → Measure T) (hK : Measurable K)
+    (hKprob : ∀ x, IsProbabilityMeasure (K x))
+    (deadOutput target : Measure T) [IsProbabilityMeasure deadOutput]
+    [IsProbabilityMeasure target]
+    (hmix : ∀ nu : Measure S, IsProbabilityMeasure nu →
+      Arlib.IsWarm M nu pi →
+      MeasureLeUpTo (nu.bind K) target budget) :
+    MeasureLeUpTo
+      (live.bind K + dead Set.univ • deadOutput) target (budget + eta) := by
+  have hliveMass : live Set.univ ≤ 1 := by
+    calc
+      live Set.univ ≤ live Set.univ + dead Set.univ := le_add_right le_rfl
+      _ = 1 := hmass
+  obtain ⟨nu, hnuProb, hnuWarm, hliveNu⟩ :=
+    exists_warm_probability_of_submeasure_le_good_add_bad
+      live good bad pi hM hMtop hliveMass hlive hgood
+  let _ : IsProbabilityMeasure nu := hnuProb
+  obtain ⟨mixError, hmixDom, hmixMass⟩ := hmix nu hnuProb hnuWarm
+  let error := mixError + bad.bind K + dead Set.univ • deadOutput
+  refine ⟨error, ?_, ?_⟩
+  · have hbind := measure_bind_mono_left hliveNu hK
+    rw [measure_bind_add_left nu bad hK] at hbind
+    calc
+      live.bind K + dead Set.univ • deadOutput ≤
+          (nu.bind K + bad.bind K) + dead Set.univ • deadOutput := by
+        gcongr
+      _ ≤ (target + mixError + bad.bind K) +
+          dead Set.univ • deadOutput := by
+        gcongr
+      _ = target + error := by
+        simp only [error]
+        ac_rfl
+  · rw [show error = mixError + bad.bind K +
+        dead Set.univ • deadOutput by rfl,
+      Measure.add_apply, Measure.add_apply,
+      measure_bind_apply_univ bad hK hKprob,
+      Measure.smul_apply, smul_eq_mul]
+    have hdeadOutputMass : deadOutput Set.univ = 1 := measure_univ
+    rw [hdeadOutputMass, mul_one]
+    calc
+      mixError Set.univ + bad Set.univ + dead Set.univ =
+          mixError Set.univ + (bad Set.univ + dead Set.univ) := by
+        ac_rfl
+      _ ≤ budget + eta := add_le_add hmixMass herror
 
 /-- The dead trace mass is bounded by the same optional-retained exact-chance
 error: the ideal accepted target is supported on `some`. -/
