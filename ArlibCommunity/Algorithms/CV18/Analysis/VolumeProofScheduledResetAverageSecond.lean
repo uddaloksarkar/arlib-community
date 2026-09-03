@@ -44,6 +44,22 @@ theorem exists_scheduledRetainedResetReference_average_secondMoment
       MeasureLeUpTo
         (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
         reference (scheduledResetReferenceError q (count - 1)) ∧
+      MemLp (fun history =>
+        sequentialPrefixSum
+          (retainedSampleObservation
+            (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+              (scheduleValue q (phase + 1)))) count history /
+            (count : ℝ)) 2 reference ∧
+      (∫ history,
+          sequentialPrefixSum
+            (retainedSampleObservation
+              (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+                (scheduleValue q (phase + 1)))) count history /
+              (count : ℝ) ∂reference) =
+        ∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+            (scheduleValue q (phase + 1)) x
+          ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+            (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)) ∧
       (∫ history,
           (sequentialPrefixSum
             (retainedSampleObservation
@@ -114,6 +130,11 @@ theorem exists_scheduledRetainedResetReference_average_secondMoment
     simpa [weight] using hcoordinateThird
   have hprefix := exactShadowHistory_prefix_thirdMoment_le
     q I phase count reference hcoordinates hA hcoordinateThird
+  have havgMem :=
+    (integral_exactShadowHistory_average_sq_le_gaussianSecond
+      q I phase count hcount reference hcoordinates).1
+  have havgMean := integral_exactShadowHistory_average_eq_gaussianMean
+    q I phase count hcount reference hcoordinates
   have hepsilon : 0 < epsilon := by
     dsimp [epsilon]
     have hdependent : 0 < figureOneDependentEpsilon q := by
@@ -129,8 +150,10 @@ theorem exists_scheduledRetainedResetReference_average_secondMoment
       hYsecond (fun i hi => (hprefix i hi).1)
       (fun i hi => by simpa [Y, weight] using (hprefix i hi).2)
       hYcube (by simpa [epsilon, Y, weight] using hind)
-  refine ⟨reference, hreferenceProb, hmlu, ?_⟩
-  simpa [epsilon, Y, weight] using havg
+  refine ⟨reference, hreferenceProb, hmlu, ?_, ?_, ?_⟩
+  · simpa [Y, weight, sequentialPrefixSum] using havgMem
+  · simpa [Y, weight, sequentialPrefixSum] using havgMean
+  · simpa [epsilon, Y, weight] using havg
 
 #print axioms exists_scheduledRetainedResetReference_average_secondMoment
 
