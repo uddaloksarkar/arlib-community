@@ -130,6 +130,87 @@ theorem uniformRatioWeight_pos (sigma2 : ℝ) (x : AmbientSpace n) :
   unfold uniformRatioWeight
   positivity
 
+theorem scheduledBalancedCoolingRatioTransitionLaw_ae_ratio_positive
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (tau2 : ℝ) (current : AmbientSpace q.n) :
+    ∀ᵐ result ∂scheduledBalancedCoolingRatioTransitionLaw parameters q I
+        sigma2 tau2 current,
+      ScheduledCollectedTotalPositive result := by
+  have hsamples : 0 < figureOnePhaseSampleCount q sigma2 := by
+    unfold figureOnePhaseSampleCount
+    split_ifs
+    · exact figureOneFixedSampleCount_pos q
+    · exact figureOneSampleCount_pos q
+  unfold scheduledBalancedCoolingRatioTransitionLaw
+  apply (ae_map_iff
+    (measurable_balancedCoolingAverage
+      (n := q.n) (figureOnePhaseSampleCount q sigma2)).aemeasurable
+    measurableSet_scheduledCollectedTotalPositive).2
+  filter_upwards [scheduledBalancedTransitionCollectLaw_ae_total_positive
+    q I hsigma2 (measurable_gaussianRatioWeight sigma2 tau2)
+      (gaussianRatioWeight_pos sigma2 tau2)
+      (parameters.proposalCap q sigma2)
+      (parameters.properStride q sigma2)
+      (parameters.retryLimit q sigma2)
+      (figureOnePhaseSampleCount q sigma2) hsamples 0
+      (accuracyScaleFactor q • current) (by norm_num)] with result hresult
+  cases result with
+  | none => trivial
+  | some result =>
+      simpa [balancedCoolingAverage, ScheduledCollectedTotalPositive] using
+        div_pos hresult (by exact_mod_cast hsamples)
+
+theorem scheduledBalancedCoolingUniformTransitionLaw_ae_ratio_positive
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    (current : AmbientSpace q.n) :
+    ∀ᵐ result ∂scheduledBalancedCoolingUniformTransitionLaw parameters q I
+        sigma2 current,
+      ScheduledCollectedTotalPositive result := by
+  have hsamples : 0 < figureOneSampleCount q := figureOneSampleCount_pos q
+  unfold scheduledBalancedCoolingUniformTransitionLaw
+  apply (ae_map_iff
+    (measurable_balancedCoolingAverage
+      (n := q.n) (figureOneSampleCount q)).aemeasurable
+    measurableSet_scheduledCollectedTotalPositive).2
+  filter_upwards [scheduledBalancedTransitionCollectLaw_ae_total_positive
+    q I hsigma2 (measurable_uniformRatioWeight sigma2)
+      (uniformRatioWeight_pos sigma2)
+      (parameters.proposalCap q sigma2)
+      (parameters.properStride q sigma2)
+      (parameters.retryLimit q sigma2)
+      (figureOneSampleCount q) hsamples 0
+      (accuracyScaleFactor q • current) (by norm_num)] with result hresult
+  cases result with
+  | none => trivial
+  | some result =>
+      simpa [balancedCoolingAverage, ScheduledCollectedTotalPositive] using
+        div_pos hresult (by exact_mod_cast hsamples)
+
+theorem scheduledBalancedTracePhaseObservationLaw_ae_total_positive
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase : ℕ)
+    (trace : ScheduledBalancedCoolingTrace q.n) :
+    ∀ᵐ result ∂scheduledBalancedTracePhaseObservationLaw
+        parameters q I phase trace,
+      ScheduledCollectedTotalPositive result := by
+  rcases trace with ⟨history, live⟩
+  cases live with
+  | false =>
+      unfold scheduledBalancedTracePhaseObservationLaw
+      apply (ae_dirac_iff measurableSet_scheduledCollectedTotalPositive).2
+      trivial
+  | true =>
+      unfold scheduledBalancedTracePhaseObservationLaw
+      simp only [if_true]
+      split_ifs
+      · exact scheduledBalancedCoolingRatioTransitionLaw_ae_ratio_positive
+          parameters q I (scheduleValue_pos q phase)
+            (scheduleValue q (phase + 1)) history.2.2.2
+      · exact scheduledBalancedCoolingUniformTransitionLaw_ae_ratio_positive
+          parameters q I (terminalVariance_pos' q) history.2.2.2
+
 /-- The ideal factor attached to the actual chronological phase is at most
 two. -/
 theorem figureOneChronologicalMomentFactor_le_two
@@ -739,6 +820,9 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_sharp_trace_moments
 #print axioms scheduledBalancedTransitionCollectLaw_ae_total_positive
 #print axioms gaussianRatioWeight_pos
 #print axioms uniformRatioWeight_pos
+#print axioms scheduledBalancedCoolingRatioTransitionLaw_ae_ratio_positive
+#print axioms scheduledBalancedCoolingUniformTransitionLaw_ae_ratio_positive
+#print axioms scheduledBalancedTracePhaseObservationLaw_ae_total_positive
 #print axioms scheduledFigureOneTrace_truncatedSecond_le_rawSecond
 #print axioms scheduledFigureOneTrace_rawMean_le_one_add_inv_alpha_mul_truncatedMean
 #print axioms scheduledFigureOneTrace_rawMeanProduct_le_pow_mul_truncatedMeanProduct
