@@ -739,6 +739,32 @@ theorem iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_leUp
     (iterated_figureOneFinalScheduledRetainedOptionKernel_leUpTo
       q I (scheduleValue_pos q phase) (exact.map some) hinitial samples)
 
+/-- The same marginal comparison bounds the absorbing failure mass, since
+the accepted target has no `none` outcome. -/
+theorem iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_none_le
+    (q : VolumeParams) (I : VolumeInput q.n) (phase samples : ℕ) :
+    (iteratedKernelLaw
+      (fun _ => figureOneFinalScheduledRetainedOptionKernel q I
+        (scheduleValue q phase))
+      ((truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map some)
+      samples) {none} ≤
+      scheduledBalancedStationaryTargetError q +
+        samples • figureOneCorrectedTransitionBudget q := by
+  have h :=
+    (iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_leUpTo
+      q I phase samples).event_le {none}
+  have hnone : ((figureOneScheduledAcceptedTargetAt q I phase).map some)
+      {none} = 0 := by
+    rw [Measure.map_apply measurable_some measurableSet_option_none]
+    have hpre : (some : AmbientSpace q.n → Option (AmbientSpace q.n)) ⁻¹'
+        ({none} : Set (Option (AmbientSpace q.n))) = ∅ := by
+      ext point
+      simp
+    rw [hpre, measure_empty]
+  rw [hnone, zero_add] at h
+  exact h
+
 #print axioms retainedSumKernel_measurable_and_probability
 #print axioms map_iterated_retainedSumKernel_state
 #print axioms iterated_retainedSumKernel_ae_total_le
@@ -748,5 +774,7 @@ theorem iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_leUp
 #print axioms integral_retainedLiveTotal_loss_le
 #print axioms
   iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_leUpTo
+#print axioms
+  iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_none_le
 
 end ArlibCommunity.Algorithms.CV18
