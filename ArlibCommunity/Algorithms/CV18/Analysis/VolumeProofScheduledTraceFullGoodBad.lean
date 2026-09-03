@@ -2365,6 +2365,74 @@ theorem approxIndepFun_figureOneScheduledTrace_terminalPhaseOutput
   exact figureOneScheduledRetained_asymmetric_budget q i (by
     simp [i, figureOneDependentPhaseCount])
 
+theorem approxIndepFun_figureOneScheduledFinalTrace_terminal
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    let i := terminalPhaseSteps q
+    let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) i
+    let Y := scheduledFigureOneTraceTruncatedPhase q I (i + 1)
+    ApproxIndepFun (figureOneDependentEpsilon q) X Y
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) := by
+  dsimp only
+  let i := terminalPhaseSteps q
+  let rho := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I i
+  let X := dependentTruncatedProduct (figureOneDependentAlpha q)
+    (scheduledFigureOneTraceTruncatedMean q I)
+    (scheduledFigureOneTraceTruncatedPhase q I) i
+  let Y := scheduledFigureOneTraceTruncatedPhase q I (i + 1)
+  let liveOutput := figureOneScheduledTraceLiveTruncatedOutput q I (i + 1)
+  let deadOutput := figureOneScheduledTraceDeadTruncatedOutput q I (i + 1)
+  let outK := scheduledBalancedTracePhaseOutputLaw
+    figureOneFinalScheduledBalancedParameters q I i liveOutput deadOutput
+  have hV : ∀ j, Measurable
+      (scheduledFigureOneTraceTruncatedPhase q I j) := fun j =>
+    (measurable_scheduledBalancedTracePhaseVariable q j).min measurable_const
+  have hX : Measurable X :=
+    measurable_dependentTruncatedProduct (figureOneDependentAlpha q)
+      (scheduledFigureOneTraceTruncatedMean q I)
+      (scheduledFigureOneTraceTruncatedPhase q I) hV i
+  have hY : Measurable Y := hV (i + 1)
+  have himmediate :=
+    approxIndepFun_figureOneScheduledTrace_terminalPhaseOutput q I
+  have hlaw := map_pair_sequentialTracePhaseOutput_eq_forwardTrace_succ
+    q I i (by simp [i, figureOneDependentPhaseCount])
+  have htransported := ApproxIndepFun.of_map_pair_eq
+    (hX.comp measurable_fst) measurable_snd hX hY
+    (by simpa [i, rho, X, Y, outK, liveOutput, deadOutput,
+      Function.comp_def] using hlaw)
+    (by simpa [i, rho, X, outK, liveOutput, deadOutput] using himmediate)
+  simpa [i, figureOneDependentPhaseCount] using htransported
+
+/-- Fully concrete CV18 Lemma 7.17(c) for every finite phase of the final
+loss-preserving executable trace. -/
+theorem figureOneScheduledTrace_lemma717c
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
+        (dependentTruncatedProduct (figureOneDependentAlpha q)
+          (scheduledFigureOneTraceTruncatedMean q I)
+          (scheduledFigureOneTraceTruncatedPhase q I) i)
+        (scheduledFigureOneTraceTruncatedPhase q I (i + 1))
+        (scheduledBalancedForwardTraceLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)) := by
+  intro i hi
+  cases i with
+  | zero => exact approxIndepFun_figureOneScheduledFinalTrace_zero q I
+  | succ previous =>
+      by_cases hgaussian : previous + 1 < terminalPhaseSteps q
+      · exact approxIndepFun_figureOneScheduledFinalTrace_gaussian
+          q I previous hgaussian
+      · have hterminal : previous + 1 = terminalPhaseSteps q := by
+          rw [figureOneDependentPhaseCount] at hi
+          omega
+        simpa [hterminal] using
+          approxIndepFun_figureOneScheduledFinalTrace_terminal q I
+
 #print axioms figureOneScheduledTrace_deadState_mass_le_retainedError
 #print axioms exists_figureOneScheduledTraceScaledState_good_bad
 
