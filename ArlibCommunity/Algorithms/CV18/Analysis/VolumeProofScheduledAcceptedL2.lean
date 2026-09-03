@@ -342,9 +342,157 @@ theorem truncatedGaussianProbability_scheduledAcceptance_map_le_self
       exact mul_le_mul' le_rfl <|
         lintegral_mono' (Measure.restrict_mono hAK le_rfl) le_rfl
 
+/-- Before normalization, the schedule-targeted accepted submeasure is at
+most four times the exact Gaussian target. -/
+theorem stationary_scheduledAcceptedSubmeasure_le_four_target
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    let pi := ellGaussianProb
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2
+    let nu : Measure (AmbientSpace q.n) :=
+      truncatedGaussianProbability q I sigma2 hsigma2
+    (pi.withDensity
+      (scheduledAccuracyGaussianRejectionAcceptance q I sigma2)).map
+        (fun x => (accuracyScaleFactor q)⁻¹ • x) ≤
+          (4 : ENNReal) • nu := by
+  dsimp only
+  let pi := ellGaussianProb
+    (figureOneScheduledPhaseBody q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) sigma2
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  let accept := scheduledAccuracyGaussianRejectionAcceptance q I sigma2
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    (accuracyScaleFactor q)⁻¹ • x
+  have hpi : pi ≤ (4 : ENNReal) • nu := by
+    apply Measure.le_iff.mpr
+    intro A hA
+    simpa [pi, nu, Measure.smul_apply, smul_eq_mul] using
+      (scheduledPhase_speedyStationary_isWarm_target q I hsigma2 A hA)
+  have hdensity : pi.withDensity accept ≤
+      (4 : ENNReal) • nu.withDensity accept := by
+    apply Measure.le_iff.mpr
+    intro A hA
+    rw [withDensity_apply _ hA, Measure.smul_apply,
+      withDensity_apply _ hA, smul_eq_mul]
+    calc
+      (∫⁻ x in A, accept x ∂pi) ≤
+          ∫⁻ x in A, accept x ∂((4 : ENNReal) • nu) := by
+        exact lintegral_mono'
+          (Measure.restrict_mono le_rfl hpi) le_rfl
+      _ = 4 * ∫⁻ x in A, accept x ∂nu := by
+        rw [setLIntegral_smul_measure, smul_eq_mul]
+  have hmap := Measure.map_mono hdensity (by
+    change Measurable scale
+    exact (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      (accuracyScaleFactor q)⁻¹).smul measurable_id)
+  rw [Measure.map_smul] at hmap
+  have hself := truncatedGaussianProbability_scheduledAcceptance_map_le_self
+    q I hsigma2
+  change (pi.withDensity accept).map scale ≤ 4 • nu
+  exact hmap.trans <| by
+    apply Measure.le_iff.mpr
+    intro A hA
+    rw [Measure.smul_apply, Measure.smul_apply]
+    exact mul_le_mul' le_rfl (Measure.le_iff.mp hself A hA)
+
+/-- The normalized schedule-targeted accepted law is universally `32`-warm
+for the exact Gaussian.  This is the missing L2 bridge for unbounded cooling
+ratios. -/
+theorem stationary_scheduledAcceptedTarget_isWarm
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2) :
+    IsWarm 32
+      (scheduledBalancedAccuracyGaussianAcceptedTargetLaw q I sigma2
+        (ellGaussianProb
+          (figureOneScheduledPhaseBody q I sigma2)
+          (figureOneScheduledProposalRadius q sigma2) sigma2))
+      (truncatedGaussianProbability q I sigma2 hsigma2 :
+        Measure (AmbientSpace q.n)) := by
+  let pi := ellGaussianProb
+    (figureOneScheduledPhaseBody q I sigma2)
+    (figureOneScheduledProposalRadius q sigma2) sigma2
+  let nu : Measure (AmbientSpace q.n) :=
+    truncatedGaussianProbability q I sigma2 hsigma2
+  let accepted :=
+    (pi.withDensity
+      (scheduledAccuracyGaussianRejectionAcceptance q I sigma2)).map
+        (fun x => (accuracyScaleFactor q)⁻¹ • x)
+  have hdelta : 0 < figureOneScheduledProposalRadius q sigma2 :=
+    figureOneScheduledProposalRadius_pos q hsigma2
+  have hmass0 : ellGaussianMeasure
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2 Set.univ ≠ 0 :=
+    ellGaussianMeasure_univ_ne_zero
+      (figureOneScheduledPhaseBody_measurable q I sigma2)
+      (figureOneScheduledPhaseBody_convex q I sigma2)
+      (figureOneScheduledPhaseBody_isCompact q I sigma2).isBounded
+      (figureOneScheduledPhaseBody_volume_ne_zero q I hsigma2)
+      hdelta sigma2
+  have hmassTop : ellGaussianMeasure
+      (figureOneScheduledPhaseBody q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) sigma2 Set.univ ≠ ⊤ :=
+    ellGaussianMeasure_ne_top_cv18
+      (figureOneScheduledPhaseBody_volume_ne_top q I sigma2)
+      (figureOneScheduledProposalRadius q sigma2) hsigma2
+  let _ : IsProbabilityMeasure pi :=
+    isProbabilityMeasure_ellGaussianProb hmass0 hmassTop
+  have hacceptedLower : ENNReal.ofReal (1 / 8 : ℝ) ≤
+      accepted Set.univ := by
+    have h := scheduledAccuracyPhase_stationary_acceptance_ge_one_eighth
+      q I hsigma2
+    change ENNReal.ofReal (1 / 8 : ℝ) ≤ accepted Set.univ
+    dsimp [accepted]
+    rw [Measure.map_apply (by fun_prop) MeasurableSet.univ,
+      Set.preimage_univ]
+    simpa [pi] using h
+  have haccepted0 : accepted Set.univ ≠ 0 := ne_of_gt <|
+    (by norm_num : 0 < ENNReal.ofReal (1 / 8 : ℝ)).trans_le hacceptedLower
+  have hacceptedTop : accepted Set.univ ≠ ⊤ := by
+    exact ne_top_of_le_ne_top (measure_ne_top pi Set.univ) <| by
+      calc
+        accepted Set.univ =
+            (pi.withDensity
+              (scheduledAccuracyGaussianRejectionAcceptance q I sigma2))
+                Set.univ := by
+          dsimp [accepted]
+          rw [Measure.map_apply (by fun_prop) MeasurableSet.univ,
+            Set.preimage_univ]
+        _ ≤ pi Set.univ := by
+          rw [withDensity_apply _ MeasurableSet.univ, Measure.restrict_univ]
+          calc
+            (∫⁻ x, scheduledAccuracyGaussianRejectionAcceptance q I sigma2 x
+                ∂pi) ≤ ∫⁻ _x, (1 : ENNReal) ∂pi := by
+              exact lintegral_mono <|
+                scheduledAccuracyGaussianRejectionAcceptance_le_one
+                  q I hsigma2
+            _ = pi Set.univ := lintegral_one
+  have hnu0 : nu Set.univ ≠ 0 := by simp [nu]
+  have hnuTop : nu Set.univ ≠ ⊤ := by simp [nu]
+  have hdom : accepted ≤ (4 : ENNReal) • nu := by
+    simpa [accepted, pi, nu] using
+      stationary_scheduledAcceptedSubmeasure_le_four_target q I hsigma2
+  have hmass : nu Set.univ ≤ (8 : ENNReal) * accepted Set.univ := by
+    rw [show nu Set.univ = 1 by simp [nu]]
+    calc
+      1 = 8 * ENNReal.ofReal (1 / 8 : ℝ) := by
+        rw [show (8 : ENNReal) = ENNReal.ofReal (8 : ℝ) by norm_num,
+          ← ENNReal.ofReal_mul (by norm_num : (0 : ℝ) ≤ 8)]
+        norm_num
+      _ ≤ 8 * accepted Set.univ := mul_le_mul' le_rfl hacceptedLower
+  have hw := isWarm_normalize_of_le_smul
+    haccepted0 hacceptedTop hnu0 hnuTop hdom hmass
+  rw [scheduledBalancedAccuracyGaussianAcceptedTargetLaw_eq]
+  change IsWarm 32 (Arlib.condOn accepted Set.univ) nu
+  rw [Arlib.condOn_def, Measure.restrict_univ]
+  convert hw using 1 <;> norm_num
+
 #print axioms scheduledPhase_ellGaussianMeasure_le_truncatedGaussianMeasure
 #print axioms scheduledPhase_gaussianMass_le_four_ellGaussianMass
 #print axioms scheduledPhase_speedyStationary_isWarm_target
 #print axioms truncatedGaussianProbability_scheduledAcceptance_map_le_self
+#print axioms stationary_scheduledAcceptedSubmeasure_le_four_target
+#print axioms stationary_scheduledAcceptedTarget_isWarm
 
 end ArlibCommunity.Algorithms.CV18
