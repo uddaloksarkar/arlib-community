@@ -2,6 +2,7 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKilledCollectorMean
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependentAverage
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependenceTransport
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependenceMarkov
 
 /-!
 # Sample-history shadow for a killed collector
@@ -213,6 +214,146 @@ theorem retainedSampleHistory_prefix_next_update_of_lt
       (lt_trans (Finset.mem_range.mp ht) hij) history next
   · exact retainedSampleObservation_update_of_lt weight hij history next
 
+/-- Writing coordinate `i` does not alter the prefix strictly before it. -/
+theorem retainedSampleHistory_prefixSum_update_same
+    {S : Type*} (weight : S → ℝ) (i : ℕ)
+    (history : RetainedSampleHistory S) (next : Option S) :
+    sequentialPrefixSum (retainedSampleObservation weight) i
+        (retainedSampleHistoryUpdate i history next) =
+      sequentialPrefixSum (retainedSampleObservation weight) i history := by
+  unfold sequentialPrefixSum
+  apply Finset.sum_congr rfl
+  intro t ht
+  exact retainedSampleObservation_update_of_lt weight
+    (Finset.mem_range.mp ht) history next
+
+/-- Creating coordinate `i` is exactly the usual sequential pair experiment:
+draw the old history, run the retained kernel from its current state, and
+record the old prefix together with the new zero-filled weight. -/
+theorem map_retainedSample_prefix_next_succ_eq_sequentialPairLaw
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (initial : Measure (RetainedSampleHistory S)) (i : ℕ) :
+    (iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+      initial (i + 1)).map (fun history =>
+        (sequentialPrefixSum (retainedSampleObservation weight) i history,
+          retainedSampleObservation weight i history)) =
+    (sequentialPairLaw
+      (iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+        initial i)
+      (K ∘ retainedSampleHistoryState)).map (fun pair =>
+        (sequentialPrefixSum (retainedSampleObservation weight) i pair.1,
+          retainedOptionWeight weight pair.2)) := by
+  let rho := iteratedKernelLaw
+    (fun j => retainedSampleHistoryKernel K j) initial i
+  let pref : RetainedSampleHistory S → ℝ :=
+    sequentialPrefixSum (retainedSampleObservation weight) i
+  let observe : RetainedSampleHistory S → ℝ :=
+    retainedSampleObservation weight i
+  have hpref : Measurable pref := measurable_sequentialPrefixSum
+    (fun t => measurable_retainedSampleObservation hweight t) i
+  have hobserve : Measurable observe :=
+    measurable_retainedSampleObservation hweight i
+  have hoptionWeight : Measurable (retainedOptionWeight weight) :=
+    measurable_retainedOptionWeight hweight
+  have hhistoryKernel := retainedSampleHistoryKernel_measurable_and_probability
+    K hK hKprob i
+  have hpairKernel : Measurable fun history : RetainedSampleHistory S =>
+      ((K ∘ retainedSampleHistoryState) history).map
+        (fun next => (history, next)) :=
+    measurable_sequentialPairKernel (rho := rho)
+      (hK.comp measurable_snd) (fun history => hKprob history.2)
+  have hleft :
+      (rho.bind (retainedSampleHistoryKernel K i)).map
+          (fun history => (pref history, observe history)) =
+        rho.bind fun history => (K history.2).map fun next =>
+          (pref history, retainedOptionWeight weight next) := by
+    rw [map_bind_eq_bind_map_of_measurable rho hhistoryKernel.1
+      (hpref.prodMk hobserve)]
+    apply Measure.bind_congr_right
+    filter_upwards with history
+    unfold retainedSampleHistoryKernel
+    have hupdate : Measurable fun next : Option S =>
+        retainedSampleHistoryUpdate i history next :=
+      (measurable_retainedSampleHistoryUpdate i).comp
+        (measurable_const.prodMk measurable_id)
+    rw [Measure.map_map (hpref.prodMk hobserve) hupdate]
+    apply Measure.map_congr
+    filter_upwards with next
+    apply Prod.ext
+    · exact retainedSampleHistory_prefixSum_update_same
+        weight i history next
+    · exact retainedSampleObservation_update_same weight i history next
+  have hright :
+      (sequentialPairLaw rho (K ∘ retainedSampleHistoryState)).map
+          (fun pair =>
+            (pref pair.1, retainedOptionWeight weight pair.2)) =
+        rho.bind fun history => (K history.2).map fun next =>
+          (pref history, retainedOptionWeight weight next) := by
+    unfold sequentialPairLaw
+    let transform : RetainedSampleHistory S × Option S → ℝ × ℝ :=
+      fun pair => (pref pair.1, retainedOptionWeight weight pair.2)
+    have htransform : Measurable transform :=
+      (hpref.comp measurable_fst).prodMk
+        (hoptionWeight.comp measurable_snd)
+    calc
+      (rho.bind fun history => (K history.2).map
+          fun next => (history, next)).map transform =
+          rho.bind fun history =>
+            ((K history.2).map fun next => (history, next)).map transform :=
+        map_bind_eq_bind_map_of_measurable rho hpairKernel htransform
+      _ = rho.bind fun history => (K history.2).map fun next =>
+          (pref history, retainedOptionWeight weight next) := by
+        apply Measure.bind_congr_right
+        filter_upwards with history
+        have hpair : Measurable fun next : Option S => (history, next) :=
+          measurable_const.prodMk measurable_id
+        calc
+          ((K history.2).map fun next => (history, next)).map transform =
+              (K history.2).map
+                (transform ∘ fun next => (history, next)) :=
+            Measure.map_map htransform hpair
+          _ = (K history.2).map fun next =>
+              (pref history, retainedOptionWeight weight next) := by rfl
+  rw [iteratedKernelLaw_succ]
+  exact hleft.trans hright.symm
+
+/-- Sequential-pair approximate independence is therefore exactly the
+prefix/coordinate independence needed by the empirical-average recurrence
+at the step when coordinate `i` is written. -/
+theorem retainedSampleHistory_approxIndep_prefix_next_of_sequentialPair
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (initial : Measure (RetainedSampleHistory S))
+    {epsilon : ℝ} (i : ℕ)
+    (hpair : ApproxIndepFun epsilon
+      (fun pair => sequentialPrefixSum
+        (retainedSampleObservation weight) i pair.1)
+      (fun pair => retainedOptionWeight weight pair.2)
+      (sequentialPairLaw
+        (iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+          initial i)
+        (K ∘ retainedSampleHistoryState))) :
+    ApproxIndepFun epsilon
+      (sequentialPrefixSum (retainedSampleObservation weight) i)
+      (retainedSampleObservation weight i)
+      (iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+        initial (i + 1)) := by
+  apply ApproxIndepFun.of_map_pair_eq
+    ((measurable_sequentialPrefixSum
+      (fun t => measurable_retainedSampleObservation hweight t) i).comp
+        measurable_fst)
+    ((measurable_retainedOptionWeight hweight).comp measurable_snd)
+    (measurable_sequentialPrefixSum
+      (fun t => measurable_retainedSampleObservation hweight t) i)
+    (measurable_retainedSampleObservation hweight i) ?_ hpair
+  exact (map_retainedSample_prefix_next_succ_eq_sequentialPairLaw
+    K hK hKprob weight hweight initial i).symm
+
 /-- The joint law of a written coordinate and its preceding prefix sum is
 unchanged by every later transition.  This lets Lemma 7.17(b) be proved at
 the moment the sample is created and then reused at the collector's final
@@ -302,6 +443,34 @@ theorem retainedSampleHistory_approxIndep_prefix_next_of_step
     (measurable_retainedSampleObservation hweight i) ?_ hstep
   exact (map_retainedSample_prefix_next_iteratedKernelLaw_eq_of_le
     K hK hKprob weight hweight initial i (i + 1) k (by omega) (by omega)).symm
+
+/-- Combined creation-time and future-preservation bridge.  This is the
+direct adapter from CV18 Lemma 7.17(b)/(c), stated on `sequentialPairLaw`, to
+the `hind` premise of the executable killed-collector moment bound. -/
+theorem retainedSampleHistory_approxIndep_prefix_next_of_sequentialPair_final
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (initial : Measure (RetainedSampleHistory S))
+    {epsilon : ℝ} {i k : ℕ} (hik : i < k)
+    (hpair : ApproxIndepFun epsilon
+      (fun pair => sequentialPrefixSum
+        (retainedSampleObservation weight) i pair.1)
+      (fun pair => retainedOptionWeight weight pair.2)
+      (sequentialPairLaw
+        (iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+          initial i)
+        (K ∘ retainedSampleHistoryState))) :
+    ApproxIndepFun epsilon
+      (sequentialPrefixSum (retainedSampleObservation weight) i)
+      (retainedSampleObservation weight i)
+      (iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+        initial k) := by
+  apply retainedSampleHistory_approxIndep_prefix_next_of_step
+    K hK hKprob weight hweight initial hik
+  exact retainedSampleHistory_approxIndep_prefix_next_of_sequentialPair
+    K hK hKprob weight hweight initial i hpair
 
 /-- At every horizon, projecting the coordinate-recording shadow to its
 prefix sum gives exactly the retained-sum shadow.  Thus the individual
@@ -478,6 +647,9 @@ theorem iterated_retainedSumKernel_average_secondMoment_le_of_approxIndepPrefix
 #print axioms retainedSampleHistoryKernel_measurable_and_probability
 #print axioms map_iterated_retainedSampleHistoryKernel_state
 #print axioms retainedSampleHistory_prefixSum_update
+#print axioms map_retainedSample_prefix_next_succ_eq_sequentialPairLaw
+#print axioms
+  retainedSampleHistory_approxIndep_prefix_next_of_sequentialPair_final
 #print axioms map_retainedSample_prefix_next_iteratedKernelLaw_eq_of_le
 #print axioms retainedSampleHistory_approxIndep_prefix_next_of_step
 #print axioms map_iterated_retainedSampleHistoryKernel_sum
