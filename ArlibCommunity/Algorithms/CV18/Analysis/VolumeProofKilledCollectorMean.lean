@@ -148,6 +148,146 @@ theorem map_iterated_retainedSumKernel_state
         _ = (iteratedKernelLaw (fun _ => K)
             (initial.map retainedSumState) steps).bind K := by rw [ih]
 
+set_option maxHeartbeats 1000000 in
+/-- Nonnegative initial totals and nonnegative retained weights keep every
+shadow accumulated total nonnegative. -/
+theorem iterated_retainedSumKernel_ae_total_nonnegative
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (hweight0 : ∀ state, 0 ≤ weight state)
+    (initial : Measure (ℝ × Option S))
+    (hinitial0 : ∀ᵐ state ∂initial, 0 ≤ state.1) : ∀ steps,
+    ∀ᵐ state ∂iteratedKernelLaw
+      (fun _ => retainedSumKernel K weight) initial steps,
+      0 ≤ state.1 := by
+  have hsum := retainedSumKernel_measurable_and_probability
+    K hK hKprob weight hweight
+  intro steps
+  induction steps with
+  | zero => exact hinitial0
+  | succ steps ih =>
+      rw [iteratedKernelLaw_succ]
+      let R : Kernel (ℝ × Option S) (ℝ × Option S) :=
+        ⟨retainedSumKernel K weight, hsum.1⟩
+      letI : IsMarkovKernel R := ⟨hsum.2⟩
+      change ∀ᵐ state ∂R ∘ₘ iteratedKernelLaw
+        (fun _ => retainedSumKernel K weight) initial steps, 0 ≤ state.1
+      apply Measure.ae_comp_of_ae_ae (κ := R)
+        (measurableSet_le measurable_const measurable_fst)
+      filter_upwards [ih] with state hstate0
+      change ∀ᵐ next ∂retainedSumKernel K weight state, 0 ≤ next.1
+      unfold retainedSumKernel
+      have hout : Measurable fun next : Option S =>
+          (state.1 + retainedOptionWeight weight next, next) :=
+        (measurable_const.add
+          (measurable_retainedOptionWeight hweight)).prodMk measurable_id
+      apply (ae_map_iff hout.aemeasurable
+        (measurableSet_le measurable_const measurable_fst)).2
+      filter_upwards with next
+      cases next with
+      | none => simpa [retainedOptionWeight] using hstate0
+      | some next =>
+          exact add_nonneg hstate0 (hweight0 next)
+
+/-- The shadow expected total is exactly the initial expected total plus the
+sum of the zero-filled retained-state marginal means.  This is the finite
+endpoint-marginal identity needed for CV18's killed phase collector. -/
+theorem lintegral_iterated_retainedSumKernel_total_eq_sum_marginals
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (hweight0 : ∀ state, 0 ≤ weight state)
+    (initial : Measure (ℝ × Option S))
+    (hinitial0 : ∀ᵐ state ∂initial, 0 ≤ state.1) : ∀ steps,
+    (∫⁻ state, ENNReal.ofReal state.1
+      ∂iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+        initial steps) =
+      (∫⁻ state, ENNReal.ofReal state.1 ∂initial) +
+        ∑ i ∈ Finset.range steps,
+          ∫⁻ state, ENNReal.ofReal (retainedOptionWeight weight state)
+            ∂iteratedKernelLaw (fun _ => K)
+              (initial.map retainedSumState) (i + 1) := by
+  have hsum := retainedSumKernel_measurable_and_probability
+    K hK hKprob weight hweight
+  have htotalMeas : Measurable fun state : ℝ × Option S =>
+      ENNReal.ofReal state.1 :=
+    ENNReal.measurable_ofReal.comp measurable_fst
+  have hweightOpt : Measurable (retainedOptionWeight weight) :=
+    measurable_retainedOptionWeight hweight
+  have hweightENN : Measurable fun state : Option S =>
+      ENNReal.ofReal (retainedOptionWeight weight state) :=
+    ENNReal.measurable_ofReal.comp hweightOpt
+  have hweightOpt0 : ∀ state : Option S,
+      0 ≤ retainedOptionWeight weight state := by
+    intro state
+    cases state with
+    | none => rfl
+    | some state => exact hweight0 state
+  intro steps
+  induction steps with
+  | zero => simp
+  | succ steps ih =>
+      let old := iteratedKernelLaw
+        (fun _ => retainedSumKernel K weight) initial steps
+      have hold0 : ∀ᵐ state ∂old, 0 ≤ state.1 :=
+        iterated_retainedSumKernel_ae_total_nonnegative
+          K hK hKprob weight hweight hweight0 initial hinitial0 steps
+      let nextMean : ℝ × Option S → ENNReal := fun state =>
+        ∫⁻ next, ENNReal.ofReal (retainedOptionWeight weight next) ∂K state.2
+      have hnextMean : Measurable nextMean := by
+        exact (Measure.measurable_lintegral hweightENN).comp
+          (hK.comp measurable_snd)
+      have hinner : ∀ᵐ state ∂old,
+          (∫⁻ nextState, ENNReal.ofReal nextState.1
+            ∂retainedSumKernel K weight state) =
+          ENNReal.ofReal state.1 + nextMean state := by
+        filter_upwards [hold0] with state hstate0
+        unfold retainedSumKernel nextMean
+        have hout : Measurable fun next : Option S =>
+            (state.1 + retainedOptionWeight weight next, next) :=
+          (measurable_const.add hweightOpt).prodMk measurable_id
+        rw [lintegral_map' htotalMeas.aemeasurable hout.aemeasurable]
+        simp_rw [ENNReal.ofReal_add hstate0 (hweightOpt0 _)]
+        rw [lintegral_add_left measurable_const]
+        let _ : IsProbabilityMeasure (K state.2) := hKprob state.2
+        simp
+      have hnextEq : (∫⁻ state, nextMean state ∂old) =
+          ∫⁻ state, ENNReal.ofReal (retainedOptionWeight weight state)
+            ∂iteratedKernelLaw (fun _ => K)
+              (initial.map retainedSumState) (steps + 1) := by
+        have hlaw : old.bind (K ∘ retainedSumState) =
+            iteratedKernelLaw (fun _ => K)
+              (initial.map retainedSumState) (steps + 1) := by
+          calc
+            old.bind (K ∘ retainedSumState) =
+                (old.map retainedSumState).bind K :=
+              (map_bind_eq_bind_comp_state old measurable_snd hK).symm
+            _ = (iteratedKernelLaw (fun _ => K)
+                (initial.map retainedSumState) steps).bind K := by
+              rw [map_iterated_retainedSumKernel_state
+                K hK hKprob weight hweight initial steps]
+            _ = _ := rfl
+        calc
+          (∫⁻ state, nextMean state ∂old) =
+              ∫⁻ next, ENNReal.ofReal (retainedOptionWeight weight next)
+                ∂old.bind (K ∘ retainedSumState) := by
+            simpa [nextMean, retainedSumState, Function.comp_def] using
+              (Measure.lintegral_bind
+                (m := old) (μ := K ∘ retainedSumState)
+                (f := fun next => ENNReal.ofReal
+                  (retainedOptionWeight weight next))
+                (hK.comp measurable_snd).aemeasurable
+                hweightENN.aemeasurable).symm
+          _ = _ := by rw [hlaw]
+      rw [iteratedKernelLaw_succ,
+        Measure.lintegral_bind hsum.1.aemeasurable htotalMeas.aemeasurable]
+      rw [lintegral_congr_ae hinner, lintegral_add_left htotalMeas]
+      rw [ih, Finset.sum_range_succ, hnextEq]
+      ac_rfl
+
 /-- Pointwise, one shadow step increments the total by exactly the weight of
 the new retained state (zero after death). -/
 theorem retainedSumKernel_total_eq
@@ -232,6 +372,7 @@ theorem integral_retainedLiveTotal_loss_le
 
 #print axioms retainedSumKernel_measurable_and_probability
 #print axioms map_iterated_retainedSumKernel_state
+#print axioms lintegral_iterated_retainedSumKernel_total_eq_sum_marginals
 #print axioms integral_retainedLiveTotal_loss_le
 
 end ArlibCommunity.Algorithms.CV18
