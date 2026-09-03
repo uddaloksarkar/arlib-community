@@ -288,6 +288,57 @@ noncomputable def figureOneFinalScheduledGaussianCountedKernel
   countedContinuation oracle
     (figureOneFinalScheduledRetainedGaussianPhaseProgram q phase)
 
+/-- Forward-associated executable prefix.  This presentation is
+definitionally aligned with `iteratedKernelLaw`; later associativity can
+identify it with the tail-recursive Figure-1 presentation. -/
+noncomputable def figureOneFinalScheduledRetainedGaussianPrefixProgram
+    (q : VolumeParams) : ℕ →
+      MembershipOracleProgram q.n (Option (AmbientSpace q.n))
+  | 0 => figureOneAbortInitialSample q
+  | steps + 1 =>
+      (figureOneFinalScheduledRetainedGaussianPrefixProgram q steps).bind
+        (figureOneFinalScheduledRetainedGaussianPhaseProgram q steps)
+
+theorem figureOneFinalScheduledRetainedGaussianPrefixProgram_countedMeasurable
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ∀ steps,
+      (figureOneFinalScheduledRetainedGaussianPrefixProgram q steps).CountedStronglyMeasurable
+        oracle.query := by
+  intro steps
+  induction steps with
+  | zero =>
+      exact figureOneAbortInitialSample_countedStronglyMeasurable q I oracle
+  | succ steps ih =>
+      have hphase :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle steps
+      unfold figureOneFinalScheduledRetainedGaussianPrefixProgram
+      exact ih.bind hphase.2 hphase.1
+
+/-- Exact counted law of the forward executable Gaussian prefix. -/
+theorem figureOneFinalScheduledRetainedGaussianPrefixProgram_run
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ∀ steps,
+      (figureOneFinalScheduledRetainedGaussianPrefixProgram q steps).run
+          oracle.query =
+        iteratedKernelLaw
+          (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+          ((figureOneAbortInitialSample q).run oracle.query) steps := by
+  intro steps
+  induction steps with
+  | zero => rfl
+  | succ steps ih =>
+      have hprefix :=
+        figureOneFinalScheduledRetainedGaussianPrefixProgram_countedMeasurable
+          q I oracle steps
+      have hphase :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle steps
+      unfold figureOneFinalScheduledRetainedGaussianPrefixProgram
+      rw [MembershipOracleProgram.run_bind_counted oracle.query _ _
+        hprefix hphase.2 hphase.1, ih]
+      rfl
+
 /-- Finite chronological reference for every prefix of Gaussian phases.
 The reference has the exact ideal retained-point marginal, additive
 exact-chance loss, and only the sum of warm expected phase costs. -/
@@ -378,9 +429,38 @@ theorem exists_figureOneFinalScheduledGaussianCountedReference
     (figureOneAbortInitialSample_queryBound q).lintegral_queryCount_le
       hinitialStrong
 
+/-- Program-level form of the Gaussian-prefix counted reference. -/
+theorem exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (steps : ℕ) :
+    ∃ reference : Measure (Option (AmbientSpace q.n) × ℕ),
+      MeasureLeUpTo
+        ((figureOneFinalScheduledRetainedGaussianPrefixProgram q steps).run
+          oracle.query)
+        reference
+        ((ENNReal.ofReal (q.eps / 64) +
+            scheduledBalancedStationaryTargetError q) +
+          ∑ phase ∈ Finset.range steps,
+            figureOnePhaseSampleCount q (scheduleValue q phase) •
+              figureOneCorrectedTransitionBudget q) ∧
+      reference.fst = figureOneFinalScheduledIdealPhaseStart q I steps ∧
+      countedQueryCost reference ≤
+        1 + ∑ phase ∈ Finset.range steps,
+          ((384 * (figureOnePhaseSampleCount q (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.retryLimit q
+              (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.properStride q
+              (scheduleValue q phase)) : ℕ) : ENNReal) := by
+  rw [figureOneFinalScheduledRetainedGaussianPrefixProgram_run q I oracle steps]
+  exact exists_figureOneFinalScheduledGaussianCountedReference q I oracle steps
+
 #print axioms figureOneFinalScheduledGaussianIdealPhaseExpectedCost_le
 #print axioms figureOneFinalScheduledGaussianIdealPhaseEndpoint_leUpTo
 #print axioms figureOneAbortInitialRun_fst_leUpTo_idealPhaseStart
 #print axioms exists_figureOneFinalScheduledGaussianCountedReference
+#print axioms
+  figureOneFinalScheduledRetainedGaussianPrefixProgram_run
+#print axioms
+  exists_figureOneFinalScheduledGaussianPrefixProgram_countedReference
 
 end ArlibCommunity.Algorithms.CV18
