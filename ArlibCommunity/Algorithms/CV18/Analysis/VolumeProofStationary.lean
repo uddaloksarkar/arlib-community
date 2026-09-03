@@ -986,6 +986,34 @@ theorem gaussianRatioWeight_secondMoment_eq (q : VolumeParams)
   rw [hweighted]
   ring
 
+/-- The executable cubed Gaussian ratio weight has the exact normalized
+third-moment partition-function formula. -/
+theorem gaussianRatioWeight_thirdMoment_eq (q : VolumeParams)
+    (I : VolumeInput q.n) {sigma2 tau2 : ℝ}
+    (hsigma2 : 0 < sigma2) (htau2 : 0 < tau2) :
+    (∫ x, gaussianRatioWeight sigma2 tau2 x ^ 3
+        ∂(truncatedGaussianProbability q I sigma2 hsigma2 :
+          Measure (AmbientSpace q.n))) =
+      gaussianIntegral (truncatedBody q I)
+          (sigma2 * tau2 / (3 * sigma2 - 2 * tau2)) /
+        gaussianIntegral (truncatedBody q I) sigma2 := by
+  rw [integral_truncatedGaussianProbability q I hsigma2]
+  have hweighted :
+      (∫ x in truncatedBody q I,
+          gaussianRatioWeight sigma2 tau2 x ^ 3 * gaussianDensity sigma2 x) =
+        gaussianIntegral (truncatedBody q I)
+          (sigma2 * tau2 / (3 * sigma2 - 2 * tau2)) := by
+    have hpaper := gaussianRatio_thirdMomentIntegral q
+      (truncatedVolumeInput q I) hsigma2 htau2
+    simp only [truncatedVolumeInput_coe] at hpaper
+    rw [← hpaper]
+    apply setIntegral_congr_fun (truncatedBody_measurable q I)
+    intro x hx
+    change gaussianRatioWeight sigma2 tau2 x ^ 3 * gaussianDensity sigma2 x = _
+    rw [gaussianRatioWeight_eq_sample q I sigma2 tau2 hx]
+  rw [hweighted]
+  ring
+
 /-- The executable terminal weight has truncated ordinary volume divided by
 the terminal Gaussian partition function as its stationary expectation. -/
 theorem uniformRatioWeight_mean_eq (q : VolumeParams)

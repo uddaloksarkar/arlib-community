@@ -202,6 +202,34 @@ theorem gaussianRatio_secondMomentIntegral
   field_simp [(Real.exp_pos _).ne', hsigma2.ne', htau2.ne']
   ring
 
+/-- Cubing an adjacent Gaussian importance weight produces the Gaussian
+integral at effective variance `sigma2*tau2/(3*sigma2-2*tau2)`.
+
+For the fixed-rate schedule this variance remains positive even in dimension
+three, unlike the fourth-moment effective variance.  This is the exact moment
+identity needed by the `L³` treatment of the low-dimensional phase. -/
+theorem gaussianRatio_thirdMomentIntegral
+    (q : VolumeParams) (I : VolumeInput q.n) {sigma2 tau2 : ℝ}
+    (hsigma2 : 0 < sigma2) (htau2 : 0 < tau2) :
+    (∫ x in (I.body : Set (AmbientSpace q.n)),
+        gaussianRatioSample (I.body : Set (AmbientSpace q.n)) sigma2 tau2 x ^ 3 *
+          gaussianDensity sigma2 x) =
+      gaussianIntegral (I.body : Set (AmbientSpace q.n))
+        (sigma2 * tau2 / (3 * sigma2 - 2 * tau2)) := by
+  have hK : MeasurableSet (I.body : Set (AmbientSpace q.n)) := I.body.isClosed.measurableSet
+  rw [gaussianIntegral_eq_setIntegral hK]
+  apply MeasureTheory.integral_congr_ae
+  filter_upwards [ae_restrict_mem hK] with x hx
+  simp only [gaussianRatioSample, unnormGaussian, Set.indicator_of_mem hx]
+  rw [gaussianDensity_eq, gaussianDensity_eq]
+  rw [div_pow]
+  rw [← Real.exp_nat_mul, ← Real.exp_nat_mul]
+  norm_num only [Nat.cast_ofNat]
+  rw [← Real.exp_sub, ← Real.exp_add]
+  congr 1
+  field_simp [(Real.exp_pos _).ne', hsigma2.ne', htau2.ne']
+  ring
+
 /-- The normalized first moment of an exact Gaussian ratio is the ratio of its
 two partition functions. -/
 theorem gaussianRatio_mean_eq
@@ -231,6 +259,26 @@ theorem gaussianRatio_relativeSecondMoment_eq
         gaussianIntegral (I.body : Set (AmbientSpace q.n)) sigma2 /
           gaussianIntegral (I.body : Set (AmbientSpace q.n)) tau2 ^ 2 := by
   rw [gaussianRatio_secondMomentIntegral q I hsigma2 htau2]
+  have hs := (gaussianIntegral_pos q I hsigma2).ne'
+  have ht := (gaussianIntegral_pos q I htau2).ne'
+  field_simp [hs, ht]
+
+/-- The normalized relative third moment of an exact phase ratio is the
+corresponding three-partition-function quotient. -/
+theorem gaussianRatio_relativeThirdMoment_eq
+    (q : VolumeParams) (I : VolumeInput q.n) {sigma2 tau2 : ℝ}
+    (hsigma2 : 0 < sigma2) (htau2 : 0 < tau2) :
+    ((∫ x in (I.body : Set (AmbientSpace q.n)),
+          gaussianRatioSample (I.body : Set (AmbientSpace q.n)) sigma2 tau2 x ^ 3 *
+            gaussianDensity sigma2 x) /
+        gaussianIntegral (I.body : Set (AmbientSpace q.n)) sigma2) /
+        (gaussianIntegral (I.body : Set (AmbientSpace q.n)) tau2 /
+          gaussianIntegral (I.body : Set (AmbientSpace q.n)) sigma2) ^ 3 =
+      gaussianIntegral (I.body : Set (AmbientSpace q.n))
+          (sigma2 * tau2 / (3 * sigma2 - 2 * tau2)) *
+        gaussianIntegral (I.body : Set (AmbientSpace q.n)) sigma2 ^ 2 /
+          gaussianIntegral (I.body : Set (AmbientSpace q.n)) tau2 ^ 3 := by
+  rw [gaussianRatio_thirdMomentIntegral q I hsigma2 htau2]
   have hs := (gaussianIntegral_pos q I hsigma2).ne'
   have ht := (gaussianIntegral_pos q I htau2).ne'
   field_simp [hs, ht]
