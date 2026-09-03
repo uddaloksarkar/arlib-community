@@ -10,6 +10,65 @@ namespace ArlibCommunity.Algorithms.CV18
 open MeasureTheory ProbabilityTheory
 open scoped ENNReal
 
+/-- Query-free return is a right identity for the oracle-program syntax. -/
+theorem MembershipOracleProgram.bind_pure_right_cv18
+    {n : ℕ} {A : Type} (program : MembershipOracleProgram n A) :
+    program.bind MembershipOracleProgram.pure = program := by
+  induction program with
+  | pure value => rfl
+  | query point branch ih =>
+      simp only [MembershipOracleProgram.bind]
+      congr 1
+      funext answer
+      exact ih answer
+  | randomNat law branch ih =>
+      simp only [MembershipOracleProgram.bind]
+      congr 1
+      funext seed
+      exact ih seed
+  | randomPoint law hprob branch ih =>
+      simp only [MembershipOracleProgram.bind]
+      congr 1
+      funext point
+      exact ih point
+  | randomReal law hprob branch ih =>
+      simp only [MembershipOracleProgram.bind]
+      congr 1
+      funext value
+      exact ih value
+
+/-- Associativity of oracle-program bind, available to the counted
+chronological assembly without importing later estimator modules. -/
+theorem MembershipOracleProgram.bind_assoc_counted_cv18
+    {n : ℕ} {A B C : Type}
+    (program : MembershipOracleProgram n A)
+    (next : A → MembershipOracleProgram n B)
+    (last : B → MembershipOracleProgram n C) :
+    (program.bind next).bind last =
+      program.bind (fun value => (next value).bind last) := by
+  induction program with
+  | pure value => rfl
+  | query point branch ih =>
+      simp only [MembershipOracleProgram.bind]
+      congr 1
+      funext answer
+      exact ih answer
+  | randomNat law branch ih =>
+      simp only [MembershipOracleProgram.bind]
+      congr 1
+      funext seed
+      exact ih seed
+  | randomPoint law hprob branch ih =>
+      simp only [MembershipOracleProgram.bind]
+      congr 1
+      funext point
+      exact ih point
+  | randomReal law hprob branch ih =>
+      simp only [MembershipOracleProgram.bind]
+      congr 1
+      funext value
+      exact ih value
+
 /-- Forgetting the accumulated count after a counted continuation gives the
 ordinary estimate kernel, independently of the incoming count. -/
 theorem MembershipOracleProgram.countedContinuation_fst
@@ -220,6 +279,8 @@ theorem MembershipOracleProgram.map_bind_countedContinuation_simulation
   · fun_prop
 
 #print axioms MembershipOracleProgram.countedContinuation_fst
+#print axioms MembershipOracleProgram.bind_pure_right_cv18
+#print axioms MembershipOracleProgram.bind_assoc_counted_cv18
 #print axioms MembershipOracleProgram.fst_bind_countedContinuation
 #print axioms MembershipOracleProgram.countedQueryCost_bind_countedContinuation
 #print axioms MembershipOracleProgram.countedContinuation_step

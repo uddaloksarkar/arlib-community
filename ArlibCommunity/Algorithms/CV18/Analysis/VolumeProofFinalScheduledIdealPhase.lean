@@ -339,6 +339,56 @@ theorem figureOneFinalScheduledRetainedGaussianPrefixProgram_run
         hprefix hphase.2 hphase.1, ih]
       rfl
 
+/-- Appending the chronologically next retained phase to a retained tail
+chain extends that chain by one phase. -/
+theorem figureOneFinalScheduledRetainedGaussianChain_bind_next
+    (q : VolumeParams) : ∀ phase steps
+      (state : Option (AmbientSpace q.n)),
+      (figureOneFinalScheduledRetainedGaussianChain q phase steps state).bind
+          (figureOneFinalScheduledRetainedGaussianPhaseProgram q
+            (phase + steps)) =
+        figureOneFinalScheduledRetainedGaussianChain q phase (steps + 1)
+          state := by
+  intro phase steps
+  induction steps generalizing phase with
+  | zero =>
+      intro state
+      simp only [figureOneFinalScheduledRetainedGaussianChain, Nat.add_zero]
+      exact (MembershipOracleProgram.bind_pure_right_cv18
+        (figureOneFinalScheduledRetainedGaussianPhaseProgram q phase state)).symm
+  | succ steps ih =>
+      intro state
+      simp only [figureOneFinalScheduledRetainedGaussianChain]
+      rw [MembershipOracleProgram.bind_assoc_counted_cv18]
+      congr 1
+      funext nextState
+      have hindex : phase + (steps + 1) = (phase + 1) + steps := by omega
+      rw [hindex]
+      exact ih (phase + 1) nextState
+
+/-- The forward-associated retained Gaussian prefix is the same oracle
+program as the initial sampler followed by the tail-recursive retained
+Gaussian chain. -/
+theorem figureOneFinalScheduledRetainedGaussianPrefixProgram_eq_bind_chain
+    (q : VolumeParams) : ∀ steps,
+      figureOneFinalScheduledRetainedGaussianPrefixProgram q steps =
+        (figureOneAbortInitialSample q).bind
+          (figureOneFinalScheduledRetainedGaussianChain q 0 steps) := by
+  intro steps
+  induction steps with
+  | zero =>
+      simp only [figureOneFinalScheduledRetainedGaussianPrefixProgram,
+        figureOneFinalScheduledRetainedGaussianChain]
+      exact (MembershipOracleProgram.bind_pure_right_cv18
+        (figureOneAbortInitialSample q)).symm
+  | succ steps ih =>
+      simp only [figureOneFinalScheduledRetainedGaussianPrefixProgram]
+      rw [ih, MembershipOracleProgram.bind_assoc_counted_cv18]
+      congr 1
+      funext state
+      simpa using
+        figureOneFinalScheduledRetainedGaussianChain_bind_next q 0 steps state
+
 /-- Erasing the ratio coordinate after one executable Gaussian estimator
 gives exactly the retained phase's full result-and-count law. -/
 theorem figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
@@ -902,6 +952,9 @@ theorem exists_figureOneFinalScheduledRetainedComplete_countedReference
 #print axioms exists_figureOneFinalScheduledGaussianCountedReference
 #print axioms
   figureOneFinalScheduledRetainedGaussianPrefixProgram_run
+#print axioms figureOneFinalScheduledRetainedGaussianChain_bind_next
+#print axioms
+  figureOneFinalScheduledRetainedGaussianPrefixProgram_eq_bind_chain
 #print axioms
   figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
 #print axioms
