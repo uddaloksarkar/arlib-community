@@ -1,6 +1,8 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceMomentTransfer
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofProductAccuracy
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceFullGoodBad
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceFuture
 
 /-!
 # Raw phase-mean comparison for the executable scheduled trace
@@ -18,6 +20,181 @@ open MeasureTheory ProbabilityTheory
 namespace ArlibCommunity.Algorithms.CV18
 
 open scoped ENNReal
+
+/-! ## The raw coordinate as an immediate phase output -/
+
+/-- Read a live phase average, sending a failed phase to zero and clamping
+the otherwise nonnegative executable observation at zero. -/
+def figureOneScheduledTraceLiveRawOutput
+    (result : Option (ℝ × AmbientSpace n)) : ℝ :=
+  match result with
+  | none => 0
+  | some value => max 0 value.1
+
+theorem measurable_figureOneScheduledTraceLiveRawOutput :
+    Measurable (figureOneScheduledTraceLiveRawOutput (n := n)) := by
+  unfold figureOneScheduledTraceLiveRawOutput
+  convert Measurable.optionElim (0 : ℝ)
+    (measurable_const.max measurable_fst) using 1
+  funext result
+  cases result <;> rfl
+
+/-- A trace which was already dead appends the neutral raw coordinate `1`;
+a live trace appends the nonnegative phase observation (or zero on failure). -/
+theorem scheduledBalancedTracePhaseVariable_append_eq_rawOutput
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (trace : ScheduledBalancedCoolingTrace q.n)
+    (hvalid : ScheduledBalancedCoolingTraceValid phase trace)
+    (result : Option (ℝ × AmbientSpace q.n)) :
+    scheduledBalancedTracePhaseVariable q (phase + 1)
+        (scheduledBalancedCoolingTraceAppend trace result) =
+      if trace.2 then figureOneScheduledTraceLiveRawOutput result else 1 := by
+  unfold scheduledBalancedTracePhaseVariable
+    scheduledBalancedTraceChronologicalPhaseVariable
+    figureOneScheduledTraceLiveRawOutput
+  rw [balancedCoolingChronologicalPhaseVariable_apply_succ q phase hphase]
+  rcases trace with ⟨history, live⟩
+  change history.2.1 = phase ∧ _ at hvalid
+  cases live <;> cases result <;>
+    simp [scheduledBalancedCoolingTraceAppend, balancedCoolingHistoryAppend,
+      hvalid.1]
+
+/-- At the instant a phase is appended, its mapped raw-coordinate law is
+exactly the corresponding trace-dependent scalar output law. -/
+theorem bind_scheduledBalancedTraceRawPhaseOutput_eq_forwardTrace_succ
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q) :
+    let rho := scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I phase
+    let outK := scheduledBalancedTracePhaseOutputLaw
+      figureOneFinalScheduledBalancedParameters q I phase
+      figureOneScheduledTraceLiveRawOutput 1
+    rho.bind outK =
+      (scheduledBalancedForwardTraceLaw
+        figureOneFinalScheduledBalancedParameters q I (phase + 1)).map
+        (scheduledBalancedTracePhaseVariable q (phase + 1)) := by
+  dsimp only
+  let rho := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I phase
+  let outK := scheduledBalancedTracePhaseOutputLaw
+    figureOneFinalScheduledBalancedParameters q I phase
+    figureOneScheduledTraceLiveRawOutput 1
+  let traceK := scheduledBalancedTracePhaseKernel
+    figureOneFinalScheduledBalancedParameters q I phase
+  let Y := scheduledBalancedTracePhaseVariable q (phase + 1)
+  have houtK := scheduledBalancedTracePhaseOutputLaw_measurable_and_probability
+    figureOneFinalScheduledBalancedParameters q I phase
+    figureOneScheduledTraceLiveRawOutput 1
+    measurable_figureOneScheduledTraceLiveRawOutput
+  have htraceK := scheduledBalancedTracePhaseKernel_measurable_and_probability
+    figureOneFinalScheduledBalancedParameters q I phase
+  have hY : Measurable Y :=
+    measurable_scheduledBalancedTracePhaseVariable q (phase + 1)
+  rw [show scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I (phase + 1) =
+      rho.bind traceK by rfl,
+    map_bind_eq_bind_map_of_measurable rho htraceK.1 hY]
+  apply Measure.bind_congr_right
+  filter_upwards [scheduledBalancedForwardTraceLaw_ae_valid
+    figureOneFinalScheduledBalancedParameters q I phase] with trace hvalid
+  unfold scheduledBalancedTracePhaseOutputLaw
+    scheduledBalancedTracePhaseKernel
+  have hconditional : Measurable
+      (if trace.2 then
+        (figureOneScheduledTraceLiveRawOutput (n := q.n)) else
+        fun _ : Option (ℝ × AmbientSpace q.n) => (1 : ℝ)) := by
+    cases trace.2
+    · exact measurable_const
+    · exact measurable_figureOneScheduledTraceLiveRawOutput
+  have happend : Measurable (scheduledBalancedCoolingTraceAppend trace) :=
+    (measurable_scheduledBalancedCoolingTraceAppend (n := q.n)).comp
+      (measurable_const.prodMk measurable_id)
+  calc
+    (scheduledBalancedTracePhaseObservationLaw
+        figureOneFinalScheduledBalancedParameters q I phase trace).map
+          (if trace.2 then
+            (figureOneScheduledTraceLiveRawOutput (n := q.n)) else
+            fun _ : Option (ℝ × AmbientSpace q.n) => (1 : ℝ)) =
+      (scheduledBalancedTracePhaseObservationLaw
+        figureOneFinalScheduledBalancedParameters q I phase trace).map
+          (Y ∘ scheduledBalancedCoolingTraceAppend trace) := by
+      apply Measure.map_congr
+      filter_upwards with result
+      simp only [Function.comp_apply]
+      rw [show (if trace.2 = true then
+          (figureOneScheduledTraceLiveRawOutput (n := q.n)) else
+          fun _ : Option (ℝ × AmbientSpace q.n) => (1 : ℝ)) result =
+        if trace.2 = true then
+          figureOneScheduledTraceLiveRawOutput result else 1 by
+          by_cases h : trace.2 = true <;> simp [h]]
+      exact (scheduledBalancedTracePhaseVariable_append_eq_rawOutput
+        q phase hphase trace hvalid result).symm
+    _ = ((scheduledBalancedTracePhaseObservationLaw
+        figureOneFinalScheduledBalancedParameters q I phase trace).map
+          (scheduledBalancedCoolingTraceAppend trace)).map Y :=
+      (Measure.map_map hY happend).symm
+
+/-- Later phases preserve the already-created raw coordinate law. -/
+theorem map_scheduledBalancedForwardTraceLaw_rawPhase_eq_prefix
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (phase future : ℕ)
+    (horizon : phase + 1 + future ≤ figureOneDependentPhaseCount q) :
+    (scheduledBalancedForwardTraceLaw parameters q I
+      (phase + 1 + future)).map
+        (scheduledBalancedTracePhaseVariable q (phase + 1)) =
+      (scheduledBalancedForwardTraceLaw parameters q I (phase + 1)).map
+        (scheduledBalancedTracePhaseVariable q (phase + 1)) := by
+  let Y := scheduledBalancedTracePhaseVariable q (phase + 1)
+  have hY : Measurable Y :=
+    measurable_scheduledBalancedTracePhaseVariable q (phase + 1)
+  induction future with
+  | zero => rfl
+  | succ future ih =>
+      let m := phase + 1 + future
+      let law := scheduledBalancedForwardTraceLaw parameters q I m
+      let K := scheduledBalancedTracePhaseKernel parameters q I m
+      have hmphase : m ≤ figureOneDependentPhaseCount q := by
+        dsimp only [m]
+        omega
+      have hK := scheduledBalancedTracePhaseKernel_measurable_and_probability
+        parameters q I m
+      have hpreserve : ∀ᵐ trace ∂law, ∀ᵐ next ∂K trace,
+          Y next = Y trace := by
+        filter_upwards [scheduledBalancedForwardTraceLaw_ae_valid
+          parameters q I m] with trace hvalid
+        unfold K scheduledBalancedTracePhaseKernel
+        let append := scheduledBalancedCoolingTraceAppend trace
+        have happend : Measurable append :=
+          (measurable_scheduledBalancedCoolingTraceAppend (n := q.n)).comp
+            (measurable_const.prodMk measurable_id)
+        let good : Set (ScheduledBalancedCoolingTrace q.n) :=
+          {next | Y next = Y trace}
+        have hgood : MeasurableSet good :=
+          measurableSet_eq_fun hY measurable_const
+        apply (ae_map_iff happend.aemeasurable hgood).2
+        filter_upwards with result
+        exact scheduledBalancedTracePhaseVariable_append_eq q hvalid hmphase
+          (by omega) (by dsimp only [m]; omega) result
+      have hstep : (law.bind K).map Y = law.map Y := by
+        rw [map_bind_eq_bind_map_of_measurable law hK.1 hY]
+        calc
+          law.bind (fun trace => (K trace).map Y) =
+              law.bind (fun trace => Measure.dirac (Y trace)) := by
+            apply Measure.bind_congr_right
+            filter_upwards [hpreserve] with trace htrace
+            calc
+              (K trace).map Y =
+                  (K trace).map (fun _ => Y trace) :=
+                Measure.map_congr htrace
+              _ = Measure.dirac (Y trace) := by
+                let _ : IsProbabilityMeasure (K trace) := hK.2 trace
+                simp
+          _ = law.map Y := Measure.bind_dirac_eq_map law hY
+      have hsuccLaw : scheduledBalancedForwardTraceLaw parameters q I
+          (phase + 1 + (future + 1)) = law.bind K := by rfl
+      rw [hsuccLaw, hstep]
+      exact ih (by omega)
 
 /-- Total variation transfers the first moment when the scalar observable is
 bounded only almost everywhere under the two probability measures. -/
