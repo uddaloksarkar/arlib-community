@@ -96,6 +96,176 @@ noncomputable def figureOneRandomizedIdealHistoryLaw
   (iteratedKernelLaw (figureOneIdealChronologicalPhaseKernel q)
     (scheduledChronologicalCommonInitial q I) phases).map Prod.snd
 
+/-- Append one freshly drawn ideal phase block to a visible history. -/
+noncomputable def figureOneRandomizedIdealHistoryAppend
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q) :
+    Option (BalancedCoolingHistory q.n) →
+      FigureOneIdealPhaseSampleSpace q
+        (figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩) →
+      Option (BalancedCoolingHistory q.n) :=
+  fun history samples => match history with
+    | none => none
+    | some history => balancedCoolingHistorySnocTerminal history <| some
+        (figureOneIdealPhaseEstimator q
+          (figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩) samples,
+        figureOneIdealPhaseRetainedPoint q
+          (figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩) samples)
+
+theorem measurable_uncurry_figureOneRandomizedIdealHistoryAppend
+    (q : VolumeParams) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q) :
+    Measurable (Function.uncurry
+      (figureOneRandomizedIdealHistoryAppend q phase hphase)) := by
+  let p := figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩
+  have hresult : Measurable fun samples : FigureOneIdealPhaseSampleSpace q p =>
+      (figureOneIdealPhaseEstimator q p samples,
+        figureOneIdealPhaseRetainedPoint q p samples) :=
+    (figureOneIdealPhaseEstimator_measurable q p).prodMk
+      (measurable_figureOneIdealPhaseRetainedPoint q p)
+  have hsome : Measurable fun state :
+      FigureOneIdealPhaseSampleSpace q p × BalancedCoolingHistory q.n =>
+      balancedCoolingHistorySnocTerminal state.2 (some
+        (figureOneIdealPhaseEstimator q p state.1,
+          figureOneIdealPhaseRetainedPoint q p state.1)) :=
+    measurable_balancedCoolingHistorySnocTerminal.comp <|
+      measurable_snd.prodMk (measurable_some.comp (hresult.comp measurable_fst))
+  have hordered : Measurable fun state :
+      FigureOneIdealPhaseSampleSpace q p ×
+        Option (BalancedCoolingHistory q.n) =>
+      figureOneRandomizedIdealHistoryAppend q phase hphase state.2 state.1 := by
+    convert Measurable.optionCases
+      ((fun _ => 0), 0, (1 : ℝ), (0 : AmbientSpace q.n))
+      (noneValue := fun _ : FigureOneIdealPhaseSampleSpace q p =>
+        (none : Option (BalancedCoolingHistory q.n)))
+      (someValue := fun state =>
+        balancedCoolingHistorySnocTerminal state.2 (some
+          (figureOneIdealPhaseEstimator q p state.1,
+            figureOneIdealPhaseRetainedPoint q p state.1)))
+      measurable_const hsome using 1
+    funext state
+    cases state.2 <;> rfl
+  exact hordered.comp (measurable_snd.prodMk measurable_fst)
+
+/-- The freshly randomized ideal phase kernel on visible history alone. -/
+noncomputable def figureOneRandomizedIdealHistoryKernel
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q) :
+    Option (BalancedCoolingHistory q.n) →
+      Measure (Option (BalancedCoolingHistory q.n)) :=
+  let p := figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩
+  fun history => (figureOneIdealPhaseLaw q I p).map
+    (figureOneRandomizedIdealHistoryAppend q phase hphase history)
+
+theorem figureOneRandomizedIdealHistoryKernel_measurable_and_probability
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q) :
+    Measurable (figureOneRandomizedIdealHistoryKernel q I phase hphase) ∧
+    ∀ history, IsProbabilityMeasure
+      (figureOneRandomizedIdealHistoryKernel q I phase hphase history) := by
+  let p := figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩
+  let block := figureOneIdealPhaseLaw q I p
+  let append := figureOneRandomizedIdealHistoryAppend q phase hphase
+  have happend := measurable_uncurry_figureOneRandomizedIdealHistoryAppend
+    q phase hphase
+  constructor
+  · exact measurable_measure_map_param_variable measurable_const
+      (fun _ => figureOneIdealPhaseLaw_isProbabilityMeasure q I p)
+      happend
+  · intro history
+    let _ : IsProbabilityMeasure block :=
+      figureOneIdealPhaseLaw_isProbabilityMeasure q I p
+    exact Measure.isProbabilityMeasure_map
+      (happend.comp (measurable_const.prodMk measurable_id)).aemeasurable
+
+/-- If the visible ideal prefix is independent of the next latent phase
+block, then projecting the old deterministic construction is exactly one
+step of the genuinely randomized history kernel. -/
+theorem figureOneRandomizedIdealHistoryLaw_succ_of_indepFun
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (hind : IndepFun
+      (fun state => (figureOneIdealChronologicalState q phase state).2)
+      (fun state => state.1
+        (figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩))
+      (scheduledChronologicalCommonInitial q I)) :
+    (figureOneRandomizedIdealHistoryLaw q I phase).bind
+        (figureOneRandomizedIdealHistoryKernel q I phase hphase) =
+      figureOneRandomizedIdealHistoryLaw q I (phase + 1) := by
+  let common := scheduledChronologicalCommonInitial q I
+  let p := figureOneChronologicalPhaseOrder q ⟨phase, hphase⟩
+  let past := fun state : FigureOneIdealExperimentSpace q ×
+      Option (BalancedCoolingHistory q.n) =>
+    (figureOneIdealChronologicalState q phase state).2
+  let fresh := fun state : FigureOneIdealExperimentSpace q ×
+      Option (BalancedCoolingHistory q.n) => state.1 p
+  let append := figureOneRandomizedIdealHistoryAppend q phase hphase
+  let _ (i : FigureOneIdealPhase q) :
+      IsProbabilityMeasure (figureOneIdealPhaseLaw q I i) :=
+    figureOneIdealPhaseLaw_isProbabilityMeasure q I i
+  let initialHistory :=
+    (truncatedGaussianProbability q I (initialVariance q)
+      (initialVariance_pos q) : Measure (AmbientSpace q.n)).map
+        balancedCoolingInitialHistory
+  let _ : IsProbabilityMeasure initialHistory :=
+    Measure.isProbabilityMeasure_map
+      measurable_balancedCoolingInitialHistory.aemeasurable
+  let _ : IsProbabilityMeasure (figureOneIdealExperimentLaw q I) :=
+    figureOneIdealExperimentLaw_isProbabilityMeasure q I
+  let _ : IsProbabilityMeasure common := by
+    dsimp [common, scheduledChronologicalCommonInitial]
+    infer_instance
+  have hpast : Measurable past :=
+    measurable_snd.comp (measurable_figureOneIdealChronologicalState q phase)
+  have hfresh : Measurable fresh :=
+    (measurable_pi_apply p).comp measurable_fst
+  have hfreshLaw : common.map fresh = figureOneIdealPhaseLaw q I p := by
+    rw [show common.map fresh = (common.map Prod.fst).map (fun samples =>
+        samples p) by
+      exact (Measure.map_map (measurable_pi_apply p) measurable_fst).symm]
+    have hfst : common.map Prod.fst = figureOneIdealExperimentLaw q I := by
+      dsimp only [common, scheduledChronologicalCommonInitial]
+      let initialHistory :=
+        (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).map
+            balancedCoolingInitialHistory
+      let _ : IsProbabilityMeasure initialHistory :=
+        Measure.isProbabilityMeasure_map
+          measurable_balancedCoolingInitialHistory.aemeasurable
+      rw [Measure.map_fst_prod, measure_univ, one_smul]
+    rw [hfst]
+    exact (measurePreserving_eval (figureOneIdealPhaseLaw q I) p).map_eq
+  have hbind := bind_map_fresh_eq_map_append_of_indepFun
+    common past fresh append hpast hfresh
+      (measurable_uncurry_figureOneRandomizedIdealHistoryAppend
+        q phase hphase)
+      (by simpa [past, fresh] using hind)
+  rw [hfreshLaw] at hbind
+  have hpastLaw :
+      figureOneRandomizedIdealHistoryLaw q I phase = common.map past := by
+    rw [figureOneRandomizedIdealHistoryLaw,
+      iteratedKernelLaw_figureOneIdealChronologicalPhaseKernel]
+    exact Measure.map_map measurable_snd
+      (measurable_figureOneIdealChronologicalState q phase)
+  rw [hpastLaw]
+  rw [show figureOneRandomizedIdealHistoryKernel q I phase hphase =
+      fun history => (figureOneIdealPhaseLaw q I p).map (append history) by
+    rfl]
+  rw [hbind]
+  rw [figureOneRandomizedIdealHistoryLaw,
+    iteratedKernelLaw_figureOneIdealChronologicalPhaseKernel,
+    Measure.map_map measurable_snd
+      (measurable_figureOneIdealChronologicalState q (phase + 1))]
+  apply Measure.map_congr
+  filter_upwards with state
+  simp only [Function.comp_apply, figureOneIdealChronologicalState]
+  rw [dif_pos hphase]
+  dsimp only [append, past, fresh,
+    figureOneRandomizedIdealHistoryAppend,
+    figureOneIdealChronologicalAppend]
+  rw [figureOneIdealChronologicalState_fst q phase state]
+  cases (figureOneIdealChronologicalState q phase state).2 <;> rfl
+
 theorem figureOneRandomizedIdealHistoryLaw_isProbabilityMeasure
     (q : VolumeParams) (I : VolumeInput q.n) (phases : ℕ) :
     IsProbabilityMeasure (figureOneRandomizedIdealHistoryLaw q I phases) := by
@@ -322,6 +492,9 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_randomized
 
 #print axioms MeasureLeUpTo.iteratedKernelLaw_le_lawSequence
 #print axioms bind_map_fresh_eq_map_append_of_indepFun
+#print axioms measurable_uncurry_figureOneRandomizedIdealHistoryAppend
+#print axioms figureOneRandomizedIdealHistoryKernel_measurable_and_probability
+#print axioms figureOneRandomizedIdealHistoryLaw_succ_of_indepFun
 #print axioms figureOneRandomizedIdealHistoryLaw_isProbabilityMeasure
 #print axioms figureOneRandomizedIdealHistoryLaw_zero
 #print axioms figureOneRandomizedIdealHistoryLaw_map_output
