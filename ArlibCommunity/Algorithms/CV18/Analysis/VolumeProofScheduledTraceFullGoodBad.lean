@@ -323,6 +323,147 @@ theorem measureLeUpTo_live_dead_bind_of_good_bad
         ac_rfl
       _ ≤ budget + eta := add_le_add hmixMass herror
 
+/-! ## The actual live/dead phase law -/
+
+/-- A Gaussian phase kernel whose input is already in the speedy (scaled)
+coordinates used by the scheduled walk. -/
+noncomputable def figureOneScheduledScaledGaussianPhaseLaw
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ) :
+    AmbientSpace q.n → Measure (Option (ℝ × AmbientSpace q.n)) :=
+  fun current =>
+    (scheduledBalancedTransitionCollectLaw q I (scheduleValue q phase)
+      (gaussianRatioWeight (scheduleValue q phase)
+        (scheduleValue q (phase + 1)))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase))
+      (figureOnePhaseSampleCount q (scheduleValue q phase)) 0 current).map
+        (balancedCoolingAverage
+          (figureOnePhaseSampleCount q (scheduleValue q phase)))
+
+theorem figureOneScheduledScaledGaussianPhaseLaw_measurable_and_probability
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ) :
+    Measurable (figureOneScheduledScaledGaussianPhaseLaw q I phase) ∧
+    ∀ current, IsProbabilityMeasure
+      (figureOneScheduledScaledGaussianPhaseLaw q I phase current) := by
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  have hcollect :=
+    scheduledBalancedTransitionCollectLaw_measurable_and_probability
+      q I (scheduleValue_pos q phase)
+      (measurable_gaussianRatioWeight (scheduleValue q phase)
+        (scheduleValue q (phase + 1)))
+      (figureOneFinalScheduledBalancedParameters.proposalCap q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase))
+      (figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase)) count
+  have havg := measurable_balancedCoolingAverage (n := q.n) count
+  constructor
+  · unfold figureOneScheduledScaledGaussianPhaseLaw
+    exact (Measure.measurable_map _ havg).comp <|
+      hcollect.1.comp (measurable_const.prodMk measurable_id)
+  · intro current
+    unfold figureOneScheduledScaledGaussianPhaseLaw
+    let _ : IsProbabilityMeasure
+        (scheduledBalancedTransitionCollectLaw q I (scheduleValue q phase)
+          (gaussianRatioWeight (scheduleValue q phase)
+            (scheduleValue q (phase + 1)))
+          (figureOneFinalScheduledBalancedParameters.proposalCap q
+            (scheduleValue q phase))
+          (figureOneFinalScheduledBalancedParameters.properStride q
+            (scheduleValue q phase))
+          (figureOneFinalScheduledBalancedParameters.retryLimit q
+            (scheduleValue q phase)) count 0 current) := hcollect.2 0 current
+    exact Measure.isProbabilityMeasure_map havg.aemeasurable
+
+/-- Splitting a trace law into live and dead restrictions identifies its
+next Gaussian observation law exactly.  Live states run the scaled complete
+phase kernel; dead states emit `none` and consume no randomness. -/
+theorem bind_scheduledBalancedTracePhaseObservationLaw_eq_live_dead
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < terminalPhaseSteps q)
+    (law : Measure (ScheduledBalancedCoolingTrace q.n)) :
+    law.bind (scheduledBalancedTracePhaseObservationLaw
+        figureOneFinalScheduledBalancedParameters q I phase) =
+      (scheduledBalancedTraceLiveStateLaw law
+          (fun x => accuracyScaleFactor q • x)).bind
+        (figureOneScheduledScaledGaussianPhaseLaw q I phase) +
+      (scheduledBalancedTraceDeadStateLaw law
+          (fun x => accuracyScaleFactor q • x)) Set.univ •
+        Measure.dirac none := by
+  let liveSet := scheduledBalancedTraceLiveSet q.n
+  let deadSet := scheduledBalancedTraceDeadSet q.n
+  let scale : AmbientSpace q.n → AmbientSpace q.n := fun x =>
+    accuracyScaleFactor q • x
+  let state : ScheduledBalancedCoolingTrace q.n → AmbientSpace q.n :=
+    scale ∘ scheduledBalancedTraceRetainedState
+  let obs := scheduledBalancedTracePhaseObservationLaw
+    figureOneFinalScheduledBalancedParameters q I phase
+  let K := figureOneScheduledScaledGaussianPhaseLaw q I phase
+  have hobs := scheduledBalancedTracePhaseObservationLaw_measurable_and_probability
+    figureOneFinalScheduledBalancedParameters q I phase
+  have hK := figureOneScheduledScaledGaussianPhaseLaw_measurable_and_probability
+    q I phase
+  have hstate : Measurable state := by
+    dsimp only [state, scale]
+    exact ((measurable_const : Measurable fun _ : AmbientSpace q.n =>
+      accuracyScaleFactor q).smul measurable_id).comp
+        measurable_scheduledBalancedTraceRetainedState
+  have hsplit : law = law.restrict liveSet + law.restrict deadSet := by
+    rw [show deadSet = liveSetᶜ by
+      exact scheduledBalancedTraceDeadSet_eq_compl,
+      Measure.restrict_add_restrict_compl
+        measurableSet_scheduledBalancedTraceLiveSet]
+  have hlive : (law.restrict liveSet).bind obs =
+      ((law.restrict liveSet).map state).bind K := by
+    rw [map_bind_eq_bind_comp_state (law.restrict liveSet) hstate hK.1]
+    apply Measure.bind_congr_right
+    filter_upwards [ae_restrict_mem
+      (measurableSet_scheduledBalancedTraceLiveSet (n := q.n))]
+      with trace htrace
+    rcases trace with ⟨history, live⟩
+    cases live with
+    | false =>
+        simp [liveSet, scheduledBalancedTraceLiveSet] at htrace
+    | true =>
+        simp only [obs, scheduledBalancedTracePhaseObservationLaw,
+          if_true, hphase, K, state, scale, Function.comp_apply,
+          scheduledBalancedTraceRetainedState]
+        rfl
+  have hdead : (law.restrict deadSet).bind obs =
+      (law.restrict deadSet) Set.univ • Measure.dirac none := by
+    have heq : ∀ᵐ trace ∂(law.restrict deadSet),
+        obs trace = Measure.dirac none := by
+      filter_upwards [ae_restrict_mem
+        (measurableSet_scheduledBalancedTraceDeadSet (n := q.n))]
+        with trace htrace
+      rcases trace with ⟨history, live⟩
+      cases live with
+      | false => simp [obs, scheduledBalancedTracePhaseObservationLaw]
+      | true => simp [deadSet, scheduledBalancedTraceDeadSet] at htrace
+    rw [Measure.bind_congr_right heq, Measure.bind_const]
+  calc
+    law.bind obs =
+        (law.restrict liveSet + law.restrict deadSet).bind obs :=
+      congrArg (fun mu => mu.bind obs) hsplit
+    _ = (law.restrict liveSet).bind obs +
+        (law.restrict deadSet).bind obs :=
+      measure_bind_add_left _ _ hobs.1
+    _ = ((law.restrict liveSet).map state).bind K +
+        (law.restrict deadSet) Set.univ • Measure.dirac none := by
+      rw [hlive, hdead]
+    _ = _ := by
+      congr 2
+      rw [Measure.restrict_apply MeasurableSet.univ]
+      simp only [Set.univ_inter]
+      symm
+      exact scheduledBalancedTraceDeadStateLaw_apply_univ law scale
+        (by fun_prop)
+
 /-- The dead trace mass is bounded by the same optional-retained exact-chance
 error: the ideal accepted target is supported on `some`. -/
 theorem figureOneScheduledTrace_deadState_mass_le_retainedError
