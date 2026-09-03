@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.FiniteReferenceSequence
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.HistoryPreservingReset
+import ArlibCommunity.Algorithms.CV18.Analysis.Background.SequentialRecordedKernelReset
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofResetReferenceBaseCapstone
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianResetJoint
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalResetJoint
@@ -209,6 +210,189 @@ theorem scheduledBalancedTraceRetainedOption_resetAppend
   unfold scheduledResetTraceAppend
   rw [scheduledBalancedTraceRetainedOption_append]
   simp [hlive]
+
+/-- One chronological outer reset, stated at the public trace level.  It
+replaces the score/endpoint output marginal by `target`, preserves every
+completed coordinate, and records the new score as coordinate `phase + 1`.
+This is the structural induction step behind the global CV18 reference law. -/
+theorem exists_scheduledTraceRecordedReset
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (source : Measure (ScheduledBalancedCoolingTrace q.n))
+    [IsProbabilityMeasure source]
+    (hvalid : ∀ᵐ trace ∂source,
+      ScheduledBalancedCoolingTraceValid phase trace)
+    (retained : Measure (AmbientSpace q.n))
+    (hretained : source.map scheduledBalancedTraceRetainedOption =
+      retained.map some)
+    (target : Measure (ℝ × Option (AmbientSpace q.n)))
+    [IsProbabilityMeasure target]
+    (targetRetained : Measure (AmbientSpace q.n))
+    (htargetRetained : target.map Prod.snd = targetRetained.map some)
+    (htargetNonnegative : ∀ᵐ result ∂target, 0 ≤ result.1)
+    {delta : ENNReal} (_hdelta : delta ≠ ⊤)
+    (hnext : Arlib.TVLe
+      (((sequentialPairLaw source
+        (scheduledBalancedTracePhaseObservationLaw
+          figureOneFinalScheduledBalancedParameters q I phase)).map
+        (fun state => (state.1, scheduledResetPairOutput state.2))).map
+          Prod.snd) target delta) :
+    ∃ reference : Measure (ScheduledBalancedCoolingTrace q.n),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (source.bind (scheduledBalancedTracePhaseKernel
+          figureOneFinalScheduledBalancedParameters q I phase))
+        reference delta ∧
+      reference.map scheduledBalancedTraceRetainedOption =
+        target.map Prod.snd ∧
+      reference.map (scheduledBalancedTracePhaseVariable q (phase + 1)) =
+        target.map Prod.fst ∧
+      (∀ j, 1 ≤ j → j ≤ phase →
+        reference.map (scheduledBalancedTracePhaseVariable q j) =
+          source.map (scheduledBalancedTracePhaseVariable q j)) := by
+  let observation := scheduledBalancedTracePhaseObservationLaw
+    figureOneFinalScheduledBalancedParameters q I phase
+  let raw := (sequentialPairLaw source observation).map
+    (fun state => (state.1, scheduledResetPairOutput state.2))
+  have hobservation :=
+    scheduledBalancedTracePhaseObservationLaw_measurable_and_probability
+      figureOneFinalScheduledBalancedParameters q I phase
+  have hrawMap : Measurable fun state : ScheduledBalancedCoolingTrace q.n ×
+      Option (ℝ × AmbientSpace q.n) =>
+      (state.1, scheduledResetPairOutput state.2) :=
+    measurable_fst.prodMk
+      (measurable_scheduledResetPairOutput.comp measurable_snd)
+  have hpairProb : IsProbabilityMeasure
+      (sequentialPairLaw source observation) :=
+    sequentialPairLaw_isProbabilityMeasure source
+      hobservation.1 hobservation.2
+  let _ : IsProbabilityMeasure (sequentialPairLaw source observation) :=
+    hpairProb
+  have hrawProb : IsProbabilityMeasure raw := by
+    dsimp only [raw]
+    exact Measure.isProbabilityMeasure_map hrawMap.aemeasurable
+  let _ : IsProbabilityMeasure raw := hrawProb
+  obtain ⟨reset, hresetProb, hresetOld, hresetTarget, hresetTV⟩ :=
+    exists_historyPreservingReset_of_tvLe raw target hnext
+  let _ : IsProbabilityMeasure reset := hresetProb
+  let reference := reset.map (scheduledResetTraceAppend (n := q.n))
+  have happend := measurable_scheduledResetTraceAppend (n := q.n)
+  have hreferenceProb : IsProbabilityMeasure reference :=
+    Measure.isProbabilityMeasure_map happend.aemeasurable
+  have hrawOld : raw.map Prod.fst = source := by
+    calc
+      raw.map Prod.fst =
+          (sequentialPairLaw source observation).map Prod.fst := by
+        rw [show raw = (sequentialPairLaw source observation).map
+          (fun state => (state.1, scheduledResetPairOutput state.2)) by rfl,
+          Measure.map_map measurable_fst hrawMap]
+        rfl
+      _ = source := map_sequentialPairLaw_fst source observation
+        hobservation.1 hobservation.2
+  have hresetOldSource : reset.map Prod.fst = source :=
+    hresetOld.trans hrawOld
+  have hliveSource : ∀ᵐ trace ∂source, trace.2 = true :=
+    ae_trace_live_of_map_retainedOption_eq_map_some source retained hretained
+  have hliveReset : ∀ᵐ state ∂reset, state.1.2 = true := by
+    apply (ae_map_iff measurable_fst.aemeasurable
+      measurableSet_scheduledBalancedTraceLiveSet).1
+    rw [hresetOldSource]
+    simpa [scheduledBalancedTraceLiveSet] using hliveSource
+  have hvalidReset : ∀ᵐ state ∂reset,
+      ScheduledBalancedCoolingTraceValid phase state.1 := by
+    apply (ae_map_iff measurable_fst.aemeasurable
+      (measurableSet_scheduledBalancedCoolingTraceValid phase)).1
+    rw [hresetOldSource]
+    exact hvalid
+  have hscoreReset : ∀ᵐ state ∂reset, 0 ≤ state.2.1 := by
+    apply (ae_map_iff measurable_snd.aemeasurable
+      (measurableSet_Ici.preimage measurable_fst)).1
+    rw [hresetTarget]
+    simpa only [Set.mem_preimage, Set.mem_Ici] using htargetNonnegative
+  have hpointTarget : ∀ᵐ result ∂target, result.2 ≠ none := by
+    have hsome : ∀ᵐ value ∂targetRetained.map some, value ≠ none :=
+      (ae_map_iff measurable_some.aemeasurable
+        measurableSet_option_none.compl).2 <| ae_of_all _ fun point => by simp
+    rw [← htargetRetained] at hsome
+    exact (ae_map_iff measurable_snd.aemeasurable
+      measurableSet_option_none.compl).1 hsome
+  have hpointReset : ∀ᵐ state ∂reset, state.2.2 ≠ none := by
+    apply (ae_map_iff measurable_snd.aemeasurable
+      (measurableSet_option_none.preimage measurable_snd).compl).1
+    rw [hresetTarget]
+    simpa only [Set.mem_compl_iff, Set.mem_preimage,
+      Set.mem_singleton_iff] using hpointTarget
+  have hactual : raw.map scheduledResetTraceAppend =
+      source.bind (scheduledBalancedTracePhaseKernel
+        figureOneFinalScheduledBalancedParameters q I phase) := by
+    rw [show raw = (sequentialPairLaw source observation).map
+      (fun state => (state.1, scheduledResetPairOutput state.2)) by rfl,
+      Measure.map_map happend hrawMap]
+    exact map_sequentialPairLaw_scheduledResetTraceAppend_eq_bind
+      q I phase source
+  have hcomparison : MeasureLeUpTo
+      (source.bind (scheduledBalancedTracePhaseKernel
+        figureOneFinalScheduledBalancedParameters q I phase))
+      reference delta := by
+    rw [← hactual]
+    exact MeasureLeUpTo.of_tvLe (hresetTV.map happend)
+  have hstate : reference.map scheduledBalancedTraceRetainedOption =
+      target.map Prod.snd := by
+    calc
+      reference.map scheduledBalancedTraceRetainedOption =
+          reset.map (scheduledBalancedTraceRetainedOption ∘
+            scheduledResetTraceAppend) := by
+        rw [Measure.map_map measurable_scheduledBalancedTraceRetainedOption
+          happend]
+      _ = reset.map (Prod.snd ∘ Prod.snd) := by
+        apply Measure.map_congr
+        filter_upwards [hliveReset] with state hlive
+        exact scheduledBalancedTraceRetainedOption_resetAppend
+          state.1 hlive state.2
+      _ = (reset.map Prod.snd).map Prod.snd :=
+        (Measure.map_map measurable_snd measurable_snd).symm
+      _ = target.map Prod.snd := by rw [hresetTarget]
+  have hnew : reference.map
+      (scheduledBalancedTracePhaseVariable q (phase + 1)) =
+      target.map Prod.fst := by
+    calc
+      reference.map (scheduledBalancedTracePhaseVariable q (phase + 1)) =
+          reset.map ((scheduledBalancedTracePhaseVariable q (phase + 1)) ∘
+            scheduledResetTraceAppend) := by
+        rw [Measure.map_map
+          (measurable_scheduledBalancedTracePhaseVariable q (phase + 1))
+          happend]
+      _ = reset.map (Prod.fst ∘ Prod.snd) := by
+        apply Measure.map_congr
+        filter_upwards [hvalidReset, hliveReset, hscoreReset, hpointReset]
+          with state hstateValid hstateLive hscore hpoint
+        exact scheduledBalancedTracePhaseVariable_resetAppend_eq_fst
+          q phase hphase state.1 hstateValid hstateLive state.2 hscore hpoint
+      _ = (reset.map Prod.snd).map Prod.fst :=
+        (Measure.map_map measurable_fst measurable_snd).symm
+      _ = target.map Prod.fst := by rw [hresetTarget]
+  have hold (j : ℕ) (hj1 : 1 ≤ j) (hjphase : j ≤ phase) :
+      reference.map (scheduledBalancedTracePhaseVariable q j) =
+        source.map (scheduledBalancedTracePhaseVariable q j) := by
+    calc
+      reference.map (scheduledBalancedTracePhaseVariable q j) =
+          reset.map ((scheduledBalancedTracePhaseVariable q j) ∘
+            scheduledResetTraceAppend) := by
+        rw [Measure.map_map
+          (measurable_scheduledBalancedTracePhaseVariable q j) happend]
+      _ = reset.map ((scheduledBalancedTracePhaseVariable q j) ∘ Prod.fst) := by
+        apply Measure.map_congr
+        filter_upwards [hvalidReset] with state hstateValid
+        exact scheduledBalancedTracePhaseVariable_append_eq q hstateValid
+          hphase.le hj1 hjphase (scheduledResetPairToResult state.2)
+      _ = (reset.map Prod.fst).map
+          (scheduledBalancedTracePhaseVariable q j) :=
+        (Measure.map_map
+          (measurable_scheduledBalancedTracePhaseVariable q j)
+          measurable_fst).symm
+      _ = source.map (scheduledBalancedTracePhaseVariable q j) := by
+        rw [hresetOldSource]
+  exact ⟨reference, hreferenceProb, hcomparison, hstate, hnew, hold⟩
 
 /-- The exact Gaussian and normalized accepted endpoint laws differ by the
 single stationary-target error already allocated in the scheduled boundary
@@ -697,6 +881,7 @@ theorem exists_scheduledTerminalPairTarget
 #print axioms ae_trace_live_of_map_retainedOption_eq_map_some
 #print axioms scheduledBalancedTracePhaseVariable_resetAppend_eq_fst
 #print axioms scheduledBalancedTraceRetainedOption_resetAppend
+#print axioms exists_scheduledTraceRecordedReset
 #print axioms exists_acceptedEndpointResetJoint
 #print axioms exists_acceptedEndpointResetJoint_of_joint
 #print axioms exists_scheduledGaussianAcceptedPairTarget
