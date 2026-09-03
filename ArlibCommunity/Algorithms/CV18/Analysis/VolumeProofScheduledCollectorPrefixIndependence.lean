@@ -2,6 +2,7 @@
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKilledCollectorInitializedSampleHistory
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKilledCollectorConditionedTransition
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianEndpointMean
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKilledCollectorDependenceArithmetic
 
 /-!
 # Prefix independence for the scheduled initialized collector
@@ -250,6 +251,52 @@ theorem approxIndepFun_initializedScheduledRetainedHistory_prefix_next
   simpa only [rho, initial, exact, exactSome, K, weight, delta,
     initializedScheduledRetainedHistoryLaw, Function.comp_def] using hpair
 
+/-- Uniform form of Lemma 7.17(b)/(c) for every coordinate of a complete
+initialized collector.  Coordinate zero has a constant empty prefix; every
+successor coordinate uses the conditioned transition estimate above. -/
+theorem approxIndepFun_initializedScheduledRetainedHistory_all
+    (q : VolumeParams) (I : VolumeInput q.n) (phase count : ℕ)
+    (hcount : count ≤ figureOneDependentMaxSampleCount q)
+    (r : ℕ) (hr : r < count) :
+    ApproxIndepFun (figureOneDependentEpsilon q)
+      (sequentialPrefixSum
+        (retainedSampleObservation
+          (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+            (scheduleValue q (phase + 1)))) r)
+      (retainedSampleObservation
+        (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1))) r)
+      (initializedScheduledRetainedHistoryLaw q I phase (count - 1)) := by
+  cases r with
+  | zero =>
+      let _ : IsProbabilityMeasure
+          (initializedScheduledRetainedHistoryLaw q I phase (count - 1)) :=
+        initializedScheduledRetainedHistoryLaw_isProbabilityMeasure
+          q I phase (count - 1)
+      change ApproxIndepFun (figureOneDependentEpsilon q)
+        (fun _ => (0 : ℝ))
+        (retainedSampleObservation
+          (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+            (scheduleValue q (phase + 1))) 0)
+        (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+      exact approxIndepFun_const_left_of_nonneg
+        (initializedScheduledRetainedHistoryLaw q I phase (count - 1))
+        (0 : ℝ)
+        (retainedSampleObservation
+          (gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+            (scheduleValue q (phase + 1))) 0)
+        (figureOneDependentEpsilon_nonneg q)
+  | succ i =>
+      have hiTail : i < count - 1 := by omega
+      have hpair :=
+        approxIndepFun_initializedScheduledRetainedHistory_prefix_next
+          q I phase hiTail
+      apply hpair.mono
+      simpa [scheduledRetainedConditioningError,
+        scheduledRetainedEndpointError] using
+        killedCollector_asymmetric_error_le_dependentEpsilon q
+          (Nat.lt_trans (Nat.lt_succ_self i) hr) hcount
+
 #print axioms scheduledRetainedConditioningError_ne_top
 #print axioms scheduledRetainedEndpointError_ne_top
 #print axioms approxIndepFun_history_next_of_state_warm_base_leUpTo
@@ -257,5 +304,6 @@ theorem approxIndepFun_initializedScheduledRetainedHistory_prefix_next
 #print axioms map_initializedScheduledRetainedHistoryLaw_state
 #print axioms
   approxIndepFun_initializedScheduledRetainedHistory_prefix_next
+#print axioms approxIndepFun_initializedScheduledRetainedHistory_all
 
 end ArlibCommunity.Algorithms.CV18
