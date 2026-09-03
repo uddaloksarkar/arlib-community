@@ -231,6 +231,41 @@ theorem initializedScheduledRetainedHistory_deviation_eq_retainedSum
     deviation, retainedSampleHistoryToSum, sequentialPrefixSum, hcountEq]
     using happly
 
+/-- A completed collector can disagree with its raw accumulated average only
+when the retained chain is dead.  This is the deterministic good/bad split
+behind the paper's all-or-nothing phase coupling. -/
+theorem retainedLiveAverage_deviation_subset_raw_union_dead
+    {S : Type*} (count : ℕ) (target eps : ℝ) :
+    {state : ℝ × Option S |
+        eps * target ≤
+          |retainedLiveTotal state / (count : ℝ) - target|} ⊆
+      {state : ℝ × Option S |
+        eps * target ≤ |state.1 / (count : ℝ) - target|} ∪
+      {state : ℝ × Option S | state.2 = none} := by
+  intro state hstate
+  rcases state with ⟨total, result⟩
+  cases result with
+  | none =>
+      exact Or.inr rfl
+  | some point =>
+      left
+      simpa [retainedLiveTotal] using hstate
+
+/-- Measure form of the completed/raw/dead split.  No moment of the
+executable residual law is used. -/
+theorem measure_retainedLiveAverage_deviation_le_raw_add_dead
+    {S : Type*} [MeasurableSpace S] (mu : Measure (ℝ × Option S))
+    (count : ℕ) (target eps : ℝ) :
+    mu {state |
+        eps * target ≤
+          |retainedLiveTotal state / (count : ℝ) - target|} ≤
+      mu {state | eps * target ≤
+          |state.1 / (count : ℝ) - target|} +
+        mu {state | state.2 = none} := by
+  exact (measure_mono
+    (retainedLiveAverage_deviation_subset_raw_union_dead
+      count target eps)).trans (measure_union_le _ _)
+
 #print axioms
   MeasureLeUpTo.measure_relativeDeviation_le_of_reference_moments
 #print axioms
@@ -239,5 +274,7 @@ theorem initializedScheduledRetainedHistory_deviation_eq_retainedSum
   initializedScheduledRetainedHistory_relativeDeviation_le_of_coordinate_moments
 #print axioms
   initializedScheduledRetainedHistory_deviation_eq_retainedSum
+#print axioms retainedLiveAverage_deviation_subset_raw_union_dead
+#print axioms measure_retainedLiveAverage_deviation_le_raw_add_dead
 
 end ArlibCommunity.Algorithms.CV18
