@@ -739,6 +739,99 @@ theorem integral_figureOneScheduledGaussianPhaseTarget_liveRaw_lower
     using (sub_le_iff_le_add.mp <| hshadowLower.trans <| by
       linarith [hlossA])
 
+/-- The retained-sum shadow dies exactly when its optional-state marginal
+dies.  Hence its final death probability is controlled by the same
+accumulated retry error as the retained endpoint chain. -/
+theorem figureOneScheduledGaussianShadow_dead_real_le
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hepsilonTop :
+      2 * scheduledBalancedStationaryTargetError q +
+          figureOnePhaseSampleCount q (scheduleValue q phase) •
+            figureOneCorrectedTransitionBudget q ≠ ⊤) :
+    let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+    let weight := gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+      (scheduleValue q (phase + 1))
+    let K := figureOneFinalScheduledRetainedOptionKernel q I
+      (scheduleValue q phase)
+    let initial :=
+      (truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+          (fun x => (weight x, some x))
+    (iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+      initial (count - 1)).real {state | state.2 = none} ≤
+      (scheduledBalancedStationaryTargetError q +
+        (count - 1) • figureOneCorrectedTransitionBudget q).toReal := by
+  dsimp only
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let steps := count - 1
+  let s := scheduleValue q phase
+  let t := scheduleValue q (phase + 1)
+  let weight := gaussianRatioWeight (n := q.n) s t
+  let K := figureOneFinalScheduledRetainedOptionKernel q I s
+  let initial :=
+    (truncatedGaussianProbability q I s (scheduleValue_pos q phase) :
+      Measure (AmbientSpace q.n)).map (fun x => (weight x, some x))
+  let shadow := iteratedKernelLaw
+    (fun _ => retainedSumKernel K weight) initial steps
+  let endpoint := iteratedKernelLaw (fun _ => K)
+    (initial.map retainedSumState) steps
+  have hK := figureOneFinalScheduledRetainedOptionKernel_measurable_and_probability
+    q I (scheduleValue_pos q phase)
+  have hweight : Measurable weight := measurable_gaussianRatioWeight s t
+  have hinitialState : initial.map retainedSumState =
+      (truncatedGaussianProbability q I s (scheduleValue_pos q phase) :
+        Measure (AmbientSpace q.n)).map some := by
+    calc
+      initial.map retainedSumState =
+          (truncatedGaussianProbability q I s
+            (scheduleValue_pos q phase) : Measure (AmbientSpace q.n)).map
+              (retainedSumState ∘ fun x => (weight x, some x)) :=
+        Measure.map_map measurable_snd
+          (hweight.prodMk measurable_some)
+      _ = _ := by rfl
+  have hshadowMap : shadow.map retainedSumState = endpoint := by
+    simpa [shadow, endpoint] using
+      map_iterated_retainedSumKernel_state K hK.1 hK.2 weight hweight
+        initial steps
+  have hdead : shadow {state | state.2 = none} = endpoint {none} := by
+    calc
+      shadow {state | state.2 = none} =
+          (shadow.map retainedSumState) {none} := by
+        rw [Measure.map_apply
+          (show Measurable (retainedSumState (S := AmbientSpace q.n)) from
+            measurable_snd)
+          measurableSet_option_none]
+        rfl
+      _ = endpoint {none} := by rw [hshadowMap]
+  have hendpoint : endpoint {none} ≤
+      scheduledBalancedStationaryTargetError q +
+        steps • figureOneCorrectedTransitionBudget q := by
+    dsimp only [endpoint]
+    rw [hinitialState]
+    simpa [K, s, steps] using
+      iterated_figureOneFinalScheduledRetainedOptionKernel_from_truncated_none_le
+        q I phase steps
+  have hcount : steps ≤ count := by
+    dsimp only [steps]
+    omega
+  have herrorLe :
+      scheduledBalancedStationaryTargetError q +
+          steps • figureOneCorrectedTransitionBudget q ≤
+        2 * scheduledBalancedStationaryTargetError q +
+          count • figureOneCorrectedTransitionBudget q := by
+    apply add_le_add
+    · simpa [two_mul] using
+        (self_le_add_right (scheduledBalancedStationaryTargetError q)
+          (scheduledBalancedStationaryTargetError q))
+    · rw [nsmul_eq_mul, nsmul_eq_mul]
+      gcongr
+  have herrorTop :
+      scheduledBalancedStationaryTargetError q +
+          steps • figureOneCorrectedTransitionBudget q ≠ ⊤ :=
+    ne_top_of_le_ne_top hepsilonTop herrorLe
+  rw [Measure.real, hdead]
+  exact ENNReal.toReal_mono herrorTop hendpoint
+
 #print axioms figureOneScheduledGaussianPhaseTarget_eq_map_retainedSumKernel
 #print axioms integral_retainedLiveTotal_loss_le_sqrt
 #print axioms integral_retainedLiveAverage_loss_le_sqrt
@@ -748,5 +841,6 @@ theorem integral_figureOneScheduledGaussianPhaseTarget_liveRaw_lower
   integral_figureOneScheduledGaussianShadow_average_lower
 #print axioms
   integral_figureOneScheduledGaussianPhaseTarget_liveRaw_lower
+#print axioms figureOneScheduledGaussianShadow_dead_real_le
 
 end ArlibCommunity.Algorithms.CV18
