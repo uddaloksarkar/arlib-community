@@ -164,11 +164,131 @@ theorem MeasureLeUpTo.map_scheduledHistory_le_randomizedIdeal
     figureOneRandomizedIdealHistoryLaw_map_output q I] at hmapped
   exact hmapped.mono_error hbudget
 
+/-- Post-initial accuracy capstone with the corrected, history-only ideal
+prefix premise. -/
+theorem scheduledPostInitialDirectFailureBound_of_randomizedIdealHistory
+    (parameters : BalancedCoolingParameters) (q : VolumeParams)
+    (I : VolumeInput q.n) (hrounded : WellRounded q I)
+    (continuation : AmbientSpace q.n → Measure ℝ)
+    (hlaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          continuation =
+        (scheduledBalancedForwardHistoryLaw parameters q I
+          (figureOneDependentPhaseCount q)).map
+            (balancedFigureOneHistoryEstimate q))
+    (hphase : ∀ phase, phase < figureOneDependentPhaseCount q →
+      MeasureLeUpTo
+        ((figureOneRandomizedIdealHistoryLaw q I phase).bind
+          (scheduledBalancedForwardPhaseKernel parameters q I phase))
+        (figureOneRandomizedIdealHistoryLaw q I (phase + 1))
+        (figureOnePhaseReplacementBudget q)) :
+    FigureOnePostInitialDirectFailureBoundFor q I continuation := by
+  have htransfer := MeasureLeUpTo.map_scheduledHistory_le_randomizedIdeal
+    parameters q I hphase
+  let W := figureOneChronologicalIdealCoordinate q
+  let mu := figureOneIdealExperimentLaw q I
+  let mean := dependentPhaseMeanProduct
+    (figureOneChronologicalTruncatedMean q I mu W)
+    (figureOneDependentPhaseCount q)
+  let _ : IsProbabilityMeasure mu :=
+    figureOneIdealExperimentLaw_isProbabilityMeasure q I
+  have hmeas : ∀ j, Measurable (W j) :=
+    fun j => figureOneChronologicalIdealCoordinate_measurable q j
+  have hnonneg : ∀ j samples, 0 ≤ W j samples :=
+    fun j samples => figureOneChronologicalIdealCoordinate_nonneg q j samples
+  have hmem : ∀ j, MemLp (W j) 2 mu :=
+    fun j => figureOneChronologicalIdealCoordinate_memLp q I j 2
+  have hsharp := figureOneSharpAcceleratedMoments q I
+  have hmean : ∀ j, (∫ samples, W j samples ∂mu) =
+      figureOneChronologicalRawMean q I j :=
+    fun j => figureOneChronologicalIdealCoordinate_mean q I hsharp j
+  have hsecond : ∀ j, (∫ samples, W j samples ^ 2 ∂mu) ≤
+      figureOneChronologicalMomentFactor q j *
+        figureOneChronologicalRawMean q I j ^ 2 :=
+    fun j => figureOneChronologicalIdealCoordinate_secondMoment_le
+      q I hsharp j
+  have hind : ∀ i, i < figureOneDependentPhaseCount q →
+      ApproxIndepFun (figureOneDependentEpsilon q)
+        (dependentTruncatedProduct (figureOneDependentAlpha q)
+          (figureOneChronologicalTruncatedMean q I mu W)
+          (figureOneChronologicalTruncatedPhase q I W) i)
+        (figureOneChronologicalTruncatedPhase q I W (i + 1)) mu := by
+    intro i hi
+    exact (figureOneChronologicalIdeal_exactIndependence q I i hi).mono
+      (figureOneDependentEpsilon_nonneg q)
+  have htail := measure_chronologicalIdealPhaseSampleProduct_figureOne_le
+    q I mu W hmeas hnonneg hmem hmean hsecond hind
+  have hmeanApprox :=
+    figureOneChronologicalTruncatedMeanProduct_relativeApprox
+      q I mu W hmeas hnonneg hmem hmean hsecond
+  have hestimate : balancedFigureOneHistoryEstimate q = fun history =>
+      initialGaussianIntegral q * balancedCoolingHistoryProduct q history := by
+    funext history
+    cases history <;>
+      simp [balancedFigureOneHistoryEstimate, balancedCoolingHistoryProduct]
+  rw [hestimate] at htransfer hlaw
+  apply figureOnePostInitialDirectFailureBoundFor_of_mappedProductLe
+    q I continuation (figureOneRadialTruncationBound q I hrounded)
+    (scheduledBalancedForwardHistoryLaw parameters q I
+      (figureOneDependentPhaseCount q)) mu
+    (balancedCoolingHistoryProduct q)
+    (dependentPhaseSampleProduct W (figureOneDependentPhaseCount q))
+    (measurable_balancedCoolingHistoryProduct q)
+    (by
+      unfold dependentPhaseSampleProduct
+      exact (Finset.range (figureOneDependentPhaseCount q)).measurable_fun_prod
+        fun j _ => hmeas (j + 1))
+    mean hmeanApprox htail
+  · simpa [W, mu] using htransfer
+  · exact hlaw
+
+/-- Final balanced-base wrapper for the corrected randomized ideal-prefix
+route.  Once the history-only phase replacement is supplied, no executable
+raw second-moment premise remains. -/
+theorem figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_randomizedIdeal
+    (q : VolumeParams) (I : VolumeInput q.n)
+    (oracle : MembershipOracle I) (hrounded : WellRounded q I)
+    (hpostLaw :
+      (truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          (fun point =>
+            (scheduledBalancedFigureOnePointContinuation
+              figureOneFinalScheduledBalancedParameters q point).runEstimate
+                oracle.query) =
+        (scheduledBalancedForwardHistoryLaw
+          figureOneFinalScheduledBalancedParameters q I
+          (figureOneDependentPhaseCount q)).map
+            (balancedFigureOneHistoryEstimate q))
+    (hphase : ∀ phase, phase < figureOneDependentPhaseCount q →
+      MeasureLeUpTo
+        ((figureOneRandomizedIdealHistoryLaw q I phase).bind
+          (scheduledBalancedForwardPhaseKernel
+            figureOneFinalScheduledBalancedParameters q I phase))
+        (figureOneRandomizedIdealHistoryLaw q I (phase + 1))
+        (figureOnePhaseReplacementBudget q)) :
+    (figureOneFinalScheduledBalancedBaseProgram q).runEstimate oracle.query
+        (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ) := by
+  have hpost :=
+    scheduledPostInitialDirectFailureBound_of_randomizedIdealHistory
+      figureOneFinalScheduledBalancedParameters q I hrounded
+      (fun point =>
+        (scheduledBalancedFigureOnePointContinuation
+          figureOneFinalScheduledBalancedParameters q point).runEstimate
+            oracle.query)
+      hpostLaw hphase
+  exact figureOneFinalScheduledBalancedBase_failure_le_of_directPostInitial
+    q I oracle hpost
+
 #print axioms MeasureLeUpTo.iteratedKernelLaw_le_lawSequence
 #print axioms figureOneRandomizedIdealHistoryLaw_isProbabilityMeasure
 #print axioms figureOneRandomizedIdealHistoryLaw_zero
 #print axioms figureOneRandomizedIdealHistoryLaw_map_output
 #print axioms MeasureLeUpTo.map_scheduledHistory_le_randomizedIdeal
+#print axioms
+  scheduledPostInitialDirectFailureBound_of_randomizedIdealHistory
+#print axioms
+  figureOneFinalScheduledBalancedBase_failure_le_of_postHistory_randomizedIdeal
 
 end
 
