@@ -16,7 +16,7 @@ result is then recorded back into `H`.
 namespace ArlibCommunity.Algorithms.CV18
 
 open MeasureTheory
-open scoped ENNREAL
+open scoped ENNReal
 
 noncomputable section
 
