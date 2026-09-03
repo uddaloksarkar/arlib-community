@@ -480,6 +480,96 @@ theorem exists_shadowRecordedReference_of_nextMarginal_tvLe
       prefixLaw K record observe hK hKprob hrecord hobserve] at hop
     simpa only [reference] using hop
 
+/-- Strengthened one-sample reset that also exposes preservation of any
+measurable old-history projection left unchanged by recording.  This is the
+induction interface for constructing a single reference law with many exact
+shadow coordinates. -/
+theorem exists_shadowRecordedReference_of_nextMarginal_tvLe_preserving
+    {H X Y Z : Type*} [MeasurableSpace H] [MeasurableSpace X]
+    [MeasurableSpace Y] [MeasurableSpace Z]
+    (prefixLaw : Measure (H × X)) [IsProbabilityMeasure prefixLaw]
+    (K : X → Measure X) (record : H → Y → H) (observe : X → Y)
+    (target : Measure X) [IsProbabilityMeasure target]
+    (readNew : H → Y) (projectOld : H → Z)
+    (hK : Measurable K) (hKprob : ∀ x, IsProbabilityMeasure (K x))
+    (hrecord : Measurable (Function.uncurry record))
+    (hobserve : Measurable observe) (hreadNew : Measurable readNew)
+    (hprojectOld : Measurable projectOld)
+    (hreadRecord : ∀ history x,
+      readNew (record history (observe x)) = observe x)
+    (hprojectRecord : ∀ history x,
+      projectOld (record history (observe x)) = projectOld history)
+    {epsilon : ENNReal}
+    (hnext : Arlib.TVLe
+      ((prefixLaw.bind (historyRawNextWithCopyKernel K)).map Prod.snd)
+      target epsilon) :
+    ∃ reference : Measure (H × X),
+      IsProbabilityMeasure reference ∧
+      MeasureLeUpTo
+        (prefixLaw.bind (historyOperationalRecordKernel K record observe))
+        reference epsilon ∧
+      reference.map (readNew ∘ Prod.fst) = target.map observe ∧
+      reference.map Prod.snd =
+        (prefixLaw.bind
+          (historyOperationalRecordKernel K record observe)).map Prod.snd ∧
+      reference.map (projectOld ∘ Prod.fst) =
+        prefixLaw.map (projectOld ∘ Prod.fst) := by
+  let raw := prefixLaw.bind (historyRawNextWithCopyKernel K)
+  have hrawKernel := historyRawNextWithCopyKernel_measurable_and_probability
+    (H := H) K hK hKprob
+  let _ : IsProbabilityMeasure raw :=
+    isProbabilityMeasure_bind hrawKernel.1.aemeasurable
+      (ae_of_all _ hrawKernel.2)
+  obtain ⟨reset, hresetProb, hresetHistory, hresetTarget, hresetTV⟩ :=
+    exists_historyPreservingReset_of_tvLe raw target (by
+      simpa only [raw] using hnext)
+  let _ : IsProbabilityMeasure reset := hresetProb
+  let reference := reset.map (historyRecordShadowState record observe)
+  have hrecordShadow := measurable_historyRecordShadowState
+    record observe hrecord hobserve
+  have hreferenceProb : IsProbabilityMeasure reference :=
+    Measure.isProbabilityMeasure_map hrecordShadow.aemeasurable
+  refine ⟨reference, hreferenceProb, ?_, ?_, ?_, ?_⟩
+  · have hresetMlu : MeasureLeUpTo raw reset epsilon :=
+      MeasureLeUpTo.of_tvLe hresetTV
+    simpa only [raw, reference] using
+      (MeasureLeUpTo.historyOperationalRecord_of_shadowReset
+        prefixLaw reset K record observe hK hKprob hrecord hobserve
+        hresetMlu)
+  · simpa only [reference] using
+      map_shadowRecorded_newCoordinate_eq_of_reset_marginal
+        reset target record observe readNew hrecord hobserve hreadNew
+        hreadRecord hresetTarget
+  · have hop := map_shadowRecorded_operationalState_eq_of_reset_history
+      raw reset record observe hrecord hobserve hresetHistory
+    rw [bind_historyRawNextWithCopy_map_recordShadow_eq
+      prefixLaw K record observe hK hKprob hrecord hobserve] at hop
+    simpa only [reference] using hop
+  · have hprojectFunction :
+        (projectOld ∘ Prod.fst) ∘
+            historyRecordShadowState record observe =
+          (projectOld ∘ Prod.fst) ∘ Prod.fst := by
+      funext state
+      exact hprojectRecord state.1.1 state.2
+    calc
+      reference.map (projectOld ∘ Prod.fst) =
+          reset.map ((projectOld ∘ Prod.fst) ∘
+            historyRecordShadowState record observe) :=
+        Measure.map_map (hprojectOld.comp measurable_fst) hrecordShadow
+      _ = reset.map ((projectOld ∘ Prod.fst) ∘ Prod.fst) := by
+        rw [hprojectFunction]
+      _ = (reset.map Prod.fst).map (projectOld ∘ Prod.fst) :=
+        (Measure.map_map (hprojectOld.comp measurable_fst)
+          measurable_fst).symm
+      _ = (raw.map Prod.fst).map (projectOld ∘ Prod.fst) := by
+        rw [hresetHistory]
+      _ = raw.map ((projectOld ∘ Prod.fst) ∘ Prod.fst) :=
+        Measure.map_map (hprojectOld.comp measurable_fst) measurable_fst
+      _ = prefixLaw.map (projectOld ∘ Prod.fst) := by
+        simpa only [raw, Function.comp_def] using
+          map_bind_historyRawNextWithCopyKernel_old
+            prefixLaw K projectOld hK hKprob hprojectOld
+
 #print axioms historyRawNextKernel_measurable_and_probability
 #print axioms historyOperationalRecordKernel_measurable_and_probability
 #print axioms bind_historyRawNextKernel_map_record_eq
@@ -494,6 +584,7 @@ theorem exists_shadowRecordedReference_of_nextMarginal_tvLe
 #print axioms map_shadowRecorded_operationalState_eq_of_reset_history
 #print axioms integral_shadowRecorded_newCoordinate_eq_target
 #print axioms exists_shadowRecordedReference_of_nextMarginal_tvLe
+#print axioms exists_shadowRecordedReference_of_nextMarginal_tvLe_preserving
 
 end
 
