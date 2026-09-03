@@ -4,6 +4,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.Background.HistoryPreservingReset
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofResetReferenceBaseCapstone
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGaussianResetJoint
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTerminalResetJoint
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledOuterPhaseIndependence
 
 /-!
 # A chronological reset reference for the scheduled trace
@@ -85,6 +86,75 @@ theorem ae_fst_nonnegative_of_map_eq_liveRaw
       measurableSet_Ici).2 hlive
   rw [← hscore] at hmapped
   exact (ae_map_iff measurable_fst.aemeasurable measurableSet_Ici).1 hmapped
+
+/-- Append the score/optional-endpoint pair used by the outer reset to the
+public loss-preserving trace. -/
+noncomputable def scheduledResetTraceAppend
+    (state : ScheduledBalancedCoolingTrace n ×
+      (ℝ × Option (AmbientSpace n))) : ScheduledBalancedCoolingTrace n :=
+  scheduledBalancedCoolingTraceAppend state.1
+    (scheduledResetPairToResult state.2)
+
+theorem measurable_scheduledResetTraceAppend :
+    Measurable (scheduledResetTraceAppend (n := n)) := by
+  unfold scheduledResetTraceAppend
+  exact measurable_scheduledBalancedCoolingTraceAppend.comp <|
+    measurable_fst.prodMk
+      (measurable_scheduledResetPairToResult.comp measurable_snd)
+
+theorem scheduledResetPairToResult_pairOutput_eq
+    (result : Option (ℝ × AmbientSpace n))
+    (hresult : ScheduledCollectedTotalNonnegative result) :
+    scheduledResetPairToResult (scheduledResetPairOutput result) = result := by
+  cases result with
+  | none => rfl
+  | some result =>
+      rcases result with ⟨score, point⟩
+      simp only [ScheduledCollectedTotalNonnegative] at hresult
+      simp [scheduledResetPairToResult, scheduledResetPairOutput,
+        figureOneScheduledTraceLiveRawOutput, optionSnd, max_eq_right hresult]
+
+/-- Pairing an executable phase result with its nonnegative score and then
+reassembling it does not change the executable trace-step law. -/
+theorem map_sequentialPairLaw_scheduledResetTraceAppend_eq_bind
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (source : Measure (ScheduledBalancedCoolingTrace q.n)) :
+    (sequentialPairLaw source
+        (scheduledBalancedTracePhaseObservationLaw
+          figureOneFinalScheduledBalancedParameters q I phase)).map
+      (fun state => scheduledResetTraceAppend
+        (state.1, scheduledResetPairOutput state.2)) =
+      source.bind (scheduledBalancedTracePhaseKernel
+        figureOneFinalScheduledBalancedParameters q I phase) := by
+  let K := scheduledBalancedTracePhaseObservationLaw
+    figureOneFinalScheduledBalancedParameters q I phase
+  have hK := scheduledBalancedTracePhaseObservationLaw_measurable_and_probability
+    figureOneFinalScheduledBalancedParameters q I phase
+  have hlift : Measurable fun trace : ScheduledBalancedCoolingTrace q.n =>
+      (K trace).map fun result => (trace, result) :=
+    measurable_sequentialPairKernel (rho := source) hK.1 hK.2
+  have hout : Measurable fun state : ScheduledBalancedCoolingTrace q.n ×
+      Option (ℝ × AmbientSpace q.n) =>
+      scheduledResetTraceAppend
+        (state.1, scheduledResetPairOutput state.2) :=
+    measurable_scheduledResetTraceAppend.comp <|
+      measurable_fst.prodMk
+        (measurable_scheduledResetPairOutput.comp measurable_snd)
+  unfold sequentialPairLaw
+  rw [map_bind_eq_bind_map_of_measurable source hlift hout]
+  apply Measure.bind_congr_right
+  filter_upwards with trace
+  unfold scheduledBalancedTracePhaseKernel
+  have hpair : Measurable fun result : Option (ℝ × AmbientSpace q.n) =>
+      (trace, result) := measurable_const.prodMk measurable_id
+  rw [Measure.map_map hout hpair]
+  apply Measure.map_congr
+  filter_upwards [scheduledBalancedTracePhaseObservationLaw_ae_total_nonnegative
+    figureOneFinalScheduledBalancedParameters q I phase trace]
+      with result hresult
+  unfold scheduledResetTraceAppend
+  simp only [Function.comp_apply, Prod.fst, Prod.snd]
+  rw [scheduledResetPairToResult_pairOutput_eq result hresult]
 
 /-- The exact Gaussian and normalized accepted endpoint laws differ by the
 single stationary-target error already allocated in the scheduled boundary
@@ -568,6 +638,8 @@ theorem exists_scheduledTerminalPairTarget
       hsecondTarget
 
 #print axioms scheduledRetainedExactSome_tvLe_acceptedSome
+#print axioms scheduledResetPairToResult_pairOutput_eq
+#print axioms map_sequentialPairLaw_scheduledResetTraceAppend_eq_bind
 #print axioms exists_acceptedEndpointResetJoint
 #print axioms exists_acceptedEndpointResetJoint_of_joint
 #print axioms exists_scheduledGaussianAcceptedPairTarget
