@@ -191,6 +191,56 @@ theorem iterated_retainedSumKernel_ae_total_nonnegative
       | some next =>
           exact add_nonneg hstate0 (hweight0 next)
 
+set_option maxHeartbeats 1000000 in
+/-- A uniform retained-weight bound gives the expected linear deterministic
+bound on the shadow total. -/
+theorem iterated_retainedSumKernel_ae_total_le
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    {B C : ℝ} (hB : 0 ≤ B) (hweightB : ∀ state, weight state ≤ B)
+    (initial : Measure (ℝ × Option S))
+    (hinitialC : ∀ᵐ state ∂initial, state.1 ≤ C) : ∀ (steps : ℕ),
+    ∀ᵐ state ∂iteratedKernelLaw
+      (fun _ => retainedSumKernel K weight) initial steps,
+      state.1 ≤ C + (steps : ℝ) * B := by
+  have hsum := retainedSumKernel_measurable_and_probability
+    K hK hKprob weight hweight
+  intro steps
+  induction steps with
+  | zero => simpa using hinitialC
+  | succ steps ih =>
+      rw [iteratedKernelLaw_succ]
+      let R : Kernel (ℝ × Option S) (ℝ × Option S) :=
+        ⟨retainedSumKernel K weight, hsum.1⟩
+      letI : IsMarkovKernel R := ⟨hsum.2⟩
+      change ∀ᵐ state ∂R ∘ₘ iteratedKernelLaw
+        (fun _ => retainedSumKernel K weight) initial steps,
+        state.1 ≤ C + ((steps + 1 : ℕ) : ℝ) * B
+      apply Measure.ae_comp_of_ae_ae (κ := R)
+        (measurableSet_le measurable_fst measurable_const)
+      filter_upwards [ih] with state hstate
+      change ∀ᵐ next ∂retainedSumKernel K weight state,
+        next.1 ≤ C + ((steps + 1 : ℕ) : ℝ) * B
+      unfold retainedSumKernel
+      have hout : Measurable fun next : Option S =>
+          (state.1 + retainedOptionWeight weight next, next) :=
+        (measurable_const.add
+          (measurable_retainedOptionWeight hweight)).prodMk measurable_id
+      apply (ae_map_iff hout.aemeasurable
+        (measurableSet_le measurable_fst measurable_const)).2
+      filter_upwards with next
+      have hnext : retainedOptionWeight weight next ≤ B := by
+        cases next with
+        | none =>
+            simp only [retainedOptionWeight]
+            exact hB
+        | some next => exact hweightB next
+      change state.1 + retainedOptionWeight weight next ≤ _
+      push_cast
+      nlinarith
+
 /-- The shadow expected total is exactly the initial expected total plus the
 sum of the zero-filled retained-state marginal means.  This is the finite
 endpoint-marginal identity needed for CV18's killed phase collector. -/
@@ -519,6 +569,7 @@ theorem integral_retainedLiveTotal_loss_le
 
 #print axioms retainedSumKernel_measurable_and_probability
 #print axioms map_iterated_retainedSumKernel_state
+#print axioms iterated_retainedSumKernel_ae_total_le
 #print axioms lintegral_iterated_retainedSumKernel_total_eq_sum_marginals
 #print axioms scheduledBalancedTransitionCollectLaw_eq_map_retainedSumKernel
 #print axioms integral_retainedLiveTotal_loss_le
