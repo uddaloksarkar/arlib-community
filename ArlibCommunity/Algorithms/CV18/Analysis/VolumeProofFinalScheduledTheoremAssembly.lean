@@ -114,6 +114,27 @@ theorem figureOneFinalScheduledCappedValueProgram_failure_le
         (by norm_num : (0 : ℝ) ≤ 1 / 64)]
       exact ENNReal.ofReal_le_ofReal (by norm_num)
 
+/-- Direct counted-reference entry point for the final capped base.  This is
+the interface used by the chronological cost construction: no expected-cost
+bound for the actual (approximate) execution is required. -/
+theorem figureOneFinalScheduledCappedValueProgram_failure_le_of_countedReference
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (reference : Measure (ℝ × ℕ)) {delta : ENNReal}
+    (hbase : (figureOneFinalScheduledAbortBaseProgram q).runEstimate
+      oracle.query (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (13 / 64 : ℝ))
+    (hdom : MeasureLeUpTo
+      ((figureOneFinalScheduledAbortBaseProgram q).run oracle.query)
+      reference delta)
+    (href : ∫⁻ outcome, (outcome.2 : ENNReal) ∂reference ≤
+      ENNReal.ofReal ((9 * 10 ^ 29) *
+        volumeScheduledBaseComplexityRate q))
+    (hdelta : delta ≤ ENNReal.ofReal (1 / 640 : ℝ)) :
+    (figureOneFinalScheduledCappedValueProgram q).runEstimate oracle.query
+      (accurateOutcome q I)ᶜ ≤ ENNReal.ofReal (1 / 4 : ℝ) := by
+  apply figureOneFinalScheduledCappedValueProgram_failure_le q I oracle hbase
+  exact figureOneFinalScheduledAbortQueryCap_failure_le_of_countedReference
+    q I oracle reference hdom href hdelta
+
 /-- Final amplification for the scheduled executable, conditional only on
 the two local conclusions that the analytic and counted-reference lanes are
 designed to supply. -/
@@ -164,6 +185,8 @@ theorem volumeTheorem_finalScheduled_of_baseFailure_and_capFailure
     exact le_rfl
 
 #print axioms figureOneFinalScheduledCappedValueProgram_failure_le
+#print axioms
+  figureOneFinalScheduledCappedValueProgram_failure_le_of_countedReference
 #print axioms volumeTheorem_finalScheduled_of_baseFailure_and_capFailure
 
 end ArlibCommunity.Algorithms.CV18

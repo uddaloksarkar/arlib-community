@@ -49,6 +49,8 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofProperCollect
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofAccuracyProperProgram
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKLSCore
 import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.Convexity.SpeedyGaussianMixing
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceMomentAssembly
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledTheoremAssembly
 
 /-!
 # CV18 accelerated Gaussian cooling
@@ -56,11 +58,14 @@ import ArlibCommunity.Algorithms.CV18.Analysis.Background.Arlib.Convexity.Speedy
 The currently verified, problem-specific analysis of Cousins and Vempala's
 accelerated Gaussian-cooling volume algorithm [CV18]. The implementation and
 all discharged analytic infrastructure are exposed here. Radial truncation,
-sharp moments, proper-step cost at the advertised Figure-1 step,
+stationary sharp moments, proper-step cost at the advertised Figure-1 step,
 the executable lazy proper-step clock, speedy-Gaussian mixing, and amplification
-are unconditional. The full assembly
-`volumeTheorem_of_postInitialMixing` has exactly one remaining premise: the
-dependent post-initial walk bound for the executable kernel.
+are unconditional. The current final scheduled assembly is
+`volumeTheorem_finalScheduled_of_baseFailure_and_capFailure`; its two premises
+are the conclusions of the executable trace-accuracy lane and the
+counted-reference global-cap lane. The older
+`volumeTheorem_of_postInitialMixing` remains available as a compact legacy
+interface.
 
 See `Analysis/README.md` for a module-level status and source audit.
 -/
