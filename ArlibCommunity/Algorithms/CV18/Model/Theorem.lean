@@ -10,13 +10,15 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGlobalResetRe
 
 This is the headline audit surface.  The statement below mentions only
 objects defined under `Model/`: the input promise, oracle-program semantics,
-success event, schedule certificate, and exact query rate.  Its proof selects
-the concrete scheduled implementation whose analysis is developed under
-`Analysis/`.
+success event, algorithm, and exact parameter-only query rate.  Its proof
+selects the concrete scheduled implementation whose analysis is developed
+under `Analysis/`.
 
 The exact displayed rate retains all protected logarithmic factors.  Removing
 them gives the paper's `O*(roundness * n^3 / eps^2)` notation; for a
 well-rounded body with universal `roundness`, this is `O*(n^3 / eps^2)`.
+The deterministic cooling schedule is an internal construction used by the
+proof and is deliberately absent from the public theorem statement.
 -/
 
 namespace ArlibCommunity.Algorithms.CV18
@@ -37,37 +39,30 @@ def VolumeGuarantee (algorithm : VolumeAlgorithm)
 algorithm succeeding with probability at least `1-p`, with the exact
 polylogarithmic refinement of the paper's `O*` query bound.
 
-The schedule is existentially packaged with evidence that its phase count is
-the first terminal index; the algorithm is likewise selected before the body
-and its membership oracle are quantified. -/
+The algorithm is selected before the body and its membership oracle are
+quantified.  Its rate is a model-level function only of the public parameters;
+the proof internally constructs the first terminal cooling schedule. -/
 theorem cv18TheoremOneOne :
-    ∃ (schedule : (q : VolumeParams) → VolumeTerminalSchedule q)
-      (algorithm : VolumeAlgorithm),
-      VolumeGuarantee algorithm
-        (fun q => scheduledComplexityRate (schedule q)) := by
-  let schedule : (q : VolumeParams) → VolumeTerminalSchedule q := fun q =>
-    { steps := terminalPhaseSteps q
-      reaches := by
-        simpa [modelScheduleValue, scheduleValue] using
-          scheduleValue_terminalPhaseSteps q
-      first := by
-        intro k hk
-        simpa [modelScheduleValue, scheduleValue] using
-          scheduleValue_ne_terminal_of_lt_terminalPhaseSteps q hk }
+    ∃ algorithm : VolumeAlgorithm,
+      VolumeGuarantee algorithm volumeTheoremOneOneRate := by
   let algorithm : VolumeAlgorithm :=
     amplifyOracleProgram figureOneFinalScheduledCappedValueProgram
-  refine ⟨schedule, algorithm, ?_⟩
+  refine ⟨algorithm, ?_⟩
   obtain ⟨C, hC, htheorem⟩ := volumeTheorem_finalScheduled
   refine ⟨C, hC, ?_⟩
   intro q I oracle hrounded
-  have hrate : scheduledComplexityRate (schedule q) =
+  have hsteps : modelTerminalPhaseSteps q = terminalPhaseSteps q := by
+    unfold modelTerminalPhaseSteps terminalPhaseSteps
+    rw [Nat.sInf_def]
+    rfl
+  have hrate : volumeTheoremOneOneRate q =
       volumeScheduledBaseComplexityRate q * protectedLog (1 / q.p) := by
-    simp only [scheduledComplexityRate, scheduledBaseComplexityRate,
-      scheduledAccuracyLog, scheduledSafeRetryCount,
-      scheduledPerSampleMixingError, scheduledDependentEpsilon,
-      scheduledDependentAlpha, scheduledDependentPhaseCount,
+    simp only [volumeTheoremOneOneRate, volumeTheoremOneOneBaseRate,
+      volumeAccuracyLog, volumeSafeRetryCount,
+      volumePerSampleMixingError, volumeDependentEpsilon,
+      volumeDependentAlpha, volumeDependentPhaseCount, hsteps,
       scheduledMaxSampleCount, scheduledFixedSampleCount,
-      scheduledSampleCount, schedule,
+      scheduledSampleCount,
       volumeScheduledBaseComplexityRate, figureOneScheduledAccuracyLog,
       figureOneScheduledCoreError, figureOneScheduledRadialError,
       figureOneCorrectedBlockMixingError, figureOneSafeRetryCount,

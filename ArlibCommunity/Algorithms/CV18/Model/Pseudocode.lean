@@ -122,14 +122,12 @@ model-level counterpart of the loop variable in Figure 1. -/
 noncomputable def modelScheduleValue (q : VolumeParams) (k : ℕ) : ℝ :=
   (nextVariance q)^[k] (initialVariance q)
 
-/-- Auditable evidence for the first point at which Figure 1's deterministic
-cooling schedule reaches the terminal variance.  Keeping the index and its
-minimality in `Model/` prevents the complexity statement from hiding an
-unconstrained number of phases. -/
-structure VolumeTerminalSchedule (q : VolumeParams) where
-  steps : ℕ
-  reaches : modelScheduleValue q steps = terminalVariance q
-  first : ∀ k < steps, modelScheduleValue q k ≠ terminalVariance q
+/-- The first point at which Figure 1's deterministic cooling schedule reaches
+the terminal variance.  The analysis proves that the defining set is nonempty;
+using its infimum here keeps the public query rate a function of the input
+parameters, rather than exposing a schedule witness in Theorem 1.1. -/
+noncomputable def modelTerminalPhaseSteps (q : VolumeParams) : ℕ :=
+  sInf {k | modelScheduleValue q k = terminalVariance q}
 
 /-- A finite schedule witnessing the loop in Figure 1.
 
@@ -244,45 +242,39 @@ noncomputable def scheduledFixedSampleCount (q : VolumeParams) : ℕ :=
 
 /-- Number of empirical estimators, including the terminal
 Gaussian-to-uniform estimator. -/
-def scheduledDependentPhaseCount {q : VolumeParams}
-    (schedule : VolumeTerminalSchedule q) : ℕ :=
-  schedule.steps + 1
+noncomputable def volumeDependentPhaseCount (q : VolumeParams) : ℕ :=
+  modelTerminalPhaseSteps q + 1
 
 /-- A uniform sample-count bound across all phases. -/
 noncomputable def scheduledMaxSampleCount (q : VolumeParams) : ℕ :=
   max (scheduledFixedSampleCount q) (scheduledSampleCount q)
 
 /-- Truncation parameter used by the dependent-product estimate. -/
-noncomputable def scheduledDependentAlpha {q : VolumeParams}
-    (schedule : VolumeTerminalSchedule q) : ℝ :=
-  1024 * (scheduledDependentPhaseCount schedule : ℝ) / q.eps ^ 2
+noncomputable def volumeDependentAlpha (q : VolumeParams) : ℝ :=
+  1024 * (volumeDependentPhaseCount q : ℝ) / q.eps ^ 2
 
 /-- Dependence budget used by the recursive moment estimate. -/
-noncomputable def scheduledDependentEpsilon {q : VolumeParams}
-    (schedule : VolumeTerminalSchedule q) : ℝ :=
+noncomputable def volumeDependentEpsilon (q : VolumeParams) : ℝ :=
   q.eps ^ 2 /
-    (4096 * scheduledDependentAlpha schedule ^ 4 *
-      (scheduledDependentPhaseCount schedule : ℝ))
+    (4096 * volumeDependentAlpha q ^ 4 *
+      (volumeDependentPhaseCount q : ℝ))
 
 /-- Per-sample transition error allocated by the global exact-chance
 argument. -/
-noncomputable def scheduledPerSampleMixingError {q : VolumeParams}
-    (schedule : VolumeTerminalSchedule q) : ℝ :=
-  scheduledDependentEpsilon schedule /
+noncomputable def volumePerSampleMixingError (q : VolumeParams) : ℝ :=
+  volumeDependentEpsilon q /
     (3 * (scheduledMaxSampleCount q : ℝ) *
-      (scheduledDependentPhaseCount schedule : ℝ))
+      (volumeDependentPhaseCount q : ℝ))
 
 /-- Number of rejection attempts needed for the geometric tail budget. -/
-noncomputable def scheduledSafeRetryCount {q : VolumeParams}
-    (schedule : VolumeTerminalSchedule q) : ℕ :=
+noncomputable def volumeSafeRetryCount (q : VolumeParams) : ℕ :=
   Nat.ceil
-    (128 * protectedLog (4 / scheduledPerSampleMixingError schedule))
+    (128 * protectedLog (4 / volumePerSampleMixingError q))
 
 /-- Common logarithmic accuracy scale for the core and radial mixing
 requirements. -/
-noncomputable def scheduledAccuracyLog {q : VolumeParams}
-    (schedule : VolumeTerminalSchedule q) : ℝ :=
-  let perSample := scheduledPerSampleMixingError schedule
+noncomputable def volumeAccuracyLog (q : VolumeParams) : ℝ :=
+  let perSample := volumePerSampleMixingError q
   max
     (protectedLog ((q.n : ℝ) / (perSample / 768)))
     (protectedLog ((q.n : ℝ) / (perSample / 8)))
@@ -290,19 +282,17 @@ noncomputable def scheduledAccuracyLog {q : VolumeParams}
 /-- The exact one-run rate used by the completed scheduled proof.  Its extra
 factors are logarithmic and hence are suppressed by the paper's `O*`
 notation. -/
-noncomputable def scheduledBaseComplexityRate {q : VolumeParams}
-    (schedule : VolumeTerminalSchedule q) : ℝ :=
-  volumeBaseComplexityRate q * scheduledAccuracyLog schedule *
+noncomputable def volumeTheoremOneOneBaseRate (q : VolumeParams) : ℝ :=
+  volumeBaseComplexityRate q * volumeAccuracyLog q *
     protectedLog
-      (1 / (scheduledPerSampleMixingError schedule /
-        (4 * (((scheduledSafeRetryCount schedule - 1 : ℕ) : ℝ) + 1)))) ^ 2
+      (1 / (volumePerSampleMixingError q /
+        (4 * (((volumeSafeRetryCount q - 1 : ℕ) : ℝ) + 1)))) ^ 2
 
 /-- Exact query rate after confidence amplification. -/
-noncomputable def scheduledComplexityRate {q : VolumeParams}
-    (schedule : VolumeTerminalSchedule q) : ℝ :=
-  scheduledBaseComplexityRate schedule * protectedLog (1 / q.p)
+noncomputable def volumeTheoremOneOneRate (q : VolumeParams) : ℝ :=
+  volumeTheoremOneOneBaseRate q * protectedLog (1 / q.p)
 
 #modelClosure volumeCoolingAlgorithm
-#modelClosure scheduledComplexityRate
+#modelClosure volumeTheoremOneOneRate
 
 end ArlibCommunity.Algorithms.CV18
