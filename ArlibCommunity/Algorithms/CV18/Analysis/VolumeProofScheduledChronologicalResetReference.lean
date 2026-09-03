@@ -203,9 +203,128 @@ theorem exists_acceptedEndpointResetJoint_of_joint
   exact ⟨target, htargetProb, hcomparison, htargetState, hmemFst,
     hmeanTarget, hsecondTarget⟩
 
+/-- Fully instantiated Gaussian phase target on the accepted-endpoint pair
+carrier.  It has the exact chronological mean and the reset-reference
+equation-(6) second moment. -/
+theorem exists_scheduledGaussianAcceptedPairTarget
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < terminalPhaseSteps q) :
+    ∃ target : Measure (ℝ × Option (AmbientSpace q.n)),
+      IsProbabilityMeasure target ∧
+      MeasureLeUpTo
+        ((figureOneScheduledGaussianPhaseTarget q I phase).map
+          scheduledResetPairOutput)
+        target
+        (scheduledResetReferenceError q
+            (figureOnePhaseSampleCount q (scheduleValue q phase) - 1) +
+          scheduledBalancedStationaryTargetError q) ∧
+      target.map Prod.snd =
+        (figureOneScheduledAcceptedTargetAt q I phase).map some ∧
+      MemLp Prod.fst 2 target ∧
+      (∫ result, result.1 ∂target) =
+        figureOneChronologicalRawMean q I (phase + 1) ∧
+      (∫ result, result.1 ^ 2 ∂target) ≤
+        (figureOneChronologicalMomentFactor q (phase + 1) +
+            figureOneExecutableMomentSlack q / 8) *
+          figureOneChronologicalRawMean q I (phase + 1) ^ 2 := by
+  let count := figureOnePhaseSampleCount q (scheduleValue q phase)
+  let mean :=
+    ∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+        (scheduleValue q (phase + 1)) x
+      ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+        (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))
+  let factor := if scheduleValue q phase ≤ 1 then
+    1 + 2 / (q.n : ℝ)
+  else
+    1 + scheduleValue q phase / terminalVariance q
+  have hcount : 0 < count := by
+    simpa [count] using
+      figureOnePhaseSampleCount_pos q (scheduleValue q phase)
+  have hcountMax : count ≤ figureOneDependentMaxSampleCount q := by
+    simpa [count] using
+      figureOnePhaseSampleCount_le_dependentMax q (scheduleValue q phase)
+  have hmeanPos : 0 < mean := by
+    rw [show mean =
+        gaussianIntegral (truncatedBody q I) (scheduleValue q (phase + 1)) /
+          gaussianIntegral (truncatedBody q I) (scheduleValue q phase) by
+      simpa [mean] using
+        gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
+    exact div_pos
+      (gaussianIntegral_pos q (truncatedVolumeInput q I)
+        (scheduleValue_pos q (phase + 1)))
+      (gaussianIntegral_pos q (truncatedVolumeInput q I)
+        (scheduleValue_pos q phase))
+  have hcoordinateSecond :
+      (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x ^ 2
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) ≤
+        factor * mean ^ 2 := by
+    apply (div_le_iff₀ (pow_pos hmeanPos 2)).mp
+    simpa [factor, mean] using
+      scheduleValue_gaussian_relativeSecondMoment_le_branchFactor
+        q I phase hphase
+  have hcoordinateThird :
+      (∫ x, gaussianRatioWeight (n := q.n) (scheduleValue q phase)
+          (scheduleValue q (phase + 1)) x ^ 3
+        ∂(truncatedGaussianProbability q I (scheduleValue q phase)
+          (scheduleValue_pos q phase) : Measure (AmbientSpace q.n))) ≤
+        ((129 / 64 : ℝ) * mean) ^ 3 := by
+    simpa [mean] using
+      scheduleValue_gaussian_thirdMoment_le_rational_mean_cube q I phase
+  obtain ⟨joint, hjointProb, hjoint, hstate, hmem, hmean, hsecond⟩ :=
+    exists_figureOneScheduledGaussianResetJointTarget q I phase count
+      (by rfl) hcount hcountMax
+      (mul_pos (by norm_num) hmeanPos) hmeanPos.le le_rfl
+      hcoordinateSecond hcoordinateThird
+  let _ : IsProbabilityMeasure joint := hjointProb
+  have hbudget :=
+    scheduledGaussianResetReference_equationSix_budget_chronological
+      q I phase hphase
+  have hsecond' :
+      (∫ result, figureOneScheduledTraceLiveRawOutput result ^ 2
+          ∂joint) ≤
+        (figureOneChronologicalMomentFactor q (phase + 1) +
+            figureOneExecutableMomentSlack q / 8) * mean ^ 2 := by
+    exact hsecond.trans (by simpa [count, mean, factor] using hbudget)
+  let _ : IsProbabilityMeasure
+      (figureOneScheduledGaussianPhaseTarget q I phase) :=
+    figureOneScheduledGaussianPhaseTarget_isProbabilityMeasure q I phase
+  obtain ⟨target, htargetProb, hcomparison, htargetState, htargetMem,
+      htargetMean, htargetSecond⟩ :=
+    exists_acceptedEndpointResetJoint_of_joint q I phase
+      (figureOneScheduledGaussianPhaseTarget q I phase) joint hjoint
+        hstate hmem hmean hsecond'
+  have hmeanChronological : mean =
+      figureOneChronologicalRawMean q I (phase + 1) := by
+    have hphaseDependent : phase < figureOneDependentPhaseCount q := by
+      rw [figureOneDependentPhaseCount]
+      omega
+    have horder :
+        figureOneChronologicalPhaseOrder q ⟨phase, hphaseDependent⟩ =
+          if hs : scheduleValue q phase ≤ 1 then
+            FigureOneIdealPhase.fixed ⟨⟨phase, hphase⟩, hs⟩
+          else
+            FigureOneIdealPhase.accelerated ⟨⟨phase, hphase⟩, hs⟩ := by
+      simpa using figureOneChronologicalPhaseOrder_apply_transition q
+        (⟨phase, hphase⟩ : Fin (terminalPhaseSteps q))
+    rw [figureOneChronologicalRawMean,
+      figureOneChronologicalPhaseAt_succ q phase hphaseDependent, horder]
+    by_cases hs : scheduleValue q phase ≤ 1
+    · simp [hs, figureOneIdealPhaseMean, mean,
+        gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
+    · simp [hs, figureOneIdealPhaseMean, mean,
+        gaussianRatioWeight_mean_eq q I (scheduleValue_pos q phase)]
+  refine ⟨target, htargetProb, ?_, htargetState, htargetMem, ?_, ?_⟩
+  · simpa [count] using hcomparison
+  · exact htargetMean.trans hmeanChronological
+  · rw [← hmeanChronological]
+    exact htargetSecond
+
 #print axioms scheduledRetainedExactSome_tvLe_acceptedSome
 #print axioms exists_acceptedEndpointResetJoint
 #print axioms exists_acceptedEndpointResetJoint_of_joint
+#print axioms exists_scheduledGaussianAcceptedPairTarget
 
 end
 
