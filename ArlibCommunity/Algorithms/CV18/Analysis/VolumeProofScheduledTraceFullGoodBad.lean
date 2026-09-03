@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledGoodBadIndependence
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceDependentAssembly
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceFuture
 
 /-! # Full retained-state good/bad decomposition for the scheduled trace -/
 
@@ -975,6 +976,56 @@ theorem bind_scheduledBalancedTracePhaseOutputLaw_leUpTo_of_live_good_bad
   rw [bind_scheduledBalancedTracePhaseOutputLaw_eq_live_dead
     q I phase hphase law liveOutput deadOutput hliveOutput]
   simpa [live, dead, K, rawK, target, scale] using hmlu
+
+/-! ## Immediate-phase scalar interface -/
+
+noncomputable def figureOneScheduledTraceLiveTruncatedOutput
+    (q : VolumeParams) (I : VolumeInput q.n) (j : ℕ) :
+    Option (ℝ × AmbientSpace q.n) → ℝ
+  | none => min 0
+      (figureOneDependentAlpha q * scheduledFigureOneTraceRawMean q I j)
+  | some result => min (max 0 result.1)
+      (figureOneDependentAlpha q * scheduledFigureOneTraceRawMean q I j)
+
+theorem measurable_figureOneScheduledTraceLiveTruncatedOutput
+    (q : VolumeParams) (I : VolumeInput q.n) (j : ℕ) :
+    Measurable (figureOneScheduledTraceLiveTruncatedOutput q I j) := by
+  unfold figureOneScheduledTraceLiveTruncatedOutput
+  convert Measurable.optionElim
+    (min 0 (figureOneDependentAlpha q *
+      scheduledFigureOneTraceRawMean q I j))
+    (measurable_const.max measurable_fst |>.min measurable_const) using 1
+  funext result
+  cases result <;> rfl
+
+noncomputable def figureOneScheduledTraceDeadTruncatedOutput
+    (q : VolumeParams) (I : VolumeInput q.n) (j : ℕ) : ℝ :=
+  min 1 (figureOneDependentAlpha q * scheduledFigureOneTraceRawMean q I j)
+
+/-- The trace-dependent scalar kernel reads exactly the new truncated
+coordinate after appending the phase observation. -/
+theorem scheduledFigureOneTraceTruncatedPhase_append_eq_output
+    (q : VolumeParams) (I : VolumeInput q.n) (phase : ℕ)
+    (hphase : phase < figureOneDependentPhaseCount q)
+    (trace : ScheduledBalancedCoolingTrace q.n)
+    (hvalid : ScheduledBalancedCoolingTraceValid phase trace)
+    (result : Option (ℝ × AmbientSpace q.n)) :
+    scheduledFigureOneTraceTruncatedPhase q I (phase + 1)
+        (scheduledBalancedCoolingTraceAppend trace result) =
+      if trace.2 then
+        figureOneScheduledTraceLiveTruncatedOutput q I (phase + 1) result
+      else figureOneScheduledTraceDeadTruncatedOutput q I (phase + 1) := by
+  unfold scheduledFigureOneTraceTruncatedPhase dependentTruncatedPhase
+    figureOneScheduledTraceLiveTruncatedOutput
+    figureOneScheduledTraceDeadTruncatedOutput
+    scheduledBalancedTracePhaseVariable
+    scheduledBalancedTraceChronologicalPhaseVariable
+  rw [balancedCoolingChronologicalPhaseVariable_apply_succ q phase hphase]
+  rcases trace with ⟨history, live⟩
+  change history.2.1 = phase ∧ _ at hvalid
+  cases live <;> cases result <;>
+    simp [scheduledBalancedCoolingTraceAppend, balancedCoolingHistoryAppend,
+      hvalid.1]
 
 /-- The dead trace mass is bounded by the same optional-retained exact-chance
 error: the ideal accepted target is supported on `some`. -/
