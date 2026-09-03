@@ -41,7 +41,7 @@ endpoint marginal is exactly `target`, its expected count is no larger than
 the original expected count, and the discarded joint mass is at most the
 original marginal error. -/
 theorem exists_countedReference_of_fst_leUpTo
-    {S : Type*} [MeasurableSpace S] [StandardBorelSpace S]
+    {S : Type*} [MeasurableSpace S]
     (joint : Measure (S × ℕ)) [IsFiniteMeasure joint]
     (target : Measure S) [IsFiniteMeasure target]
     {delta : ENNReal}
@@ -135,7 +135,7 @@ then discards the new endpoint error and fills its missing mass at count zero.
 Thus errors add as probabilities, while expected query counts add only the
 per-phase reference costs; there is no `cost cap * error` term. -/
 theorem exists_countedReference_iteratedKernelLaw
-    {S : Type*} [MeasurableSpace S] [StandardBorelSpace S]
+    {S : Type*} [MeasurableSpace S]
     (actualK : ℕ → (S × ℕ) → Measure (S × ℕ))
     (actualInitial : Measure (S × ℕ)) [IsFiniteMeasure actualInitial]
     (ideal : ℕ → Measure S)

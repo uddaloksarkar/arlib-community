@@ -1,6 +1,7 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofCountedChronologicalContinuation
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledCostChain
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledAbortAccuracy
 
 /-! # Exact ideal-prefix inputs for counted scheduled phases -/
 
@@ -199,7 +200,187 @@ theorem figureOneFinalScheduledGaussianIdealPhaseEndpoint_leUpTo
   simpa [figureOneScheduledAcceptedTargetAt,
     figureOneScheduledSpeedyPiAt, Nat.sub_add_cancel hcount] using hphase
 
+/-- The paper-faithful aborting initial sample differs from the normalized
+truncated Gaussian retained law only by the rejected Gaussian tail mass. -/
+theorem figureOneAbortInitialRetained_leUpTo_truncated
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    MeasureLeUpTo
+      ((initialGaussianSamplingMeasure q).map (initialTruncatedOption q I))
+      ((truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).map some)
+      (ENNReal.ofReal (q.eps / 64)) := by
+  let actual := (initialGaussianSamplingMeasure q).map
+    (initialTruncatedOption q I)
+  let target := (truncatedGaussianProbability q I (initialVariance q)
+    (initialVariance_pos q) : Measure (AmbientSpace q.n)).map some
+  let _ : IsProbabilityMeasure actual :=
+    Measure.isProbabilityMeasure_map
+      (measurable_initialTruncatedOption q I).aemeasurable
+  let _ : IsProbabilityMeasure target :=
+    Measure.isProbabilityMeasure_map measurable_some.aemeasurable
+  apply MeasureLeUpTo.of_tvLe
+  apply Arlib.tvLe_of_forall_le
+  intro event hevent
+  have h := initialTruncatedOption_bind_apply_le q I
+    (Measure.dirac (none : Option (AmbientSpace q.n))) inferInstance
+    (fun point => Measure.dirac (some point))
+    (Measure.measurable_dirac.comp measurable_some)
+    (fun _ => inferInstance) event hevent
+  have hleft :
+      ((initialGaussianSamplingMeasure q).map
+        (initialTruncatedOption q I)).bind (fun initialPoint =>
+          match initialPoint with
+          | none => Measure.dirac none
+          | some point => Measure.dirac (some point)) = actual := by
+    have hkernel : (fun initialPoint : Option (AmbientSpace q.n) =>
+        match initialPoint with
+        | none => Measure.dirac none
+        | some point => Measure.dirac (some point)) = Measure.dirac := by
+      funext initialPoint
+      cases initialPoint <;> rfl
+    rw [hkernel, Measure.bind_dirac]
+  have hright :
+      (truncatedGaussianProbability q I (initialVariance q)
+        (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+          (fun point => Measure.dirac (some point)) = target := by
+    rw [Measure.bind_dirac_eq_map _ measurable_some]
+  change actual event ≤ target event + ENNReal.ofReal (q.eps / 64)
+  calc
+    actual event =
+        (((initialGaussianSamplingMeasure q).map
+          (initialTruncatedOption q I)).bind (fun initialPoint =>
+            match initialPoint with
+            | none => Measure.dirac none
+            | some point => Measure.dirac (some point))) event := by
+      rw [hleft]
+    _ ≤ ((truncatedGaussianProbability q I (initialVariance q)
+          (initialVariance_pos q) : Measure (AmbientSpace q.n)).bind
+            (fun point => Measure.dirac (some point))) event +
+          ENNReal.ofReal (q.eps / 64) := h
+    _ = target event + ENNReal.ofReal (q.eps / 64) := by
+      rw [hright]
+
+/-- The counted aborting initial sampler has the exact first ideal marginal
+up to the one truncation-tail loss and one stationary-target loss. -/
+theorem figureOneAbortInitialRun_fst_leUpTo_idealPhaseStart
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    MeasureLeUpTo ((figureOneAbortInitialSample q).run oracle.query).fst
+      (figureOneFinalScheduledIdealPhaseStart q I 0)
+      (ENNReal.ofReal (q.eps / 64) +
+        scheduledBalancedStationaryTargetError q) := by
+  have habort := figureOneAbortInitialRetained_leUpTo_truncated q I
+  have hstationary := scheduledBalancedInitialRetained_leUpTo_target q I
+  rw [map_scheduledBalancedInitialTrace_retainedOption] at hstationary
+  have hrun : ((figureOneAbortInitialSample q).run oracle.query).fst =
+      (figureOneAbortInitialSample q).runEstimate oracle.query := by
+    exact ((figureOneAbortInitialSample q).runEstimate_eq_map_fst_run
+      oracle.query
+      (figureOneAbortInitialSample_countedStronglyMeasurable
+        q I oracle).executionMeasurable).symm
+  rw [hrun, runEstimate_figureOneAbortInitialSample q I oracle]
+  simpa [figureOneFinalScheduledIdealPhaseStart] using
+    habort.trans hstationary
+
+/-- The counted transition kernel for chronological retained Gaussian
+phases. -/
+noncomputable def figureOneFinalScheduledGaussianCountedKernel
+    (q : VolumeParams) (oracle : AmbientSpace q.n → Bool) (phase : ℕ) :=
+  countedContinuation oracle
+    (figureOneFinalScheduledRetainedGaussianPhaseProgram q phase)
+
+/-- Finite chronological reference for every prefix of Gaussian phases.
+The reference has the exact ideal retained-point marginal, additive
+exact-chance loss, and only the sum of warm expected phase costs. -/
+theorem exists_figureOneFinalScheduledGaussianCountedReference
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I)
+    (steps : ℕ) :
+    ∃ reference : Measure (Option (AmbientSpace q.n) × ℕ),
+      MeasureLeUpTo
+        (iteratedKernelLaw
+          (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+          ((figureOneAbortInitialSample q).run oracle.query) steps)
+        reference
+        ((ENNReal.ofReal (q.eps / 64) +
+            scheduledBalancedStationaryTargetError q) +
+          ∑ phase ∈ Finset.range steps,
+            figureOnePhaseSampleCount q (scheduleValue q phase) •
+              figureOneCorrectedTransitionBudget q) ∧
+      reference.fst = figureOneFinalScheduledIdealPhaseStart q I steps ∧
+      countedQueryCost reference ≤
+        1 + ∑ phase ∈ Finset.range steps,
+          ((384 * (figureOnePhaseSampleCount q (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.retryLimit q
+              (scheduleValue q phase) *
+            figureOneFinalScheduledBalancedParameters.properStride q
+              (scheduleValue q phase)) : ℕ) : ENNReal) := by
+  have hinitialStrong :=
+    figureOneAbortInitialSample_countedStronglyMeasurable q I oracle
+  let _ : IsProbabilityMeasure
+      ((figureOneAbortInitialSample q).run oracle.query) :=
+    MembershipOracleProgram.run_isProbabilityMeasure oracle.query _
+      hinitialStrong.executionMeasurable
+  let ideal := figureOneFinalScheduledIdealPhaseStart q I
+  let phaseCost : ℕ → ENNReal := fun phase =>
+    ((384 * (figureOnePhaseSampleCount q (scheduleValue q phase) *
+      figureOneFinalScheduledBalancedParameters.retryLimit q
+        (scheduleValue q phase) *
+      figureOneFinalScheduledBalancedParameters.properStride q
+        (scheduleValue q phase)) : ℕ) : ENNReal)
+  have hreference := exists_countedReference_iteratedKernelLaw
+    (figureOneFinalScheduledGaussianCountedKernel q oracle.query)
+    ((figureOneAbortInitialSample q).run oracle.query) ideal
+    (fun phase => figureOnePhaseSampleCount q (scheduleValue q phase) •
+      figureOneCorrectedTransitionBudget q)
+    phaseCost
+    (fun phase => by
+      let _ : IsProbabilityMeasure (ideal phase) := by
+        exact figureOneFinalScheduledIdealPhaseStart_isProbabilityMeasure q I phase
+      infer_instance)
+    (figureOneAbortInitialRun_fst_leUpTo_idealPhaseStart q I oracle)
+    (fun phase => by
+      unfold figureOneFinalScheduledGaussianCountedKernel
+      exact measurable_countedContinuation oracle.query _
+        (figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle phase).1
+        (figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle phase).2)
+    (fun phase state => by
+      unfold figureOneFinalScheduledGaussianCountedKernel countedContinuation
+      let _ : IsProbabilityMeasure
+          ((figureOneFinalScheduledRetainedGaussianPhaseProgram
+            q phase state.1).run oracle.query) :=
+        MembershipOracleProgram.run_isProbabilityMeasure oracle.query _
+          ((figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+            q I oracle phase).2 state.1).executionMeasurable
+      exact Measure.isProbabilityMeasure_map (by fun_prop))
+    (fun phase rho _hrho hmarginal => by
+      have hprogram :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle phase
+      have hnext : ideal (phase + 1) =
+          (figureOneScheduledAcceptedTargetAt q I phase).map some := by
+        simp [ideal, figureOneFinalScheduledIdealPhaseStart]
+      apply MembershipOracleProgram.countedContinuation_step oracle.query rho
+        (ideal phase) (ideal (phase + 1))
+        (figureOneFinalScheduledRetainedGaussianPhaseProgram q phase)
+        hprogram.1 hprogram.2 hmarginal
+      · rw [hnext]
+        exact figureOneFinalScheduledGaussianIdealPhaseEndpoint_leUpTo
+          q I oracle phase
+      · exact figureOneFinalScheduledGaussianIdealPhaseExpectedCost_le
+          q I oracle phase)
+    steps
+  obtain ⟨reference, hdom, hmarginal, hcost⟩ := hreference
+  refine ⟨reference, hdom, hmarginal, ?_⟩
+  apply hcost.trans
+  gcongr
+  simpa only [countedQueryCost, Nat.cast_one] using
+    (figureOneAbortInitialSample_queryBound q).lintegral_queryCount_le
+      hinitialStrong
+
 #print axioms figureOneFinalScheduledGaussianIdealPhaseExpectedCost_le
 #print axioms figureOneFinalScheduledGaussianIdealPhaseEndpoint_leUpTo
+#print axioms figureOneAbortInitialRun_fst_leUpTo_idealPhaseStart
+#print axioms exists_figureOneFinalScheduledGaussianCountedReference
 
 end ArlibCommunity.Algorithms.CV18
