@@ -1,5 +1,6 @@
 /- Copyright (c) 2026. All rights reserved. Released under Apache 2.0. -/
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofKilledCollectorMean
+import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofApproxIndependentAverage
 
 /-!
 # Sample-history shadow for a killed collector
@@ -253,9 +254,122 @@ theorem map_iterated_retainedSampleHistoryKernel_sum
             (initial.map (retainedSampleHistoryToSum weight 0)) steps).bind
               (retainedSumKernel K weight) := by rw [ih]
 
+/-- The CV18 equation-(6) calculation applies directly to the individual
+coordinates recorded by the killed-collector history.  This is the common
+probability-space form; the next theorem transports it to the retained-sum
+law used by the executable semantics. -/
+theorem retainedSampleHistory_average_secondMoment_le_of_approxIndepPrefix
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (initial : Measure (RetainedSampleHistory S))
+    (hinitial : IsProbabilityMeasure initial)
+    (k : ℕ) (hk : 0 < k) {B mean factor epsilon : ℝ}
+    (hB0 : 0 ≤ B) (hmean0 : 0 ≤ mean) (hepsilon0 : 0 ≤ epsilon)
+    (hweight0 : ∀ state, 0 ≤ weight state)
+    (hweightB : ∀ state, weight state ≤ B)
+    (hmean : ∀ i, i < k →
+      (∫ history, retainedSampleObservation weight i history
+        ∂iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+          initial k) ≤ mean)
+    (hsecond : ∀ i, i < k →
+      (∫ history, retainedSampleObservation weight i history ^ 2
+        ∂iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+          initial k) ≤ factor * mean ^ 2)
+    (hind : ∀ i, i < k →
+      ApproxIndepFun epsilon
+        (sequentialPrefixSum (retainedSampleObservation weight) i)
+        (retainedSampleObservation weight i)
+        (iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+          initial k)) :
+    (∫ history,
+        (retainedSampleHistoryToSum weight k history).1 ^ 2 /
+          (k : ℝ) ^ 2
+      ∂iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+        initial k) ≤
+      (1 + (factor - 1) / (k : ℝ)) * mean ^ 2 +
+        epsilon * (1 - 1 / (k : ℝ)) * B ^ 2 := by
+  let mu := iteratedKernelLaw
+    (fun j => retainedSampleHistoryKernel K j) initial k
+  have hkernel : ∀ j, Measurable (retainedSampleHistoryKernel K j) :=
+    fun j => (retainedSampleHistoryKernel_measurable_and_probability
+      K hK hKprob j).1
+  have hkernelProb : ∀ j history,
+      IsProbabilityMeasure (retainedSampleHistoryKernel K j history) :=
+    fun j history => (retainedSampleHistoryKernel_measurable_and_probability
+      K hK hKprob j).2 history
+  let _ : IsProbabilityMeasure mu :=
+    iteratedKernelLaw_isProbabilityMeasure _ initial hinitial
+      hkernel hkernelProb k
+  have hY0 : ∀ i, i < k → ∀ history,
+      0 ≤ retainedSampleObservation weight i history := by
+    intro i hi history
+    unfold retainedSampleObservation
+    cases history.1 i with
+    | none => simp [retainedOptionWeight]
+    | some state => simpa [retainedOptionWeight] using hweight0 state
+  have hYB : ∀ i, i < k → ∀ history,
+      retainedSampleObservation weight i history ≤ B := by
+    intro i hi history
+    unfold retainedSampleObservation
+    cases history.1 i with
+    | none => simpa [retainedOptionWeight] using hB0
+    | some state => simpa [retainedOptionWeight] using hweightB state
+  have havg := sequentialAverage_secondMoment_le_of_approxIndepPrefix
+    mu (fun i => measurable_retainedSampleObservation hweight i)
+    k hk hB0 hmean0 hepsilon0 hY0 hYB hmean hsecond hind
+  simpa [mu, sequentialPrefixSum, retainedSampleHistoryToSum, div_pow] using havg
+
+/-- Transport the coordinate-history second-moment estimate to the
+retained-sum shadow.  The latter is exactly the law already identified with
+the executable retry collector. -/
+theorem iterated_retainedSumKernel_average_secondMoment_le_of_approxIndepPrefix
+    {S : Type*} [MeasurableSpace S]
+    (K : Option S → Measure (Option S)) (hK : Measurable K)
+    (hKprob : ∀ state, IsProbabilityMeasure (K state))
+    (weight : S → ℝ) (hweight : Measurable weight)
+    (initial : Measure (RetainedSampleHistory S))
+    (hinitial : IsProbabilityMeasure initial)
+    (k : ℕ) (hk : 0 < k) {B mean factor epsilon : ℝ}
+    (hB0 : 0 ≤ B) (hmean0 : 0 ≤ mean) (hepsilon0 : 0 ≤ epsilon)
+    (hweight0 : ∀ state, 0 ≤ weight state)
+    (hweightB : ∀ state, weight state ≤ B)
+    (hmean : ∀ i, i < k →
+      (∫ history, retainedSampleObservation weight i history
+        ∂iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+          initial k) ≤ mean)
+    (hsecond : ∀ i, i < k →
+      (∫ history, retainedSampleObservation weight i history ^ 2
+        ∂iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+          initial k) ≤ factor * mean ^ 2)
+    (hind : ∀ i, i < k →
+      ApproxIndepFun epsilon
+        (sequentialPrefixSum (retainedSampleObservation weight) i)
+        (retainedSampleObservation weight i)
+        (iteratedKernelLaw (fun j => retainedSampleHistoryKernel K j)
+          initial k)) :
+    (∫ state, (state.1 / (k : ℝ)) ^ 2
+      ∂iteratedKernelLaw (fun _ => retainedSumKernel K weight)
+        (initial.map (retainedSampleHistoryToSum weight 0)) k) ≤
+      (1 + (factor - 1) / (k : ℝ)) * mean ^ 2 +
+        epsilon * (1 - 1 / (k : ℝ)) * B ^ 2 := by
+  have hhistory :=
+    retainedSampleHistory_average_secondMoment_le_of_approxIndepPrefix
+      K hK hKprob weight hweight initial hinitial k hk hB0 hmean0
+        hepsilon0 hweight0 hweightB hmean hsecond hind
+  rw [← map_iterated_retainedSampleHistoryKernel_sum
+    K hK hKprob weight hweight initial k]
+  rw [integral_map
+    (measurable_retainedSampleHistoryToSum hweight k).aemeasurable
+    ((measurable_fst.div_const (k : ℝ)).pow_const 2).aestronglyMeasurable]
+  simpa [retainedSampleHistoryToSum, div_pow] using hhistory
+
 #print axioms retainedSampleHistoryKernel_measurable_and_probability
 #print axioms map_iterated_retainedSampleHistoryKernel_state
 #print axioms retainedSampleHistory_prefixSum_update
 #print axioms map_iterated_retainedSampleHistoryKernel_sum
+#print axioms retainedSampleHistory_average_secondMoment_le_of_approxIndepPrefix
+#print axioms iterated_retainedSumKernel_average_secondMoment_le_of_approxIndepPrefix
 
 end ArlibCommunity.Algorithms.CV18
