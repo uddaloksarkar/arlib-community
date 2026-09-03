@@ -404,6 +404,183 @@ theorem figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
   · exact ((measurable_balancedCoolingAverage _).comp measurable_fst).prodMk
       measurable_snd
 
+/-- Erasing every ratio/product coordinate from a Gaussian cooling block
+preserves its complete endpoint-and-query-count law. -/
+theorem figureOneFinalScheduledRetainedGaussianChain_run_eq_map_coolingProduct
+    (q : VolumeParams) (I : VolumeInput q.n) (oracle : MembershipOracle I) :
+    ∀ phase steps (point : AmbientSpace q.n),
+      (figureOneFinalScheduledRetainedGaussianChain q phase steps
+          (some point)).run oracle.query =
+        ((coolingProduct
+          (scheduledBalancedCoolingPrimitives
+            figureOneFinalScheduledBalancedParameters) q
+          (scheduledVarianceSegment q phase steps) point).run
+            oracle.query).map fun outcome =>
+              (optionSnd outcome.1, outcome.2) := by
+  intro phase steps
+  induction steps generalizing phase with
+  | zero =>
+      intro point
+      simp only [scheduledVarianceSegment_zero, coolingProduct,
+        figureOneFinalScheduledRetainedGaussianChain,
+        MembershipOracleProgram.run]
+      rw [Measure.map_dirac'
+        (f := fun outcome : Option (ℝ × AmbientSpace q.n) × ℕ =>
+          (optionSnd outcome.1, outcome.2))
+        ((measurable_optionSnd.comp measurable_fst).prodMk measurable_snd)]
+      rfl
+  | succ steps ih =>
+      intro point
+      let parameters := figureOneFinalScheduledBalancedParameters
+      let sigma2 := scheduleValue q phase
+      let tau2 := scheduleValue q (phase + 1)
+      let ratioProgram := scheduledBalancedCoolingRatioEstimate parameters q
+        sigma2 tau2 point
+      let tailCooling (nextPoint : AmbientSpace q.n) :=
+        coolingProduct (scheduledBalancedCoolingPrimitives parameters) q
+          (scheduledVarianceSegment q (phase + 1) steps) nextPoint
+      let retainedPhase :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram q phase (some point)
+      let retainedTail :=
+        figureOneFinalScheduledRetainedGaussianChain q (phase + 1) steps
+      let multiply (ratio : ℝ) (tail : Option (ℝ × AmbientSpace q.n)) :=
+        balancedCoolingProductCons ratio tail
+      let actualNext : Option (ℝ × AmbientSpace q.n) →
+          MembershipOracleProgram q.n (Option (ℝ × AmbientSpace q.n))
+        | none => .pure none
+        | some value =>
+            (tailCooling value.2).bind fun tail =>
+              .pure (multiply value.1 tail)
+      have hratio := scheduledBalancedCoolingRatioEstimate_countedMeasurable
+        parameters q I oracle (scheduleValue_pos q phase) tau2
+      have htail := scheduledBalancedCoolingProduct_countedMeasurable
+        parameters q I oracle (scheduledVarianceSegment q (phase + 1) steps)
+          (by
+            intro variance hvariance
+            rw [scheduledVarianceSegment, List.mem_ofFn'] at hvariance
+            obtain ⟨i, rfl⟩ := hvariance
+            exact scheduleValue_pos q _)
+      have hmultiply : Measurable fun z :
+          (ℝ × AmbientSpace q.n) × Option (ℝ × AmbientSpace q.n) =>
+          multiply z.1.1 z.2 := by
+        exact measurable_balancedCoolingProductCons.comp
+          ((measurable_fst.comp measurable_fst).prodMk measurable_snd)
+      have hsome := MembershipOracleProgram.countedMeasurable_bind_pure
+        oracle.query (fun value : ℝ × AmbientSpace q.n =>
+          tailCooling value.2)
+        (fun z : (ℝ × AmbientSpace q.n) ×
+          Option (ℝ × AmbientSpace q.n) => multiply z.1.1 z.2)
+        (htail.1.comp measurable_snd) (fun value => htail.2 value.2)
+          hmultiply
+      have hactualNextRun : Measurable fun result =>
+          (actualNext result).run oracle.query := by
+        convert Measurable.optionElim
+          (Measure.dirac ((none : Option (ℝ × AmbientSpace q.n)), 0))
+          hsome.1 using 1
+        funext result
+        cases result <;> rfl
+      have hactualNext : ∀ result,
+          (actualNext result).CountedStronglyMeasurable oracle.query := by
+        intro result
+        cases result with
+        | none => trivial
+        | some value => exact hsome.2 value
+      have hretainedPhase :=
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_countedMeasurable
+          q I oracle phase
+      have hretainedTail :=
+        figureOneFinalScheduledRetainedGaussianChain_countedMeasurable
+          q I oracle (phase + 1) steps
+      have hactualForm :
+          coolingProduct (scheduledBalancedCoolingPrimitives parameters) q
+              (scheduledVarianceSegment q phase (steps + 1)) point =
+            ratioProgram.bind actualNext := by
+        rw [scheduledVarianceSegment_succ]
+        rw [scheduledVarianceSegment_eq_cons_head_tail q (phase + 1) steps]
+        rw [coolingProduct]
+        dsimp only [ratioProgram, actualNext, tailCooling, multiply,
+          parameters, sigma2, tau2]
+        congr 1
+        funext result
+        cases result with
+        | none => rfl
+        | some value =>
+            rw [← scheduledVarianceSegment_eq_cons_head_tail
+              q (phase + 1) steps]
+            rcases value with ⟨ratio, nextPoint⟩
+            simp only
+            congr 1
+            funext tail
+            cases tail with
+            | none => rfl
+            | some value =>
+                rcases value with ⟨product, lastPoint⟩
+                rfl
+      have hretainedForm :
+          figureOneFinalScheduledRetainedGaussianChain q phase (steps + 1)
+              (some point) = retainedPhase.bind retainedTail := by
+        rfl
+      have hnext : ∀ result,
+          (retainedTail (optionSnd result)).run oracle.query =
+            ((actualNext result).run oracle.query).map fun outcome =>
+              (optionSnd outcome.1, outcome.2) := by
+        intro result
+        cases result with
+        | none =>
+            change (retainedTail none).run oracle.query =
+              ((actualNext none).run oracle.query).map fun outcome =>
+                (optionSnd outcome.1, outcome.2)
+            dsimp only [retainedTail, actualNext]
+            rw [figureOneFinalScheduledRetainedGaussianChain_none q
+              (phase + 1) steps]
+            simp only [MembershipOracleProgram.run]
+            rw [Measure.map_dirac'
+              (f := fun outcome : Option (ℝ × AmbientSpace q.n) × ℕ =>
+                (optionSnd outcome.1, outcome.2))
+              ((measurable_optionSnd.comp measurable_fst).prodMk
+                measurable_snd)]
+            rfl
+        | some value =>
+            rcases value with ⟨ratio, nextPoint⟩
+            change (retainedTail (some nextPoint)).run oracle.query =
+              ((actualNext (some (ratio, nextPoint))).run oracle.query).map
+                fun outcome => (optionSnd outcome.1, outcome.2)
+            dsimp only [retainedTail, actualNext]
+            have htailRun := htail.2 nextPoint
+            have hpure := MembershipOracleProgram.run_bind_pure_eq_map
+              oracle.query (tailCooling nextPoint) (multiply ratio)
+              (measurable_balancedCoolingProductCons.comp
+                (measurable_const.prodMk measurable_id)) htailRun
+            rw [ih (phase + 1) nextPoint, hpure, Measure.map_map]
+            · apply Measure.map_congr
+              filter_upwards with outcome
+              rcases outcome with ⟨tail, count⟩
+              cases tail with
+              | none => rfl
+              | some value =>
+                  rcases value with ⟨product, lastPoint⟩
+                  rfl
+            · exact (measurable_optionSnd.comp measurable_fst).prodMk
+                measurable_snd
+            · exact ((measurable_balancedCoolingProductCons.comp
+                (measurable_const.prodMk measurable_id)).comp
+                  measurable_fst).prodMk measurable_snd
+      have hcompose :=
+        MembershipOracleProgram.map_bind_countedContinuation_simulation
+          oracle.query (ratioProgram.run oracle.query)
+          optionSnd measurable_optionSnd optionSnd measurable_optionSnd
+          actualNext retainedTail hactualNextRun hactualNext
+          hretainedTail.1 hretainedTail.2 hnext
+      rw [hretainedForm,
+        MembershipOracleProgram.run_bind_counted oracle.query _ _
+          (hretainedPhase.2 (some point)) hretainedTail.2 hretainedTail.1,
+        figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
+          q I oracle phase point]
+      rw [hactualForm,
+        MembershipOracleProgram.run_bind_counted oracle.query _ _
+          (hratio.2 point) hactualNext hactualNextRun]
+      exact hcompose
+
 /-- Retaining or forgetting the terminal phase's estimator coordinates does
 not change its complete query-count distribution. -/
 theorem figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_uniform
@@ -727,6 +904,8 @@ theorem exists_figureOneFinalScheduledRetainedComplete_countedReference
   figureOneFinalScheduledRetainedGaussianPrefixProgram_run
 #print axioms
   figureOneFinalScheduledRetainedGaussianPhaseProgram_run_eq_map_ratio
+#print axioms
+  figureOneFinalScheduledRetainedGaussianChain_run_eq_map_coolingProduct
 #print axioms
   figureOneFinalScheduledRetainedTerminalProgram_map_snd_eq_uniform
 #print axioms
