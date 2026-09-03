@@ -87,6 +87,28 @@ theorem map_bind_historyRawNextKernel_old
     _ = prefixLaw.map (projectOld ∘ Prod.fst) :=
       Measure.bind_dirac_eq_map prefixLaw (hprojectOld.comp measurable_fst)
 
+/-- The state coordinate of the raw law is the ordinary operational
+next-state marginal. -/
+theorem map_bind_historyRawNextKernel_snd
+    {H X : Type*} [MeasurableSpace H] [MeasurableSpace X]
+    (prefixLaw : Measure (H × X))
+    (K : X → Measure X) (hK : Measurable K)
+    (hKprob : ∀ x, IsProbabilityMeasure (K x)) :
+    (prefixLaw.bind (historyRawNextKernel K)).map Prod.snd =
+      (prefixLaw.map Prod.snd).bind K := by
+  have hraw := historyRawNextKernel_measurable_and_probability
+    (H := H) K hK hKprob
+  rw [map_bind_eq_bind_map_of_measurable prefixLaw hraw.1 measurable_snd]
+  rw [map_bind_eq_bind_comp_state prefixLaw measurable_snd hK]
+  apply Measure.bind_congr_right
+  filter_upwards with state
+  unfold historyRawNextKernel
+  have hpair : Measurable fun next : X => (state.1, next) :=
+    measurable_const.prodMk measurable_id
+  rw [Measure.map_map measurable_snd hpair]
+  change Measure.map id (K state.2) = K state.2
+  exact Measure.map_id
+
 /-- Append the observable of a reset state, retaining that reset state as the
 operational state for the following step. -/
 def historyRecordResetState
@@ -723,6 +745,7 @@ theorem exists_shadowRecordedReference_of_nextMarginal_tvLe_preserving
 
 #print axioms historyRawNextKernel_measurable_and_probability
 #print axioms map_bind_historyRawNextKernel_old
+#print axioms map_bind_historyRawNextKernel_snd
 #print axioms historyOperationalRecordKernel_measurable_and_probability
 #print axioms map_bind_historyOperationalRecordKernel_snd
 #print axioms bind_historyRawNextKernel_map_record_eq
