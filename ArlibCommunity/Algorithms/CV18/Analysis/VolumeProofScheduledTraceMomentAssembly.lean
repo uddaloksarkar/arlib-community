@@ -556,6 +556,70 @@ theorem figureOneScheduledFullRetainedError_lt_one (q : VolumeParams) :
     (figureOneScheduledFullRetainedError_ne_top q) ENNReal.one_ne_top).mp <| by
       simpa using hrealLt
 
+/-- The optional-retained comparison controls precisely the absorbing dead
+branch of the complete scheduled trace. -/
+theorem scheduledBalancedFullForwardTraceLaw_dead_mass_le
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    (scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q))
+        (scheduledBalancedTraceDeadSet q.n) ≤
+      figureOneScheduledFullRetainedError q := by
+  let law := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I
+      (figureOneDependentPhaseCount q)
+  have hevent :=
+    (scheduledBalancedFullForwardTraceLaw_retained_leUpTo_target q I).event_le
+      ({none} : Set (Option (AmbientSpace q.n)))
+  have hnone :
+      ((figureOneScheduledAcceptedTargetAt q I
+        (terminalPhaseSteps q)).map some)
+          ({none} : Set (Option (AmbientSpace q.n))) = 0 := by
+    rw [Measure.map_apply measurable_some measurableSet_option_none]
+    have hpre : (some : AmbientSpace q.n → Option (AmbientSpace q.n)) ⁻¹'
+        ({none} : Set (Option (AmbientSpace q.n))) = ∅ := by
+      ext point
+      simp
+    rw [hpre, measure_empty]
+  rw [hnone, zero_add] at hevent
+  rw [Measure.map_apply measurable_scheduledBalancedTraceRetainedOption
+    measurableSet_option_none] at hevent
+  have hpre : scheduledBalancedTraceRetainedOption ⁻¹'
+      ({none} : Set (Option (AmbientSpace q.n))) =
+        scheduledBalancedTraceDeadSet q.n := by
+    ext trace
+    rcases trace with ⟨history, live⟩
+    cases live <;> simp [scheduledBalancedTraceRetainedOption,
+      scheduledBalancedTraceDeadSet]
+  simpa [law, hpre] using hevent
+
+/-- Hence the successful branch of the complete scheduled trace has
+strictly positive probability. -/
+theorem scheduledBalancedFullForwardTraceLaw_live_mass_pos
+    (q : VolumeParams) (I : VolumeInput q.n) :
+    0 < (scheduledBalancedForwardTraceLaw
+      figureOneFinalScheduledBalancedParameters q I
+        (figureOneDependentPhaseCount q))
+        (scheduledBalancedTraceLiveSet q.n) := by
+  let law := scheduledBalancedForwardTraceLaw
+    figureOneFinalScheduledBalancedParameters q I
+      (figureOneDependentPhaseCount q)
+  let _ : IsProbabilityMeasure law :=
+    scheduledBalancedForwardTraceLaw_isProbabilityMeasure
+      figureOneFinalScheduledBalancedParameters q I _
+  have hdead : law (scheduledBalancedTraceDeadSet q.n) < 1 :=
+    (scheduledBalancedFullForwardTraceLaw_dead_mass_le q I).trans_lt
+      (figureOneScheduledFullRetainedError_lt_one q)
+  have hsum : law (scheduledBalancedTraceLiveSet q.n) +
+      law (scheduledBalancedTraceDeadSet q.n) = 1 := by
+    rw [scheduledBalancedTraceDeadSet_eq_compl,
+      measure_add_measure_compl measurableSet_scheduledBalancedTraceLiveSet,
+      measure_univ]
+  rw [pos_iff_ne_zero]
+  intro hlive
+  rw [hlive, zero_add] at hsum
+  exact hdead.ne hsum
+
 /-- The ideal factor attached to the actual chronological phase is at most
 two. -/
 theorem figureOneChronologicalMomentFactor_le_two
