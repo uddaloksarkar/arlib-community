@@ -18,6 +18,118 @@ open MeasureTheory ProbabilityTheory
 
 namespace ArlibCommunity.Algorithms.CV18
 
+/-! ## Strict positivity of successful phase collectors -/
+
+def ScheduledCollectedTotalPositive :
+    Option (ℝ × AmbientSpace n) → Prop
+  | none => True
+  | some result => 0 < result.1
+
+theorem measurableSet_scheduledCollectedTotalPositive :
+    MeasurableSet {result : Option (ℝ × AmbientSpace n) |
+      ScheduledCollectedTotalPositive result} := by
+  let A : Set (ℝ × AmbientSpace n) := {result | 0 < result.1}
+  have hA : MeasurableSet A :=
+    measurableSet_lt measurable_const measurable_fst
+  rw [show {result : Option (ℝ × AmbientSpace n) |
+      ScheduledCollectedTotalPositive result} =
+      {none} ∪ optionSomeEvent A by
+    ext result
+    cases result <;> simp [ScheduledCollectedTotalPositive,
+      optionSomeEvent, A]]
+  exact measurableSet_option_none.union (measurableSet_optionSomeEvent hA)
+
+/-- If at least one strictly positive observation is requested, every
+successful branch of the finite scheduled collector has positive total. -/
+theorem scheduledBalancedTransitionCollectLaw_ae_total_positive
+    (q : VolumeParams) (I : VolumeInput q.n)
+    {sigma2 : ℝ} (hsigma2 : 0 < sigma2)
+    {weight : AmbientSpace q.n → ℝ} (hweight : Measurable weight)
+    (hweightPos : ∀ x, 0 < weight x)
+    (proposalCap properStride retryLimit : ℕ) :
+    ∀ samples, 0 < samples → ∀ total current, 0 ≤ total →
+      ∀ᵐ result ∂scheduledBalancedTransitionCollectLaw q I sigma2 weight
+          proposalCap properStride retryLimit samples total current,
+        ScheduledCollectedTotalPositive result := by
+  have htransition :=
+    scheduledBalancedAccuracyTransitionLawAux_measurable_and_probability
+      q I hsigma2 proposalCap properStride retryLimit
+  intro samples
+  induction samples with
+  | zero => simp
+  | succ samples ih =>
+      intro hsamples total current htotal
+      let tail : Option (AmbientSpace q.n) →
+          Measure (Option (ℝ × AmbientSpace q.n)) := fun result =>
+        match result with
+        | none => Measure.dirac none
+        | some target =>
+            scheduledBalancedTransitionCollectLaw q I sigma2 weight
+              proposalCap properStride retryLimit samples
+              (total + weight target) (accuracyScaleFactor q • target)
+      have htail : Measurable tail := by
+        dsimp only [tail]
+        have hcollect :=
+          (scheduledBalancedTransitionCollectLaw_measurable_and_probability
+            q I hsigma2 hweight proposalCap properStride retryLimit samples).1
+        have hsome : Measurable fun target : AmbientSpace q.n =>
+            scheduledBalancedTransitionCollectLaw q I sigma2 weight
+              proposalCap properStride retryLimit samples
+              (total + weight target) (accuracyScaleFactor q • target) :=
+          hcollect.comp <|
+            (measurable_const.add hweight).prodMk <|
+              (measurable_const : Measurable fun _ : AmbientSpace q.n =>
+                accuracyScaleFactor q).smul measurable_id
+        convert Measurable.optionElim
+          (Measure.dirac (none : Option (ℝ × AmbientSpace q.n))) hsome using 1
+        funext result
+        cases result <;> rfl
+      let good : Set (Option (ℝ × AmbientSpace q.n)) :=
+        {result | ScheduledCollectedTotalPositive result}
+      have hgood : MeasurableSet good :=
+        measurableSet_scheduledCollectedTotalPositive
+      change ∀ᵐ result ∂
+          (scheduledBalancedAccuracyTransitionLawAux q I sigma2 proposalCap
+            properStride retryLimit current).bind tail,
+        ScheduledCollectedTotalPositive result
+      apply MeasureTheory.mem_ae_iff.mpr
+      change ((scheduledBalancedAccuracyTransitionLawAux q I sigma2 proposalCap
+        properStride retryLimit current).bind tail) goodᶜ = 0
+      rw [Measure.bind_apply hgood.compl htail.aemeasurable]
+      apply lintegral_eq_zero_of_ae_eq_zero
+      filter_upwards with result
+      cases result with
+      | none =>
+          change (Measure.dirac
+            (none : Option (ℝ × AmbientSpace q.n))) goodᶜ = 0
+          rw [Measure.dirac_apply' _ hgood.compl]
+          simp [good, ScheduledCollectedTotalPositive]
+      | some target =>
+          by_cases hsamples0 : samples = 0
+          · subst samples
+            change (Measure.dirac (some
+              (total + weight target,
+                (accuracyScaleFactor q)⁻¹ •
+                  (accuracyScaleFactor q • target)))) goodᶜ = 0
+            rw [Measure.dirac_apply' _ hgood.compl]
+            simp [good, ScheduledCollectedTotalPositive,
+              add_pos_of_nonneg_of_pos htotal (hweightPos target)]
+          · exact MeasureTheory.mem_ae_iff.mp <|
+              ih (Nat.pos_of_ne_zero hsamples0)
+                (total + weight target) (accuracyScaleFactor q • target)
+                (add_nonneg htotal (hweightPos target).le)
+
+theorem gaussianRatioWeight_pos (sigma2 tau2 : ℝ)
+    (x : AmbientSpace n) :
+    0 < gaussianRatioWeight sigma2 tau2 x := by
+  unfold gaussianRatioWeight
+  positivity
+
+theorem uniformRatioWeight_pos (sigma2 : ℝ) (x : AmbientSpace n) :
+    0 < uniformRatioWeight sigma2 x := by
+  unfold uniformRatioWeight
+  positivity
+
 /-- The ideal factor attached to the actual chronological phase is at most
 two. -/
 theorem figureOneChronologicalMomentFactor_le_two
@@ -624,6 +736,9 @@ theorem figureOneFinalScheduledBalancedBase_failure_le_of_sharp_trace_moments
       q I hrawPos hsecond hrawApprox
 
 #print axioms figureOneChronologicalMomentFactor_le_two
+#print axioms scheduledBalancedTransitionCollectLaw_ae_total_positive
+#print axioms gaussianRatioWeight_pos
+#print axioms uniformRatioWeight_pos
 #print axioms scheduledFigureOneTrace_truncatedSecond_le_rawSecond
 #print axioms scheduledFigureOneTrace_rawMean_le_one_add_inv_alpha_mul_truncatedMean
 #print axioms scheduledFigureOneTrace_rawMeanProduct_le_pow_mul_truncatedMeanProduct
