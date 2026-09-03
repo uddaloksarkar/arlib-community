@@ -104,6 +104,7 @@ import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofScheduledTraceBoundary
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledCheapAbortCap
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledTheoremAssembly
 import ArlibCommunity.Algorithms.CV18.Analysis.VolumeProofFinalScheduledPhasewiseCapstone
+import ArlibCommunity.Algorithms.CV18.Model.Theorem
 
 /-!
 # CV18 accelerated Gaussian cooling
@@ -118,8 +119,11 @@ equation-(6) moments, Lemma 7.17(c) dependence recurrence, terminal phase,
 mapped-product accuracy bound, query cap, and amplification are assembled in
 the premise-free theorem `volumeTheorem_finalScheduled`, the end-to-end
 formalization of CV18 Theorem 1.1 for the executable scheduled implementation.
+The audit-facing statement is `cv18TheoremOneOne` in `Model/Theorem.lean`;
+its type is machine-checked to unfold only to declarations under `Model/`.
 The older `volumeTheorem_of_postInitialMixing` remains available as a compact
 legacy interface.
 
-See `Analysis/README.md` for a module-level status and source audit.
+See `Model/README.md` for the statement audit and `Analysis/README.md` for the
+module-level proof audit.
 -/

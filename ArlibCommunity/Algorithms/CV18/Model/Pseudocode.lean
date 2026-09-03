@@ -117,6 +117,20 @@ variance so the following phase can jump exactly to the uniform density. -/
 noncomputable def nextVariance (q : VolumeParams) (sigma2 : ℝ) : ℝ :=
   min (terminalVariance q) (sigma2 * coolingRate q sigma2)
 
+/-- The deterministic variance after `k` cooling transitions.  This is the
+model-level counterpart of the loop variable in Figure 1. -/
+noncomputable def modelScheduleValue (q : VolumeParams) (k : ℕ) : ℝ :=
+  (nextVariance q)^[k] (initialVariance q)
+
+/-- Auditable evidence for the first point at which Figure 1's deterministic
+cooling schedule reaches the terminal variance.  Keeping the index and its
+minimality in `Model/` prevents the complexity statement from hiding an
+unconstrained number of phases. -/
+structure VolumeTerminalSchedule (q : VolumeParams) where
+  steps : ℕ
+  reaches : modelScheduleValue q steps = terminalVariance q
+  first : ∀ k < steps, modelScheduleValue q k ≠ terminalVariance q
+
 /-- A finite schedule witnessing the loop in Figure 1.
 
 Existence and quantitative bounds for this schedule are analysis obligations;
@@ -217,6 +231,78 @@ def accurateOutcome (q : VolumeParams) (I : VolumeInput q.n) : Set ℝ :=
 noncomputable def outcomeProbability (mu : Measure ℝ) (S : Set ℝ) : ℝ :=
   (mu.toOuterMeasure S).toReal
 
+/-! ## Exact rate exposed by the verified scheduled implementation -/
+
+/-- Sample count for an accelerated or terminal phase. -/
+noncomputable def scheduledSampleCount (q : VolumeParams) : ℕ :=
+  Nat.ceil (512 * protectedLog (terminalVariance q) / q.eps ^ 2)
+
+/-- Sample count for a fixed-rate phase. -/
+noncomputable def scheduledFixedSampleCount (q : VolumeParams) : ℕ :=
+  Nat.ceil
+    (4096 * protectedLog ((q.n : ℝ) / q.eps) / q.eps ^ 2)
+
+/-- Number of empirical estimators, including the terminal
+Gaussian-to-uniform estimator. -/
+def scheduledDependentPhaseCount {q : VolumeParams}
+    (schedule : VolumeTerminalSchedule q) : ℕ :=
+  schedule.steps + 1
+
+/-- A uniform sample-count bound across all phases. -/
+noncomputable def scheduledMaxSampleCount (q : VolumeParams) : ℕ :=
+  max (scheduledFixedSampleCount q) (scheduledSampleCount q)
+
+/-- Truncation parameter used by the dependent-product estimate. -/
+noncomputable def scheduledDependentAlpha {q : VolumeParams}
+    (schedule : VolumeTerminalSchedule q) : ℝ :=
+  1024 * (scheduledDependentPhaseCount schedule : ℝ) / q.eps ^ 2
+
+/-- Dependence budget used by the recursive moment estimate. -/
+noncomputable def scheduledDependentEpsilon {q : VolumeParams}
+    (schedule : VolumeTerminalSchedule q) : ℝ :=
+  q.eps ^ 2 /
+    (4096 * scheduledDependentAlpha schedule ^ 4 *
+      (scheduledDependentPhaseCount schedule : ℝ))
+
+/-- Per-sample transition error allocated by the global exact-chance
+argument. -/
+noncomputable def scheduledPerSampleMixingError {q : VolumeParams}
+    (schedule : VolumeTerminalSchedule q) : ℝ :=
+  scheduledDependentEpsilon schedule /
+    (3 * (scheduledMaxSampleCount q : ℝ) *
+      (scheduledDependentPhaseCount schedule : ℝ))
+
+/-- Number of rejection attempts needed for the geometric tail budget. -/
+noncomputable def scheduledSafeRetryCount {q : VolumeParams}
+    (schedule : VolumeTerminalSchedule q) : ℕ :=
+  Nat.ceil
+    (128 * protectedLog (4 / scheduledPerSampleMixingError schedule))
+
+/-- Common logarithmic accuracy scale for the core and radial mixing
+requirements. -/
+noncomputable def scheduledAccuracyLog {q : VolumeParams}
+    (schedule : VolumeTerminalSchedule q) : ℝ :=
+  let perSample := scheduledPerSampleMixingError schedule
+  max
+    (protectedLog ((q.n : ℝ) / (perSample / 768)))
+    (protectedLog ((q.n : ℝ) / (perSample / 8)))
+
+/-- The exact one-run rate used by the completed scheduled proof.  Its extra
+factors are logarithmic and hence are suppressed by the paper's `O*`
+notation. -/
+noncomputable def scheduledBaseComplexityRate {q : VolumeParams}
+    (schedule : VolumeTerminalSchedule q) : ℝ :=
+  volumeBaseComplexityRate q * scheduledAccuracyLog schedule *
+    protectedLog
+      (1 / (scheduledPerSampleMixingError schedule /
+        (4 * (((scheduledSafeRetryCount schedule - 1 : ℕ) : ℝ) + 1)))) ^ 2
+
+/-- Exact query rate after confidence amplification. -/
+noncomputable def scheduledComplexityRate {q : VolumeParams}
+    (schedule : VolumeTerminalSchedule q) : ℝ :=
+  scheduledBaseComplexityRate schedule * protectedLog (1 / q.p)
+
 #modelClosure volumeCoolingAlgorithm
+#modelClosure scheduledComplexityRate
 
 end ArlibCommunity.Algorithms.CV18
