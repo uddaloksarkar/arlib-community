@@ -29,7 +29,7 @@ One area so far.
 
 | Area | Contents | Start here |
 | --- | --- | --- |
-| `Algorithms` | Analyses of specific algorithms. Currently `TPA/` — Huber's Tootsie Pop Algorithm: the closed form of its contraction-counter tail, the Poisson law that follows, almost-sure termination, and the two-phase run-count schedule. | [ArlibCommunity/Algorithms.lean](ArlibCommunity/Algorithms.lean) |
+| `Algorithms` | Tootsie Pop and capped lazy Hit-and-Run. The Hit-and-Run result bounds membership queries on every tape and does not claim mixing. | [ArlibCommunity/Algorithms.lean](ArlibCommunity/Algorithms.lean) |
 
 `import ArlibCommunity` gives you everything; `import ArlibCommunity.Algorithms`
 gives you one area; importing a single module gives you one piece. Every

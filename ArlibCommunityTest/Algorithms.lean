@@ -44,4 +44,16 @@ example {A Ahat eps : ℝ} (heps : 0 < eps) (h : |Ahat - A| ≤ Real.log (1 + ep
       Real.exp Ahat / Real.exp A ≤ 1 + eps :=
   relative_error_of_log_error heps h
 
+open ArlibCommunity.Algorithms.HitAndRun
+open ArlibCommunity.Algorithms.HitAndRun.Model.Operations
+open Arlib.Computation
+
+/-- Three walk steps with two bisections per side and one rejection attempt
+make at most fifteen membership queries on any tape. -/
+example (member : State 2 → Bool) (x₀ : State 2) (t : Tape 2) :
+    queryCount (Charged.cost (execution
+      { D := 2, bisectionSteps := 2, rejectionTries := 1, steps := 3 } member x₀ t)) ≤ 15 := by
+  simpa using execution_queryCount_le
+    { D := 2, bisectionSteps := 2, rejectionTries := 1, steps := 3 } member x₀ t
+
 end ArlibCommunityTest.Algorithms

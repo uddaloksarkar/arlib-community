@@ -24,6 +24,13 @@ Distributions.* Ann. Appl. Probab. 25(2):974–985, 2015. arXiv:1206.2689.
 (Not cited here directly; it is the source of `Arlib.Probability.poissonPMF`'s
 tail bounds, which `ArlibCommunity/Algorithms/TPA/UniformProduct.lean` consumes.)
 
+**`Lov99`** — László Lovász. *Hit-and-run mixes fast.* Mathematical
+Programming 86 (1999), 443–461.
+
+**`Vem05`** — Santosh Vempala. *Geometric Random Walks: A Survey.*
+Combinatorial and Computational Geometry, MSRI Publications 52 (2005).
+<https://library.slmath.org/books/Book52/files/32vemp.pdf>
+
 ## Known gaps
 
 A gap is a place where a docstring quotes a result without saying whose it is.

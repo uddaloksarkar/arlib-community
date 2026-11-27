@@ -27,6 +27,9 @@ and their names (`tpaTail`, and whatever follows) would otherwise collide.
   sub-area root records that which of his papers it follows is unresolved): the
   Poisson law of its contraction counter, almost-sure termination, and the
   two-phase run-count schedule.
+* `ArlibCommunity.Algorithms.HitAndRun` — the capped lazy walk and its
+  worst-case membership-query bound. The mixing proof is separate.
 -/
 
 import ArlibCommunity.Algorithms.TPA
+import ArlibCommunity.Algorithms.HitAndRun
